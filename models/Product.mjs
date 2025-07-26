@@ -22,13 +22,13 @@ const productSchema = new Schema(
 
         productStatus: {
             type: String,
-            enum: ['Draft', 'Published', 'Archived'],
-            default: 'Draft',
+            enum: ['draft', 'published', 'archived'],
+            default: 'draft',
         },
         visibility: {
             type: String,
-            enum: ['Visible', 'Hidden'],
-            default: 'Visible',
+            enum: ['visible', 'hidden'],
+            default: 'visible',
         },
         isFeatured: { type: Boolean, default: false },
         isPreOrder: { type: Boolean, default: false },
