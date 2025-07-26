@@ -24,6 +24,15 @@ export const createProduct = async (req, res) => {
             ...rest
         } = req.body;
 
+        const nameExists = await Product.findOne({ productName: productName })
+        if (nameExists) return res.json({ message: 'Product name is already taken' })
+
+        const SkuExists = await Product.findOne({ SKU: SKU })
+        if (SkuExists) return res.json({ message: 'This SKU is already in Use' })
+
+        const barcodeExists = await Product.findOne({ barcode: barcode })
+        if (barcodeExists) return res.json({ message: 'This Barcode is already taken' })
+
 
         if (!productName || !productDescription || !brand || !category) {
             return res.status(400).json({ message: 'Required fields missing' });
