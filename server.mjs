@@ -15,6 +15,7 @@ import adminRouter from './routes/admins.router.mjs'
 import categoryRouter from './routes/category.router.mjs'
 import brandRouter from './routes/brands.router.mjs'
 import productsRouter from './routes/products.routes.mjs'
+import blogsRouter from './routes/blogs.router.mjs'
 
 const app = express();
 
@@ -36,6 +37,8 @@ app.use('/admins', adminRouter)
 app.use('/categories', categoryRouter)
 app.use('/brands', brandRouter)
 app.use('/products', productsRouter)
+app.use('/blogs', blogsRouter)
+
 
 
 mongoose.connection.once('open', () => {
