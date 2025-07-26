@@ -134,7 +134,7 @@ export const getAllProducts = async (req, res) => {
 
         res.status(200).json({
             data: products,
-            met: {
+            meta: {
                 total,
                 page: parseInt(page),
                 limit: parseInt(limit),
