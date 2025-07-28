@@ -15,12 +15,9 @@ import adminRouter from './routes/admins.router.mjs'
 import categoryRouter from './routes/category.router.mjs'
 import brandRouter from './routes/brands.router.mjs'
 import productsRouter from './routes/products.routes.mjs'
-<<<<<<< HEAD
 import blogsRouter from './routes/blogs.router.mjs'
-=======
 import productTypeRouter from './routes/productType.router.mjs'
 
->>>>>>> e044706fa0d39351a45871a6b58e36fe4c5d83d3
 
 const app = express();
 
