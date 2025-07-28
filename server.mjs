@@ -43,12 +43,9 @@ app.use('/admins', adminRouter)
 app.use('/categories', categoryRouter)
 app.use('/brands', brandRouter)
 app.use('/products', productsRouter)
-<<<<<<< HEAD
 app.use('/blogs', blogsRouter)
-
-=======
 app.use('/product-types', productTypeRouter)
->>>>>>> e044706fa0d39351a45871a6b58e36fe4c5d83d3
+
 
 
 mongoose.connection.once('open', () => {
