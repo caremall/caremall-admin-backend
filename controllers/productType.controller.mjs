@@ -19,24 +19,46 @@ export const createProductType = async (req, res) => {
 
 export const getAllProductTypes = async (req, res) => {
     try {
-        const { search, attributeName } = req.query;
+        const { search, attributeName, page = 1, limit = 10 } = req.query;
 
-        let filter = {};
+        const filter = {};
 
         if (search) {
-            filter.name = { $regex: search, $options: 'i' }; // case-insensitive search
+            filter.name = { $regex: search, $options: 'i' };
         }
 
         if (attributeName) {
             filter['attributes.name'] = { $regex: attributeName, $options: 'i' };
         }
 
-        const types = await ProductType.find(filter);
-        res.status(200).json(types);
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const [types, total] = await Promise.all([
+            ProductType.find(filter)
+                .skip(skip)
+                .limit(parseInt(limit))
+                .sort({ createdAt: -1 }), // optional sorting
+            ProductType.countDocuments(filter)
+        ]);
+
+        const totalPages = Math.ceil(total / limit);
+
+        res.status(200).json({
+            data: types,
+            meta: {
+                total,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages,
+                hasNextPage: parseInt(page) < totalPages,
+                hasPrevPage: parseInt(page) > 1
+            }
+        });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 };
+
 
 
 
