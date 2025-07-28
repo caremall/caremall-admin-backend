@@ -10,7 +10,7 @@ export const createProductType = async (req, res) => {
 
         const productType = await ProductType.create(req.body);
 
-        res.status(201).json(productType);
+        res.status(201).json({ success: true, message: 'Product type created' });
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
