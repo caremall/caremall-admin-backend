@@ -23,7 +23,7 @@ const blogSchema = new mongoose.Schema(
     },
     description: {
       type: String,
-      required: false, 
+      required: true, 
       trim: true,
       
     },
@@ -34,7 +34,7 @@ const blogSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['draft', 'published', 'archived'],
+      enum: ['draft', 'published'],
       default: 'draft',
     },
     tags: {
