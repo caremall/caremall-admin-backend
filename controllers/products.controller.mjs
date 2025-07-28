@@ -88,7 +88,7 @@ export const getAllProducts = async (req, res) => {
             maxPrice,
             sort,
             page = 1,
-            limit = 20
+            limit = 8
         } = req.query;
 
         const query = {};
@@ -97,7 +97,8 @@ export const getAllProducts = async (req, res) => {
         if (search) {
             query.$or = [
                 { productName: { $regex: search, $options: 'i' } },
-                { productDescription: { $regex: search, $options: 'i' } }
+                { productDescription: { $regex: search, $options: 'i' } },
+                { SKU: { $regex: search, $options: 'i' } }
             ];
         }
 
