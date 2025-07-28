@@ -104,7 +104,7 @@ export const updateCategory = async (req, res) => {
         const nameConflict = await Category.findOne({
             name,
             parentId,
-            _id: { $ne: _id }
+            _id: { $ne: id }
         });
 
         if (nameConflict) {
