@@ -15,12 +15,15 @@ import adminRouter from './routes/admins.router.mjs'
 import categoryRouter from './routes/category.router.mjs'
 import brandRouter from './routes/brands.router.mjs'
 import productsRouter from './routes/products.routes.mjs'
+import productTypeRouter from './routes/productType.router.mjs'
+
 
 const app = express();
 
 
 configDotenv()
 connectDB(process.env.DATABASE_URI);
+
 
 app.use(cors(corsOptions))
 app.use(express.json())
@@ -36,6 +39,7 @@ app.use('/admins', adminRouter)
 app.use('/categories', categoryRouter)
 app.use('/brands', brandRouter)
 app.use('/products', productsRouter)
+app.use('/product-types', productTypeRouter)
 
 
 mongoose.connection.once('open', () => {
