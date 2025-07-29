@@ -113,7 +113,7 @@ export const updateCategory = async (req, res) => {
 
         const codeConflict = await Category.findOne({
             categoryCode,
-            _id: { $ne: _id }
+            _id: { $ne: id }
         });
 
         if (codeConflict) {
