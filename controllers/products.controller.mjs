@@ -1,7 +1,6 @@
 import Product from '../models/Product.mjs';
 import Variant from '../models/Variant.mjs';
 
-
 export const createProduct = async (req, res) => {
     try {
         const {
@@ -12,73 +11,71 @@ export const createProduct = async (req, res) => {
             hasVariant,
             SKU,
             barcode,
-            productImages,
-            costPrice,
-            sellingPrice,
-            mrpPrice,
             variants = [],
         } = req.body;
 
-        if (!productName || !productDescription || !brand || !category) {
-            return res.status(400).json({ message: 'Required fields missing' });
+        const missingFields = [];
+        if (!productName || productName.trim() === '') missingFields.push('productName');
+        if (!productDescription || productDescription.trim() === '') missingFields.push('productDescription');
+        if (!brand || brand.trim() === '') missingFields.push('brand');
+        if (!category || category.trim() === '') missingFields.push('category');
+
+        if (missingFields.length > 0) {
+            return res.status(400).json({ message: `Missing required fields: ${missingFields.join(', ')}` });
         }
 
-        if (!hasVariant) {
-            const missingFields = [];
-
-            if (!SKU) missingFields.push('SKU');
-            if (!barcode) missingFields.push('barcode');
-            if (!productImages || !productImages.length) missingFields.push('productImages');
-            if (costPrice === undefined) missingFields.push('costPrice');
-            if (sellingPrice === undefined) missingFields.push('sellingPrice');
-            if (mrpPrice === undefined) missingFields.push('mrpPrice');
-
-            if (missingFields.length > 0) {
-                return res.status(400).json({ message: `Missing fields: ${missingFields.join(', ')}` });
-            }
-        }
-
-        const cleanSKU = SKU?.trim();
-        const cleanBarcode = barcode?.trim();
-
-        const variantSKUs = variants.map(v => v.SKU?.trim()).filter(Boolean);
-        const variantBarcodes = variants.map(v => v.barcode?.trim()).filter(Boolean);
-
-        const allSKUs = cleanSKU ? [cleanSKU, ...variantSKUs] : [...variantSKUs];
-        const allBarcodes = cleanBarcode ? [cleanBarcode, ...variantBarcodes] : [...variantBarcodes];
-
-        if (allSKUs.length > 0) {
-            const existingSku = await Promise.any([
-                Product.findOne({ SKU: { $in: allSKUs } }),
-                Variant.findOne({ SKU: { $in: allSKUs } }),
-            ]);
-            if (existingSku) {
-                return res.status(400).json({ message: `SKU '${existingSku.SKU}' is already in use` });
-            }
-        }
-
-        if (allBarcodes.length > 0) {
-            const existingBarcode = await Promise.any([
-                Product.findOne({ barcode: { $in: allBarcodes } }),
-                Variant.findOne({ barcode: { $in: allBarcodes } }),
-            ]);
-            if (existingBarcode) {
-                return res.status(400).json({ message: `Barcode '${existingBarcode.barcode}' is already in use` });
-            }
-        }
-
-        const nameExists = await Product.findOne({ productName });
+        const nameExists = await Product.findOne({ productName: productName.trim() });
         if (nameExists) {
             return res.status(400).json({ message: 'Product name is already taken' });
         }
 
-        const newProduct = await Product.create(req.body);
+        if (!hasVariant) {
+            if (SKU && SKU.trim() !== '') {
+                const skuExists = await Product.findOne({ SKU: SKU.trim() });
+                if (skuExists) return res.status(400).json({ message: 'This SKU is already in use' });
+            }
+            if (barcode && barcode.trim() !== '') {
+                const barcodeExists = await Product.findOne({ barcode: barcode.trim() });
+                if (barcodeExists) return res.status(400).json({ message: 'This Barcode is already in use' });
+            }
+        }
 
-        if (hasVariant && variants.length > 0) {
+        if (hasVariant && Array.isArray(variants)) {
+            for (let variant of variants) {
+                if (variant.SKU) {
+                    const exists = await Variant.findOne({ SKU: variant.SKU.trim() });
+                    if (exists) return res.status(400).json({ message: `Variant SKU '${variant.SKU}' is already in use` });
+                }
+                if (variant.barcode) {
+                    const exists = await Variant.findOne({ barcode: variant.barcode.trim() });
+                    if (exists) return res.status(400).json({ message: `Variant Barcode '${variant.barcode}' is already in use` });
+                }
+            }
+        }
+
+        const productData = { ...req.body };
+
+        if (hasVariant) {
+            delete productData.SKU;
+            delete productData.barcode;
+            delete productData.productImages;
+            delete productData.costPrice;
+            delete productData.sellingPrice;
+            delete productData.mrpPrice;
+            if (!productData.productType) delete productData.productType;
+        } else {
+            delete productData.productType;
+        }
+
+        ['brand', 'category', 'productType'].forEach(field => {
+            if (productData[field] === '') delete productData[field];
+        });
+
+        const newProduct = await Product.create(productData);
+
+        if (hasVariant && Array.isArray(variants) && variants.length > 0) {
             const variantDocs = variants.map(variant => ({
                 ...variant,
-                SKU: variant.SKU?.trim(),
-                barcode: variant.barcode?.trim(),
                 productId: newProduct._id,
             }));
 
@@ -94,13 +91,14 @@ export const createProduct = async (req, res) => {
         res.status(201).json({
             success: true,
             message: 'Product created successfully',
+            product: newProduct,
         });
-
     } catch (err) {
         console.error(err);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ message: 'Server error', error: err.message });
     }
 };
+
 
 
 export const getAllProducts = async (req, res) => {
