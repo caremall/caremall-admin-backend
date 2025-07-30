@@ -103,7 +103,13 @@ const productSchema = new Schema(
 
         metaTitle: String,
         metaDescription: String,
-        urlSlug: { type: String, unique: true, lowercase: true, trim: true },
+        urlSlug: {
+            type: String,
+            required: true,
+            unique: true,
+            lowercase: true,
+            trim: true
+        },
     },
     { timestamps: true }
 );
