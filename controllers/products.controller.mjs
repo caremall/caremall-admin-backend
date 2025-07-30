@@ -12,10 +12,12 @@ export const createProduct = async (req, res) => {
             SKU,
             barcode,
             variants = [],
+            urlSlug
         } = req.body;
 
         const missingFields = [];
-        if (!productName || productName.trim() === '') missingFields.push('productName');
+        if (!productName || productName.trim() === '') missingFields.push('productName')
+        if (!urlSlug || urlSlug.trim() === '') missingFields.push('urlSlug');
         if (!productDescription || productDescription.trim() === '') missingFields.push('productDescription');
         if (!brand || brand.trim() === '') missingFields.push('brand');
         if (!category || category.trim() === '') missingFields.push('category');
@@ -27,6 +29,10 @@ export const createProduct = async (req, res) => {
         const nameExists = await Product.findOne({ productName: productName.trim() });
         if (nameExists) {
             return res.status(200).json({ message: 'Product name is already taken' });
+        }
+        const slugExist = await Product.findOne({ urlSlug: urlSlug.trim() })
+        if (slugExist) {
+            return res.status(200).json({ message: 'Slug is already taken' });
         }
 
         if (!hasVariant) {
