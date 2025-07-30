@@ -16,12 +16,8 @@ export const createProduct = async (req, res) => {
             costPrice,
             sellingPrice,
             mrpPrice,
-            availableQuantity,
-            minimumQuantity,
-            reorderQuantity,
-            maximumQuantity,
+            defaultVariant,
             variants = [],
-            ...rest
         } = req.body;
 
         const nameExists = await Product.findOne({ productName: productName })
@@ -47,10 +43,6 @@ export const createProduct = async (req, res) => {
             if (costPrice === undefined) missingFields.push('costPrice');
             if (sellingPrice === undefined) missingFields.push('sellingPrice');
             if (mrpPrice === undefined) missingFields.push('mrpPrice');
-            if (availableQuantity === undefined) missingFields.push('availableQuantity');
-            if (minimumQuantity === undefined) missingFields.push('minimumQuantity');
-            if (reorderQuantity === undefined) missingFields.push('reorderQuantity');
-            if (maximumQuantity === undefined) missingFields.push('maximumQuantity');
 
             if (missingFields.length) {
                 return res.status(400).json({ message: `Missing fields: ${missingFields.join(', ')}` });
@@ -64,7 +56,11 @@ export const createProduct = async (req, res) => {
                 ...variant,
                 productId: newProduct._id,
             }));
-            await Variant.insertMany(variantDocs);
+            const newVariants = await Variant.insertMany(variantDocs);
+            newVariants.forEach(variant => {
+                if (variant.defaultVariant) newProduct.defaultVariant = variant._id
+            })
+            await newProduct.save()
         }
 
         res.status(201).json({

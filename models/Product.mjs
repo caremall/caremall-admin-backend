@@ -25,10 +25,8 @@ const productSchema = new Schema(
         defaultVariant: {
             type: Schema.Types.ObjectId,
             ref: 'Variant',
-            required: function () {
-                return this.hasVariant === true;
-            },
         },
+
         productType: {
             type: Schema.Types.ObjectId,
             ref: 'ProductType',

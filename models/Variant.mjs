@@ -27,6 +27,11 @@ const variantSchema = new Schema(
             required: true
         },
 
+        defaultVariant: {
+            type: Boolean,
+            required: true
+        },
+
         barcode: {
             type: String,
             required: true
