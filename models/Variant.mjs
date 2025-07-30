@@ -14,22 +14,23 @@ const variantSchema = new Schema(
                 name: {
                     type: String,
                     required: true,
-                }, // e.g., "Size", "Color"
+                },
                 value: {
                     type: String,
-                    required: true,
-                }, // e.g., "M", "Red"
+                },
             }
         ],
 
         SKU: {
             type: String,
-            required: true
+            required: true,
+            unique: true
         },
 
         barcode: {
             type: String,
-            required: true
+            required: true,
+            unique: true
         },
 
         costPrice: { type: Number, required: true },
