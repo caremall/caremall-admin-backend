@@ -22,12 +22,21 @@ export const createProduct = async (req, res) => {
         const nameExists = await Product.findOne({ productName: productName })
         if (nameExists) return res.json({ message: 'Product name is already taken' })
 
-        const SkuExists = await Product.findOne({ SKU: SKU })
-        if (SkuExists) return res.json({ message: 'This SKU is already in Use' })
+        if (SKU && SKU.trim() !== "") {
+            const SkuExists = await Product.findOne({ SKU });
+            const variantExists = await Variant.findOne({ SKU })
+            if (SkuExists || variantExists) {
+                return res.json({ message: 'This SKU is already in use' });
+            }
+        }
 
-        const barcodeExists = await Product.findOne({ barcode: barcode })
-        if (barcodeExists) return res.json({ message: 'This Barcode is already taken' })
-
+        if (barcode && barcode.trim() !== "") {
+            const barcodeExists = await Product.findOne({ barcode: barcode.trim() });
+            const variantExists = await Variant.findOne({ SKU })
+            if (barcodeExists || variantExists) {
+                return res.json({ message: 'This Barcode is already taken' });
+            }
+        }
 
         if (!productName || !productDescription || !brand || !category) {
             return res.status(400).json({ message: 'Required fields missing' });
@@ -175,10 +184,6 @@ export const updateProduct = async (req, res) => {
             costPrice,
             sellingPrice,
             mrpPrice,
-            availableQuantity,
-            minimumQuantity,
-            reorderQuantity,
-            maximumQuantity,
         } = updates;
 
         if (hasVariant === false || hasVariant === 'false') {
@@ -190,10 +195,6 @@ export const updateProduct = async (req, res) => {
             if (costPrice === undefined) missingFields.push('costPrice');
             if (sellingPrice === undefined) missingFields.push('sellingPrice');
             if (mrpPrice === undefined) missingFields.push('mrpPrice');
-            if (availableQuantity === undefined) missingFields.push('availableQuantity');
-            if (minimumQuantity === undefined) missingFields.push('minimumQuantity');
-            if (reorderQuantity === undefined) missingFields.push('reorderQuantity');
-            if (maximumQuantity === undefined) missingFields.push('maximumQuantity');
 
             if (missingFields.length) {
                 return res.status(400).json({ message: `Missing fields for non-variant product: ${missingFields.join(', ')}` });

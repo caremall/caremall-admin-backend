@@ -7,6 +7,8 @@ const productSchema = new Schema(
         brand: { type: Schema.Types.ObjectId, ref: 'Brand', required: true },
         category: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
 
+        hasVariant: { type: Boolean, required: true },
+
         SKU: {
             type: String,
             required: function () {
@@ -21,7 +23,6 @@ const productSchema = new Schema(
             },
         },
 
-        hasVariant: { type: Boolean, required: true },
         defaultVariant: {
             type: Schema.Types.ObjectId,
             ref: 'Variant',
