@@ -21,22 +21,22 @@ export const createProduct = async (req, res) => {
         if (!category || category.trim() === '') missingFields.push('category');
 
         if (missingFields.length > 0) {
-            return res.status(400).json({ message: `Missing required fields: ${missingFields.join(', ')}` });
+            return res.status(200).json({ message: `Missing required fields: ${missingFields.join(', ')}` });
         }
 
         const nameExists = await Product.findOne({ productName: productName.trim() });
         if (nameExists) {
-            return res.status(400).json({ message: 'Product name is already taken' });
+            return res.status(200).json({ message: 'Product name is already taken' });
         }
 
         if (!hasVariant) {
             if (SKU && SKU.trim() !== '') {
                 const skuExists = await Product.findOne({ SKU: SKU.trim() });
-                if (skuExists) return res.status(400).json({ message: 'This SKU is already in use' });
+                if (skuExists) return res.status(200).json({ message: 'This SKU is already in use' });
             }
             if (barcode && barcode.trim() !== '') {
                 const barcodeExists = await Product.findOne({ barcode: barcode.trim() });
-                if (barcodeExists) return res.status(400).json({ message: 'This Barcode is already in use' });
+                if (barcodeExists) return res.status(200).json({ message: 'This Barcode is already in use' });
             }
         }
 
@@ -44,11 +44,11 @@ export const createProduct = async (req, res) => {
             for (let variant of variants) {
                 if (variant.SKU) {
                     const exists = await Variant.findOne({ SKU: variant.SKU.trim() });
-                    if (exists) return res.status(400).json({ message: `Variant SKU '${variant.SKU}' is already in use` });
+                    if (exists) return res.status(200).json({ message: `Variant SKU '${variant.SKU}' is already in use` });
                 }
                 if (variant.barcode) {
                     const exists = await Variant.findOne({ barcode: variant.barcode.trim() });
-                    if (exists) return res.status(400).json({ message: `Variant Barcode '${variant.barcode}' is already in use` });
+                    if (exists) return res.status(200).json({ message: `Variant Barcode '${variant.barcode}' is already in use` });
                 }
             }
         }
