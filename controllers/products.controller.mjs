@@ -19,25 +19,6 @@ export const createProduct = async (req, res) => {
             variants = [],
         } = req.body;
 
-        const nameExists = await Product.findOne({ productName: productName })
-        if (nameExists) return res.json({ message: 'Product name is already taken' })
-
-        if (SKU && SKU.trim() !== "") {
-            const SkuExists = await Product.findOne({ SKU });
-            const variantExists = await Variant.findOne({ SKU })
-            if (SkuExists || variantExists) {
-                return res.json({ message: 'This SKU is already in use' });
-            }
-        }
-
-        if (barcode && barcode.trim() !== "") {
-            const barcodeExists = await Product.findOne({ barcode: barcode.trim() });
-            const variantExists = await Variant.findOne({ SKU })
-            if (barcodeExists || variantExists) {
-                return res.json({ message: 'This Barcode is already taken' });
-            }
-        }
-
         if (!productName || !productDescription || !brand || !category) {
             return res.status(400).json({ message: 'Required fields missing' });
         }
@@ -52,33 +33,75 @@ export const createProduct = async (req, res) => {
             if (sellingPrice === undefined) missingFields.push('sellingPrice');
             if (mrpPrice === undefined) missingFields.push('mrpPrice');
 
-            if (missingFields.length) {
+            if (missingFields.length > 0) {
                 return res.status(400).json({ message: `Missing fields: ${missingFields.join(', ')}` });
             }
         }
 
+        const cleanSKU = SKU?.trim();
+        const cleanBarcode = barcode?.trim();
+
+        const variantSKUs = variants.map(v => v.SKU?.trim()).filter(Boolean);
+        const variantBarcodes = variants.map(v => v.barcode?.trim()).filter(Boolean);
+
+        const allSKUs = cleanSKU ? [cleanSKU, ...variantSKUs] : [...variantSKUs];
+        const allBarcodes = cleanBarcode ? [cleanBarcode, ...variantBarcodes] : [...variantBarcodes];
+
+        if (allSKUs.length > 0) {
+            const existingSku = await Promise.any([
+                Product.findOne({ SKU: { $in: allSKUs } }),
+                Variant.findOne({ SKU: { $in: allSKUs } }),
+            ]);
+            if (existingSku) {
+                return res.status(400).json({ message: `SKU '${existingSku.SKU}' is already in use` });
+            }
+        }
+
+        if (allBarcodes.length > 0) {
+            const existingBarcode = await Promise.any([
+                Product.findOne({ barcode: { $in: allBarcodes } }),
+                Variant.findOne({ barcode: { $in: allBarcodes } }),
+            ]);
+            if (existingBarcode) {
+                return res.status(400).json({ message: `Barcode '${existingBarcode.barcode}' is already in use` });
+            }
+        }
+
+        const nameExists = await Product.findOne({ productName });
+        if (nameExists) {
+            return res.status(400).json({ message: 'Product name is already taken' });
+        }
+
         const newProduct = await Product.create(req.body);
 
-        if (hasVariant && Array.isArray(variants) && variants.length > 0) {
+        if (hasVariant && variants.length > 0) {
             const variantDocs = variants.map(variant => ({
                 ...variant,
+                SKU: variant.SKU?.trim(),
+                barcode: variant.barcode?.trim(),
                 productId: newProduct._id,
             }));
+
             const newVariants = await Variant.insertMany(variantDocs);
-            newVariants.forEach(variant => {
-                if (variant.isDefault) newProduct.defaultVariant = variant._id
-            })
-            await newProduct.save()
+
+            const defaultVar = newVariants.find(v => v.isDefault);
+            if (defaultVar) {
+                newProduct.defaultVariant = defaultVar._id;
+                await newProduct.save();
+            }
         }
 
         res.status(201).json({
-            success: true, message: 'Product created successfully'
+            success: true,
+            message: 'Product created successfully',
         });
+
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Server error' });
     }
-}
+};
+
 
 export const getAllProducts = async (req, res) => {
     try {
@@ -96,7 +119,6 @@ export const getAllProducts = async (req, res) => {
         } = req.query;
 
         const query = {};
-
 
         if (search) {
             query.$or = [
@@ -130,12 +152,44 @@ export const getAllProducts = async (req, res) => {
             .populate('brand category')
             .sort(sortBy)
             .skip(skip)
-            .limit(parseInt(limit));
+            .limit(parseInt(limit))
+            .lean();
+
+        const productIdsWithVariants = products
+            .filter(p => p.hasVariant && p.defaultVariant)
+            .map(p => p.defaultVariant);
+
+        const defaultVariants = await Variant.find({ _id: { $in: productIdsWithVariants } }).lean();
+
+        const defaultVariantMap = {};
+        for (const variant of defaultVariants) {
+            defaultVariantMap[variant._id.toString()] = variant;
+        }
+
+        const enrichedProducts = products.map(product => {
+            if (product.hasVariant && product.defaultVariant) {
+                const variant = defaultVariantMap[product.defaultVariant.toString()];
+                if (variant) {
+                    return {
+                        ...product,
+                        SKU: variant.SKU,
+                        barcode: variant.barcode,
+                        productImages: variant.images,
+                        costPrice: variant.costPrice,
+                        sellingPrice: variant.sellingPrice,
+                        mrpPrice: variant.mrpPrice,
+                        discountPercent: variant.discountPercent ?? product.discountPercent,
+                        taxRate: variant.taxRate ?? product.taxRate,
+                    };
+                }
+            }
+            return product;
+        });
 
         const total = await Product.countDocuments(query);
 
         res.status(200).json({
-            data: products,
+            data: enrichedProducts,
             meta: {
                 total,
                 page: parseInt(page),
