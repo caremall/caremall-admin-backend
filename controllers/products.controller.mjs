@@ -16,7 +16,6 @@ export const createProduct = async (req, res) => {
             costPrice,
             sellingPrice,
             mrpPrice,
-            defaultVariant,
             variants = [],
         } = req.body;
 
@@ -58,7 +57,7 @@ export const createProduct = async (req, res) => {
             }));
             const newVariants = await Variant.insertMany(variantDocs);
             newVariants.forEach(variant => {
-                if (variant.defaultVariant) newProduct.defaultVariant = variant._id
+                if (variant.isDefault) newProduct.defaultVariant = variant._id
             })
             await newProduct.save()
         }
@@ -99,7 +98,6 @@ export const getAllProducts = async (req, res) => {
             ];
         }
 
-        // 🎯 Filters
         if (brand) query.brand = brand;
         if (category) query.category = category;
         if (visibility) query.visibility = visibility;
