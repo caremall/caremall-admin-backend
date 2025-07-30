@@ -16,12 +16,8 @@ export const createProduct = async (req, res) => {
             costPrice,
             sellingPrice,
             mrpPrice,
-            availableQuantity,
-            minimumQuantity,
-            reorderQuantity,
-            maximumQuantity,
+            defaultVariant,
             variants = [],
-            ...rest
         } = req.body;
 
         const nameExists = await Product.findOne({ productName: productName })
@@ -47,10 +43,6 @@ export const createProduct = async (req, res) => {
             if (costPrice === undefined) missingFields.push('costPrice');
             if (sellingPrice === undefined) missingFields.push('sellingPrice');
             if (mrpPrice === undefined) missingFields.push('mrpPrice');
-            if (availableQuantity === undefined) missingFields.push('availableQuantity');
-            if (minimumQuantity === undefined) missingFields.push('minimumQuantity');
-            if (reorderQuantity === undefined) missingFields.push('reorderQuantity');
-            if (maximumQuantity === undefined) missingFields.push('maximumQuantity');
 
             if (missingFields.length) {
                 return res.status(400).json({ message: `Missing fields: ${missingFields.join(', ')}` });
@@ -64,7 +56,11 @@ export const createProduct = async (req, res) => {
                 ...variant,
                 productId: newProduct._id,
             }));
-            await Variant.insertMany(variantDocs);
+            const newVariants = await Variant.insertMany(variantDocs);
+            newVariants.forEach(variant => {
+                if (variant.defaultVariant) newProduct.defaultVariant = variant._id
+            })
+            await newProduct.save()
         }
 
         res.status(201).json({
@@ -93,12 +89,13 @@ export const getAllProducts = async (req, res) => {
 
         const query = {};
 
-        // 🔍 Text Search (productName or productDescription)
+
         if (search) {
             query.$or = [
                 { productName: { $regex: search, $options: 'i' } },
                 { productDescription: { $regex: search, $options: 'i' } },
-                { SKU: { $regex: search, $options: 'i' } }
+                { SKU: { $regex: search, $options: 'i' } },
+                { barcode: { $regex: search, $options: 'i' } }
             ];
         }
 
@@ -108,18 +105,15 @@ export const getAllProducts = async (req, res) => {
         if (visibility) query.visibility = visibility;
         if (status) query.productStatus = status;
 
-        // 💰 Price Range
         if (minPrice || maxPrice) {
             query.sellingPrice = {};
             if (minPrice) query.sellingPrice.$gte = parseFloat(minPrice);
             if (maxPrice) query.sellingPrice.$lte = parseFloat(maxPrice);
         }
 
-        // 🔢 Pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
-        // 🔃 Sorting
-        let sortBy = { createdAt: -1 }; // default: newest first
+        let sortBy = { createdAt: -1 };
         if (sort) {
             const [field, order] = sort.split(':');
             sortBy = { [field]: order === 'asc' ? 1 : -1 };

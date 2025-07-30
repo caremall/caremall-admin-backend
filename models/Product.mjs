@@ -2,21 +2,67 @@ import { model, Schema } from "mongoose";
 
 const productSchema = new Schema(
     {
-        // existing fields ...
         productName: { type: String, required: true, unique: true, trim: true },
         productDescription: { type: String, required: true },
         brand: { type: Schema.Types.ObjectId, ref: 'Brand', required: true },
         category: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
-        SKU: String,
-        barcode: String,
-        hasVariant: { type: Boolean, required: true },
 
-        productImages: [String],
+        SKU: {
+            type: String,
+            required: function () {
+                return this.hasVariant === false;
+            },
+        },
+
+        barcode: {
+            type: String,
+            required: function () {
+                return this.hasVariant === false;
+            },
+        },
+
+        hasVariant: { type: Boolean, required: true },
+        defaultVariant: {
+            type: Schema.Types.ObjectId,
+            ref: 'Variant',
+        },
+
+        productType: {
+            type: Schema.Types.ObjectId,
+            ref: 'ProductType',
+            required: function () {
+                return this.hasVariant === true;
+            },
+        },
+
+        productImages: {
+            type: [String],
+            required: function () {
+                return this.hasVariant === false;
+            },
+        },
+
         tags: [String],
 
-        costPrice: Number,
-        sellingPrice: Number,
-        mrpPrice: Number,
+        costPrice: {
+            type: Number,
+            required: function () {
+                return this.hasVariant === false;
+            },
+        },
+        sellingPrice: {
+            type: Number,
+            required: function () {
+                return this.hasVariant === false;
+            },
+        },
+        mrpPrice: {
+            type: Number,
+            required: function () {
+                return this.hasVariant === false;
+            },
+        },
+
         discountPercent: Number,
         taxRate: Number,
 
@@ -38,7 +84,6 @@ const productSchema = new Schema(
         reorderQuantity: { type: Number, default: 0 },
         maximumQuantity: { type: Number, default: 0 },
 
-
         weight: Number,
         dimensions: {
             length: Number,
@@ -55,7 +100,6 @@ const productSchema = new Schema(
         affiliateId: { type: String, trim: true },
         externalLinks: [String],
 
-        // SEO
         metaTitle: String,
         metaDescription: String,
         urlSlug: { type: String, unique: true, lowercase: true, trim: true },
