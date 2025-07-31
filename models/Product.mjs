@@ -107,6 +107,22 @@ const productSchema = new Schema(
             lowercase: true,
             trim: true
         },
+        viewsCount: {
+            type: Number,
+            default: 0
+        },
+        addedToCartCount: {
+            type: Number,
+            default: 0,
+        },
+        wishlistCount: {
+            type: Number,
+            default: 0,
+        },
+        orderCount: {
+            type: Number,
+            default: 0,
+        },
     },
     { timestamps: true }
 );
