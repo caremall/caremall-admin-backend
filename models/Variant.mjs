@@ -29,7 +29,6 @@ const variantSchema = new Schema(
 
         barcode: {
             type: String,
-            required: true,
             unique: true
         },
 

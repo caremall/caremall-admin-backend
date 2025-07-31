@@ -18,9 +18,6 @@ const productSchema = new Schema(
 
         barcode: {
             type: String,
-            required: function () {
-                return this.hasVariant === false;
-            },
         },
 
         defaultVariant: {
