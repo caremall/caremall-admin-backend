@@ -23,7 +23,7 @@ export const createCategory = async (req, res) => {
             type,
             name,
             description,
-            parentId: parentId && parentId !== '' ? parentId : null,
+            parentId: parentId && parentId !== '' ? parentId : undefined,
             categoryCode,
             status,
         });
