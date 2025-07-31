@@ -18,12 +18,12 @@ export const createCategory = async (req, res) => {
         if (codeConflict) {
             return res.status(400).json({ message: 'Category code is already in use.' });
         }
-
+        if (parentId && parentId !== '') parentId = undefined
         await Category.create({
             type,
             name,
             description,
-            parentId: parentId && parentId !== '' ? parentId : undefined,
+            parentId: parentId,
             categoryCode,
             status,
         });
