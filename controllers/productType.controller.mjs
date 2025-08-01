@@ -82,7 +82,7 @@ export const updateProductType = async (req, res) => {
 
         const updated = await ProductType.findByIdAndUpdate(req.params.id, req.body, { new: true });
         if (!updated) return res.status(404).json({ message: 'Not found' });
-        res.status(200).json(updated);
+        res.status(200).json({ success: true, message: 'Product type updated' });
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
