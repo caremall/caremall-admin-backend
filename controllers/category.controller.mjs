@@ -5,7 +5,7 @@ import Product from '../models/Product.mjs'
 
 export const createCategory = async (req, res) => {
     try {
-        const { type, name, description, parentId, categoryCode, status } = req.body;
+        const { type, name, image, description, parentId, categoryCode, status } = req.body;
 
         const nameConflict = await Category.findOne({ name, parentId });
 
@@ -18,9 +18,12 @@ export const createCategory = async (req, res) => {
         if (codeConflict) {
             return res.status(400).json({ message: 'Category code is already in use.' });
         }
-        if (parentId && parentId !== '') parentId = undefined
+
+        if (parentId && parentId === '' || type === 'Main') parentId = undefined
+
         await Category.create({
             type,
+            image,
             name,
             description,
             parentId: parentId,
@@ -93,6 +96,7 @@ export const updateCategory = async (req, res) => {
             name,
             description,
             parentId,
+            image,
             categoryCode,
             status
         } = req.body.data;
@@ -127,7 +131,8 @@ export const updateCategory = async (req, res) => {
         category.type = type ?? category.type;
         category.description = description ?? category.description;
         category.status = status ?? category.status;
-        category.parentId = type === 'Main' ? null : parentId ?? category.parentId;
+        category.image = image ?? category.image;
+        category.parentId = type === 'Main' ? undefined : parentId ?? category.parentId;
         category.categoryCode = categoryCode ?? category.categoryCode;
 
 
