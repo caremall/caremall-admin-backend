@@ -1,3 +1,4 @@
+import Product from '../models/Product.mjs';
 import ProductType from '../models/ProductType.mjs';
 
 
@@ -60,8 +61,6 @@ export const getAllProductTypes = async (req, res) => {
 };
 
 
-
-
 export const getProductTypeById = async (req, res) => {
     try {
         const type = await ProductType.findById(req.params.id);
@@ -91,6 +90,9 @@ export const updateProductType = async (req, res) => {
 
 export const deleteProductType = async (req, res) => {
     try {
+        const product = await Product.findOne({ productType: req.params.id })
+        if (product) return res.status(200).json({ message: 'Product type is already used for several products' })
+
         const deleted = await ProductType.findByIdAndDelete(req.params.id);
         if (!deleted) return res.status(404).json({ message: 'Not found' });
         res.status(200).json({ message: 'Deleted successfully' });
