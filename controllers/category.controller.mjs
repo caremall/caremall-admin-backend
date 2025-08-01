@@ -96,15 +96,13 @@ export const getCategoryById = async (req, res) => {
 export const updateCategory = async (req, res) => {
     try {
         const { id } = req.params;
-        const {
-            type,
-            name,
-            description,
-            parentId,
-            image,
-            categoryCode,
-            status
-        } = req.body.data;
+        let { type, name, image, description, parentId, categoryCode, status } = req.body;
+
+        parentId = parentId?.trim() || undefined;
+
+        if (!parentId || type === 'Main') {
+            parentId = undefined;
+        }
 
         if (!name || !type || !categoryCode) {
             return res.status(200).json({ message: 'Required fields are missing' });
