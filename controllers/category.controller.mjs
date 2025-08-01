@@ -5,9 +5,12 @@ import Product from '../models/Product.mjs'
 
 export const createCategory = async (req, res) => {
     try {
-        const { type, name, image, description, parentId, categoryCode, status } = req.body;
 
-        if (!parentId || parentId === '' || type === 'Main') {
+        let { type, name, image, description, parentId, categoryCode, status } = req.body;
+
+        parentId = parentId?.trim() || undefined;
+
+        if (!parentId || type === 'Main') {
             parentId = undefined;
         }
 
