@@ -14,7 +14,7 @@ export const createBrand = async (req, res) => {
 
         const existingBrand = await Brand.findOne({ brandName: brandName.trim() });
         if (existingBrand) {
-            return res.status(400).json({ message: 'Brand already exists' });
+            return res.status(200).json({ message: 'Brand already exists' });
         }
 
         const newBrand = await Brand.create({
@@ -108,7 +108,7 @@ export const updateBrand = async (req, res) => {
             _id: { $ne: req.params.id }
         });
         if (duplicate) {
-            return res.status(400).json({ message: 'Brand with this brand name already exists' });
+            return res.status(200).json({ message: 'Brand with this brand name already exists' });
         }
 
         brand.brandName = brandName || brand.brandName;
@@ -131,7 +131,7 @@ export const updateBrand = async (req, res) => {
 export const deleteBrand = async (req, res) => {
     try {
         const product = await Product.findOne({ brand: req.params.id })
-        if (product) return res.status(400).json({
+        if (product) return res.status(200).json({
             message: "Brand already used in products"
         })
 
