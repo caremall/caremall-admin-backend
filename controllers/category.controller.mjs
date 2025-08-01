@@ -7,6 +7,10 @@ export const createCategory = async (req, res) => {
     try {
         const { type, name, image, description, parentId, categoryCode, status } = req.body;
 
+        if (!parentId || parentId === '' || type === 'Main') {
+            parentId = undefined;
+        }
+
         const nameConflict = await Category.findOne({ name, parentId });
 
         if (nameConflict) {
@@ -18,8 +22,6 @@ export const createCategory = async (req, res) => {
         if (codeConflict) {
             return res.status(400).json({ message: 'Category code is already in use.' });
         }
-
-        if (parentId && parentId === '' || type === 'Main') parentId = undefined
 
         await Category.create({
             type,
