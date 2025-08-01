@@ -7,6 +7,10 @@ const categorySchema = new mongoose.Schema(
             enum: ['Main', 'Sub'],
             required: true,
         },
+        image: {
+            type: String,
+            required: true
+        },
         name: {
             type: String,
             required: true,
