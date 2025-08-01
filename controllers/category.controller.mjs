@@ -17,13 +17,13 @@ export const createCategory = async (req, res) => {
         const nameConflict = await Category.findOne({ name, parentId });
 
         if (nameConflict) {
-            return res.status(400).json({ message: 'A category with the same name already exists under this parent.' });
+            return res.status(200).json({ message: 'A category with the same name already exists under this parent.' });
         }
 
         const codeConflict = await Category.findOne({ categoryCode });
 
         if (codeConflict) {
-            return res.status(400).json({ message: 'Category code is already in use.' });
+            return res.status(200).json({ message: 'Category code is already in use.' });
         }
 
         await Category.create({
