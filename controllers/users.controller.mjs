@@ -29,6 +29,7 @@ export const createUser = async (req, res) => {
 };
 
 export const getAllUsers = async (req, res) => {
+  console.log('this function will work');
   try {
     const users = await Users.find({});
     res.status(200).json(users);
