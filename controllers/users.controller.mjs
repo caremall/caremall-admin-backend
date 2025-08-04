@@ -28,6 +28,15 @@ export const createUser = async (req, res) => {
   }
 };
 
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await Users.find({});
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch users", error });
+  }
+};
+
 
 export const blockOrUnblockUser = async (req, res) => {
   try {
