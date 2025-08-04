@@ -8,7 +8,7 @@ router.route('/')
     .get(getAllProducts)
     .post(createProduct)
 
-router.route('/:id')
+router.route('/:slug')
     .get(getProductBySlug)
     .put(updateProduct)
     .delete(deleteProduct)
