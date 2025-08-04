@@ -18,7 +18,7 @@ import productsRouter from './routes/products.routes.mjs'
 import blogsRouter from './routes/blogs.router.mjs'
 import productTypeRouter from './routes/productType.router.mjs'
 import offerRouter from './routes/offer.router.mjs'
-import UserRouter from './routes/users.router.mjs'
+import userRouter from './routes/users.router.mjs'
 const app = express();
 
 
@@ -43,7 +43,7 @@ app.use('/products', productsRouter)
 app.use('/blogs', blogsRouter)
 app.use('/product-types', productTypeRouter)
 app.use('/offer',offerRouter)
-app.use('/users',UserRouter)
+app.use('/users',userRouter)
 
 
 

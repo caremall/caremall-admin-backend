@@ -9,6 +9,6 @@ const router = express.Router();
 
 router.post('/', createUser);             
 router.get('/', getAllUsers);               
-router.put('/:id', blockOrUnblockUser);    
+router.patch('/:id', blockOrUnblockUser);
 
 export default router;                      

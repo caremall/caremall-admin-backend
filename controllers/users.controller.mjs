@@ -32,7 +32,7 @@ export const getAllUsers = async (req, res) => {
   console.log('this function will work');
   try {
     const users = await Users.find({});
-    res.status(200).json(users);
+    res.status(200).json({data:users,meta:{}});
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch users", error });
   }
@@ -40,6 +40,7 @@ export const getAllUsers = async (req, res) => {
 
 
 export const blockOrUnblockUser = async (req, res) => {
+
   try {
     const { id } = req.params;
     const { isBlocked } = req.body;
