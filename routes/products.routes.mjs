@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { createProduct, deleteProduct, getAllProducts, getProductById, updateProduct } from '../controllers/products.controller.mjs'
+import { createProduct, deleteProduct, getAllProducts, getProductBySlug, updateProduct } from '../controllers/products.controller.mjs'
 
 const router = Router()
 
@@ -8,8 +8,8 @@ router.route('/')
     .get(getAllProducts)
     .post(createProduct)
 
-router.route('/:id')
-    .get(getProductById)
+router.route('/:slug')
+    .get(getProductBySlug)
     .put(updateProduct)
     .delete(deleteProduct)
 
