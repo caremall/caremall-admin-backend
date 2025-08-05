@@ -1,11 +1,12 @@
 import express from 'express';
 import {
+  createOffer,
   getAllOffers,
   getOfferById,
-  createOffer,
   updateOffer,
   deleteOffer,
-} from '../controllers/offer.controller.mjs';
+  updateOfferStatus
+} from "../controllers/offers.controller.mjs";
 
 const router = express.Router();
 
@@ -14,5 +15,6 @@ router.get('/:id', getOfferById);
 router.post('/', createOffer);
 router.put('/:id', updateOffer);
 router.delete('/:id', deleteOffer);
+router.patch('/:id/status', updateOfferStatus);
 
 export default router;
