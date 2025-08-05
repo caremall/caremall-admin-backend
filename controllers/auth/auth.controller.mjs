@@ -64,7 +64,7 @@ export const refresh = async (req, res) => {
 export const logout = async (req, res) => {
     try {
         const cookies = req.cookies
-        if (!cookies?.user) return res.sendStatus(204) //No content
+        if (!cookies?.user) return res.sendStatus(204) 
         res.clearCookie('user', {
             httpOnly: true,
             sameSite: 'None',
