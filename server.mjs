@@ -18,10 +18,9 @@ import productsRouter from './routes/products.routes.mjs'
 import variantRouter from './routes/variants.router.mjs'
 import blogsRouter from './routes/blogs.router.mjs'
 import productTypeRouter from './routes/productType.router.mjs'
-import offerRouter from './routes/offer.router.mjs'
 import ordersRouter from './routes/orders.router.mjs'
 import userRouter from './routes/users.router.mjs'
-import offerRouter from './routes/offerManagement.router.mjs'
+import offerRouter from './routes/offers.router.mjs'
 
 
 const app = express();
@@ -49,8 +48,8 @@ app.use('/orders', ordersRouter)
 app.use('/variants', variantRouter)
 app.use('/blogs', blogsRouter)
 app.use('/product-types', productTypeRouter)
-app.use('/offer',offerRouter)
-app.use('/users',userRouter)
+app.use('/offer', offerRouter)
+app.use('/users', userRouter)
 app.use('/offer', offerRouter)
 
 
