@@ -1,7 +1,6 @@
 import Blog from "../models/Blog.mjs";
 
 export const createBlog = async (req, res) => {
-    console.log('blog creation')
     try {
         const {
             title,
