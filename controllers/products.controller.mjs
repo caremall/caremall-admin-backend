@@ -209,19 +209,31 @@ export const getAllProducts = async (req, res) => {
 
 
 
-export const getProductById = async (req, res) => {
+export const getProductBySlug = async (req, res) => {
     try {
-        const product = await Product.findById(req.params.id).populate('brand category');
-        if (!product) return res.status(404).json({ message: 'Product not found' });
-        let variants
-        if (product.hasVariant) {
-            variants = await Variant.find({ productId: req.params.id })
+        const product = await Product.findOne({ urlSlug: req.params.slug })
+            .populate('brand category');
+
+        if (!product) {
+            return res.status(404).json({ message: 'Product not found' });
         }
-        res.status(200).json({ ...product, variants });
+
+        let variants = [];
+        if (product.hasVariant) {
+            variants = await Variant.find({ productId: product._id });
+        }
+
+        res.status(200).json({
+            success: true,
+            product,
+            variants: product.hasVariant ? variants : []
+        });
+
     } catch (err) {
+        console.error(err);
         res.status(500).json({ message: 'Server error' });
     }
-}
+};
 
 
 export const updateProduct = async (req, res) => {
