@@ -1,0 +1,109 @@
+import Order from '../models/Order.mjs';
+
+
+export const getAllOrders = async (req, res) => {
+    try {
+        const { page = 1, limit = 10, search = '', status } = req.query;
+        const query = {};
+
+        if (search) {
+            query.$or = [
+                { 'shippingAddress.fullName': { $regex: search, $options: 'i' } },
+                { 'shippingAddress.phone': { $regex: search, $options: 'i' } },
+            ];
+        }
+
+        if (status) {
+            query.orderStatus = status;
+        }
+
+        const orders = await Order.find(query)
+            .populate('user', 'name email')
+            .populate('items.product', 'productName')
+            .populate('items.variant', 'variantName')
+            .sort({ createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(parseInt(limit));
+
+        const total = await Order.countDocuments(query);
+
+        res.status(200).json({
+            data: orders,
+            meta: {
+                total,
+                page: Number(page),
+                pages: Math.ceil(total / limit)
+            },
+        });
+    } catch (error) {
+        console.error('Get All Orders Error:', error);
+        res.status(500).json({ message: 'Failed to fetch orders' });
+    }
+};
+
+
+export const getOrderById = async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id)
+            .populate('user', 'name email')
+            .populate('items.product', 'productName')
+            .populate('items.variant', 'variantName');
+
+        if (!order) return res.status(404).json({ message: 'Order not found' });
+
+        res.status(200).json(order);
+    } catch (error) {
+        console.error('Get Order By ID Error:', error);
+        res.status(500).json({ message: 'Failed to fetch order' });
+    }
+};
+
+
+export const updateOrderStatus = async (req, res) => {
+    try {
+        const { status } = req.body;
+        const order = await Order.findById(req.params.id);
+
+        if (!order) return res.status(404).json({ message: 'Order not found' });
+
+        order.orderStatus = status;
+        await order.save();
+
+        res.status(200).json({ message: 'Order status updated', order });
+    } catch (error) {
+        console.error('Update Order Status Error:', error);
+        res.status(500).json({ message: 'Failed to update order status' });
+    }
+};
+
+
+export const markOrderDelivered = async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ message: 'Order not found' });
+
+        order.isDelivered = true;
+        order.deliveredAt = new Date();
+        order.orderStatus = 'delivered';
+        await order.save();
+
+        res.status(200).json({ message: 'Order marked as delivered', order });
+    } catch (error) {
+        console.error('Mark Delivered Error:', error);
+        res.status(500).json({ message: 'Failed to mark as delivered' });
+    }
+};
+
+
+export const deleteOrder = async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ message: 'Order not found' });
+
+        await order.deleteOne();
+        res.status(200).json({ message: 'Order deleted successfully' });
+    } catch (error) {
+        console.error('Delete Order Error:', error);
+        res.status(500).json({ message: 'Failed to delete order' });
+    }
+};
