@@ -3,6 +3,7 @@ import { model, Schema } from "mongoose";
 const productSchema = new Schema(
     {
         productName: { type: String, required: true, unique: true, trim: true },
+        shortDescription: { type: String, required: true },
         productDescription: { type: String, required: true },
         brand: { type: Schema.Types.ObjectId, ref: 'Brand', required: true },
         category: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
