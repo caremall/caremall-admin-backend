@@ -20,7 +20,7 @@ export const getAllOrders = async (req, res) => {
         const orders = await Order.find(query)
             .populate('user', 'name email')
             .populate('items.product', 'productName')
-            .populate('items.variant', 'variantName')
+            .populate('items.variant', 'variantAttributes')
             .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
             .limit(parseInt(limit));
