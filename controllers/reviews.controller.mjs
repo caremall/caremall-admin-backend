@@ -28,11 +28,12 @@ export const getAllReviewsAdmin = async (req, res) => {
             .limit(Number(limit));
 
         res.status(200).json({
-            data: reviews,
-            total,
-            page: Number(page),
-            limit: Number(limit),
-            totalPages: Math.ceil(total / limit),
+            data: reviews, met: {
+                total,
+                page: Number(page),
+                limit: Number(limit),
+                totalPages: Math.ceil(total / limit)
+            }
         });
     } catch (error) {
         console.error('Admin Get All Reviews Error:', error);
