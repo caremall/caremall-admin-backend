@@ -4,23 +4,42 @@ import Return from '../models/Return.mjs';
 // @route   GET /api/admin/returns
 export const getAllReturns = async (req, res) => {
     try {
-        const { status, refundStatus } = req.query;
+        const { status, refundStatus, page = 1, limit = 10 } = req.query;
 
         const query = {};
         if (status) query.status = status;
         if (refundStatus) query.refundStatus = refundStatus;
 
-        const returns = await Return.find(query)
-            .populate('user', 'name email')
-            .populate('order', 'orderStatus')
-            .populate('item.product', 'productName')
-            .populate('item.variant', 'variantAttributes')
-            .sort({ createdAt: -1 });
+        const skip = (Number(page) - 1) * Number(limit);
 
-        res.json({ success: true, returns });
+        const [returns, total] = await Promise.all([
+            Return.find(query)
+                .populate('user', 'name email')
+                .populate('order', 'orderStatus')
+                .populate('item.product', 'productName')
+                .populate('item.variant', 'variantAttributes')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(Number(limit)),
+            Return.countDocuments(query)
+        ]);
+
+        res.json({
+            success: true,
+            data: returns,
+            meta: {
+                total,
+                page: Number(page),
+                limit: Number(limit),
+                totalPages: Math.ceil(total / limit),
+            },
+        });
     } catch (err) {
         console.error('Error fetching returns:', err);
-        res.status(500).json({ success: false, message: 'Failed to fetch returns' });
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch returns',
+        });
     }
 };
 
