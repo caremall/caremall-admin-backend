@@ -17,6 +17,7 @@ import brandRouter from './routes/brands.router.mjs'
 import productsRouter from './routes/products.routes.mjs'
 import variantRouter from './routes/variants.router.mjs'
 import blogsRouter from './routes/blogs.router.mjs'
+import reviewRouter from './routes/reviews.routes.mjs'
 import productTypeRouter from './routes/productType.router.mjs'
 import ordersRouter from './routes/orders.router.mjs'
 import retursRouter from './routes/returns.router.mjs'
@@ -49,6 +50,7 @@ app.use('/orders', ordersRouter)
 app.use('/returns', retursRouter)
 app.use('/variants', variantRouter)
 app.use('/blogs', blogsRouter)
+app.use('/reviews', reviewRouter)
 app.use('/product-types', productTypeRouter)
 app.use('/offer', offerRouter)
 app.use('/users', userRouter)

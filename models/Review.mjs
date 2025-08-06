@@ -41,7 +41,7 @@ const reviewSchema = new Schema(
     }
 );
 
-reviewSchema.index({ product: 1, user: 1 }, { unique: true });
+reviewSchema.index({ productId: 1, userId: 1 }, { unique: true });
 
 const Review = model('Review', reviewSchema);
 
