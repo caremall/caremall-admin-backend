@@ -15,7 +15,7 @@ export const getAllReturns = async (req, res) => {
         const [returns, total] = await Promise.all([
             Return.find(query)
                 .populate('user', 'name email')
-                .populate('order', 'orderStatus')
+                .populate('order', 'orderStatus createdAt')
                 .populate('item.product', 'productName')
                 .populate('item.variant', 'variantAttributes')
                 .sort({ createdAt: -1 })
@@ -25,7 +25,6 @@ export const getAllReturns = async (req, res) => {
         ]);
 
         res.json({
-            success: true,
             data: returns,
             meta: {
                 total,
