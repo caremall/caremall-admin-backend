@@ -29,14 +29,20 @@ export const getAllOrders = async (req, res) => {
         // Filter by createdAt date range
         if (startDate || endDate) {
             query.createdAt = {};
-            if (startDate) query.createdAt.$gte = new Date(startDate);
+
+            if (startDate) {
+                const start = new Date(startDate);
+                start.setHours(0, 0, 0, 0); // Start of the day
+                query.createdAt.$gte = start;
+            }
+
             if (endDate) {
-                // Set time to 23:59:59.999 of the endDate
                 const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
+                end.setHours(23, 59, 59, 999); // End of the day
                 query.createdAt.$lte = end;
             }
         }
+
 
         const orders = await Order.find(query)
             .populate('user', 'name email')
