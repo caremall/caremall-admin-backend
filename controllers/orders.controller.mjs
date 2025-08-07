@@ -1,11 +1,19 @@
 import Order from '../models/Order.mjs';
 
-
 export const getAllOrders = async (req, res) => {
     try {
-        const { page = 1, limit = 10, search = '', status } = req.query;
+        const {
+            page = 1,
+            limit = 10,
+            search = '',
+            status,
+            startDate,
+            endDate,
+        } = req.query;
+
         const query = {};
 
+        // Search by name or phone
         if (search) {
             query.$or = [
                 { 'shippingAddress.fullName': { $regex: search, $options: 'i' } },
@@ -13,8 +21,21 @@ export const getAllOrders = async (req, res) => {
             ];
         }
 
+        // Filter by status
         if (status) {
             query.orderStatus = status;
+        }
+
+        // Filter by createdAt date range
+        if (startDate || endDate) {
+            query.createdAt = {};
+            if (startDate) query.createdAt.$gte = new Date(startDate);
+            if (endDate) {
+                // Set time to 23:59:59.999 of the endDate
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.createdAt.$lte = end;
+            }
         }
 
         const orders = await Order.find(query)
@@ -32,7 +53,7 @@ export const getAllOrders = async (req, res) => {
             meta: {
                 total,
                 page: Number(page),
-                pages: Math.ceil(total / limit)
+                pages: Math.ceil(total / limit),
             },
         });
     } catch (error) {
@@ -40,6 +61,7 @@ export const getAllOrders = async (req, res) => {
         res.status(500).json({ message: 'Failed to fetch orders' });
     }
 };
+
 
 
 export const getOrderById = async (req, res) => {
