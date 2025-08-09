@@ -7,6 +7,7 @@ import {
   deleteAdmin,
   changeAdminStatus,
 } from "../../controllers/admin/admins.controller.mjs";
+import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 
 const router = express.Router();
 
@@ -17,7 +18,7 @@ router.get("/", getAllAdmins);
 router.get("/:id", getAdminById);
 
 // POST /api/admins
-router.post("/", createAdmin);
+router.post("/", catchAsyncErrors(createAdmin));
 
 // PUT /api/admins/:id
 router.put("/:id", updateAdmin);

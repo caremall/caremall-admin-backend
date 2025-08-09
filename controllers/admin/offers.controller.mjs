@@ -1,7 +1,6 @@
 import Offer from "../../models/offerManagement.mjs";
 
 export const createOffer = async (req, res) => {
-  try {
     let {
       title,
       description,
@@ -84,10 +83,6 @@ export const createOffer = async (req, res) => {
       message: "Offer created successfully",
       data: newOffer,
     });
-  } catch (error) {
-    console.error("Create Offer Error:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
 };
 
 export const getAllOffers = async (req, res) => {

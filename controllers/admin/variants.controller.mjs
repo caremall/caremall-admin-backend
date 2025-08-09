@@ -6,7 +6,6 @@ import Variant from "../../models/Variant.mjs";
  * @route POST /api/variants/:productId
  */
 export const createVariants = async (req, res) => {
-  try {
     const { productId } = req.params;
     const { variants } = req.body;
 
@@ -58,10 +57,6 @@ export const createVariants = async (req, res) => {
         message: "Variants created successfully",
         variants: newVariants,
       });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
 };
 
 /**

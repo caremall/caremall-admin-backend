@@ -6,10 +6,11 @@ import {
   updateBlog,
   deleteBlog,
 } from "../../controllers/admin/blogs.controller.mjs";
+import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 
 const router = express.Router();
 
-router.post("/", createBlog);
+router.post("/", catchAsyncErrors(createBlog));
 router.get("/", getAllBlogs);
 router.get("/:id", getBlogById);
 router.put("/:id", updateBlog);

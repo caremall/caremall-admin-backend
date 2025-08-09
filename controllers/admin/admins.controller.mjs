@@ -76,7 +76,6 @@ export const getAdminById = async (req, res) => {
 };
 
 export const createAdmin = async (req, res) => {
-  try {
     const { fullName, email, mobileNumber, role, password, notes } = req.body;
 
     const existingAdmin = await Admin.findOne({ email });
@@ -104,11 +103,6 @@ export const createAdmin = async (req, res) => {
     res
       .status(201)
       .json({ message: "Admin created successfully", admin: newAdmin });
-  } catch (err) {
-    res
-      .status(500)
-      .json({ message: "Failed to create admin", error: err.message });
-  }
 };
 
 export const updateAdmin = async (req, res) => {

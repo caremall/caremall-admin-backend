@@ -2,7 +2,6 @@ import Category from "../../models/Category.mjs";
 import Product from "../../models/Product.mjs";
 
 export const createCategory = async (req, res) => {
-  try {
     let { type, name, image, description, parentId, categoryCode, status } =
       req.body;
 
@@ -44,10 +43,6 @@ export const createCategory = async (req, res) => {
     });
 
     res.status(201).json({ message: "Category created", success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to create category" });
-  }
 };
 
 export const getAllCategories = async (req, res) => {

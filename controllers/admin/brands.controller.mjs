@@ -2,7 +2,6 @@ import Brand from "../../models/Brand.mjs";
 import Product from "../../models/Product.mjs";
 
 export const createBrand = async (req, res) => {
-  try {
     const {
       brandName,
       tagline,
@@ -29,10 +28,6 @@ export const createBrand = async (req, res) => {
     res
       .status(201)
       .json({ success: true, message: "Brand created", data: newBrand });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
 };
 
 export const getAllBrands = async (req, res) => {

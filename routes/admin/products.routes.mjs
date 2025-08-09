@@ -6,10 +6,11 @@ import {
   getProductBySlug,
   updateProduct,
 } from "../../controllers/admin/products.controller.mjs";
+import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 
 const router = Router();
 
-router.route("/").get(getAllProducts).post(createProduct);
+router.route("/").get(getAllProducts).post(catchAsyncErrors(createProduct));
 
 router
   .route("/:slug")

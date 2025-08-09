@@ -2,7 +2,6 @@ import Product from "../../models/Product.mjs";
 import ProductType from "../../models/ProductType.mjs";
 
 export const createProductType = async (req, res) => {
-  try {
     const { name } = req.body;
 
     const nameExists = await ProductType.findOne({ name: name });
@@ -12,9 +11,6 @@ export const createProductType = async (req, res) => {
     const productType = await ProductType.create(req.body);
 
     res.status(201).json({ success: true, message: "Product type created" });
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
 };
 
 export const getAllProductTypes = async (req, res) => {

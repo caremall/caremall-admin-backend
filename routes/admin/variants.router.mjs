@@ -7,11 +7,12 @@ import {
   deleteVariant,
   setDefaultVariant,
 } from "../../controllers/admin/variants.controller.mjs";
+import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 
 const router = express.Router();
 
 // Create variants for a product
-router.post("/:productId", createVariants);
+router.post("/:productId", catchAsyncErrors(createVariants));
 
 // Get all variants (admin)
 router.get("/", getAllVariants);

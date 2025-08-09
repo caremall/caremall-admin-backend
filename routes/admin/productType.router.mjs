@@ -6,10 +6,11 @@ import {
   updateProductType,
   deleteProductType,
 } from "../../controllers/admin/productType.controller.mjs";
+import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 
 const router = Router();
 
-router.post("/", createProductType);
+router.post("/", catchAsyncErrors(createProductType));
 router.get("/", getAllProductTypes);
 router.get("/:id", getProductTypeById);
 router.put("/:id", updateProductType);

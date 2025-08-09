@@ -7,12 +7,13 @@ import {
   deleteOffer,
   updateOfferStatus,
 } from "../../controllers/admin/offers.controller.mjs";
+import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 
 const router = express.Router();
 
 router.get("/", getAllOffers);
 router.get("/:id", getOfferById);
-router.post("/", createOffer);
+router.post("/", catchAsyncErrors(createOffer));
 router.put("/:id", updateOffer);
 router.delete("/:id", deleteOffer);
 router.patch("/:id/status", updateOfferStatus);

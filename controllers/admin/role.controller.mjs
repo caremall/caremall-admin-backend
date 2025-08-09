@@ -2,14 +2,10 @@ import Role from "../../models/Role.mjs";
 
 // Create Role
 export const createRole = async (req, res) => {
-  try {
     await Role.create(req.body);
     res
       .status(201)
       .json({ success: true, message: "Role created successfully" });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
 };
 
 // Get All Roles

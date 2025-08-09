@@ -2,7 +2,6 @@ import Product from "../../models/Product.mjs";
 import Variant from "../../models/Variant.mjs";
 
 export const createProduct = async (req, res) => {
-  try {
     const {
       productName,
       productDescription,
@@ -127,10 +126,6 @@ export const createProduct = async (req, res) => {
       message: "Product created successfully",
       product: newProduct,
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
 };
 
 export const getAllProducts = async (req, res) => {

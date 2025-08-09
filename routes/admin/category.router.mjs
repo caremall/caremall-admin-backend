@@ -7,10 +7,11 @@ import {
   deleteCategory,
   changeCategoryStatus,
 } from "../../controllers/admin/category.controller.mjs";
+import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 
 const router = express.Router();
 
-router.route("/").get(getAllCategories).post(createCategory);
+router.route("/").get(getAllCategories).post(catchAsyncErrors(createCategory));
 
 router
   .route("/:id")

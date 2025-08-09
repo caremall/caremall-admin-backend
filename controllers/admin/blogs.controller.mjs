@@ -1,7 +1,6 @@
 import Blog from "../../models/Blog.mjs";
 
 export const createBlog = async (req, res) => {
-  try {
     const {
       title,
       imageUrl,
@@ -42,10 +41,6 @@ export const createBlog = async (req, res) => {
       message: "Blog created successfully",
       data: newBlog,
     });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
 };
 
 export const getAllBlogs = async (req, res) => {
