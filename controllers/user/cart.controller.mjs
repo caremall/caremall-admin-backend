@@ -30,8 +30,8 @@ export const addToCart = async (req, res) => {
         if (!product) return res.status(404).json({ message: 'Product not found' });
 
         let price = product.sellingPrice;
-        if (variantId) {
-            const variant = await Variant.findById(variantId);
+        if (parsedVariantId) {
+            const variant = await Variant.findById(parsedVariantId);
             if (!variant) return res.status(404).json({ message: 'Variant not found' });
             price = variant.sellingPrice || price;
         }
@@ -70,6 +70,102 @@ export const addToCart = async (req, res) => {
     }
 };
 
+export const bulkAddToCart = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { items } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Items array is required" });
+    }
+
+    // Find or create cart
+    let cart = await Cart.findOne({ user: userId });
+    if (!cart) {
+      cart = await Cart.create({ user: userId, items: [], cartTotal: 0 });
+    }
+
+    for (const item of items) {
+      const { productId, variantId = null, quantity } = item;
+
+      // Validation
+      if (!productId || !quantity) {
+        return res
+          .status(400)
+          .json({
+            message: "Product ID and quantity are required for all items",
+          });
+      }
+      if (!mongoose.Types.ObjectId.isValid(productId)) {
+        return res
+          .status(400)
+          .json({ message: `Invalid product ID: ${productId}` });
+      }
+      const parsedVariantId = variantId && variantId !== "" ? variantId : null;
+      if (
+        parsedVariantId &&
+        !mongoose.Types.ObjectId.isValid(parsedVariantId)
+      ) {
+        return res
+          .status(400)
+          .json({ message: `Invalid variant ID: ${parsedVariantId}` });
+      }
+
+      // Find product
+      const product = await Product.findById(productId);
+      if (!product) {
+        return res
+          .status(404)
+          .json({ message: `Product not found: ${productId}` });
+      }
+
+      // Set price (variant overrides product price if exists)
+      let price = product.sellingPrice;
+      if (parsedVariantId) {
+        const variant = await Variant.findById(parsedVariantId);
+        if (!variant) {
+          return res
+            .status(404)
+            .json({ message: `Variant not found: ${parsedVariantId}` });
+        }
+        price = variant.sellingPrice || price;
+      }
+
+      const itemTotal = price * quantity;
+
+      // Check if item already exists in cart
+      const index = cart.items.findIndex(
+        (i) =>
+          i.product.toString() === productId &&
+          ((i.variant && i.variant.toString()) || "") ===
+            (parsedVariantId || "")
+      );
+
+      if (index >= 0) {
+        cart.items[index].quantity += quantity;
+        cart.items[index].totalPrice =
+          cart.items[index].quantity * cart.items[index].priceAtCart;
+      } else {
+        cart.items.push({
+          product: productId,
+          variant: parsedVariantId,
+          quantity,
+          priceAtCart: price,
+          totalPrice: itemTotal,
+        });
+      }
+    }
+
+    // Update cart total
+    cart.cartTotal = calculateCartTotal(cart.items);
+    await cart.save();
+
+    res.status(200).json({ message: "Items added to cart", cart });
+  } catch (error) {
+    console.error("Bulk add to cart error:", error);
+    res.status(500).json({ message: "Failed to add bulk items to cart" });
+  }
+};
 
 export const getCart = async (req, res) => {
     try {
