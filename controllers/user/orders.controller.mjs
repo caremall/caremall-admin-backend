@@ -2,10 +2,10 @@ import Razorpay from 'razorpay';
 import Order from '../../models/Order.mjs'
 import crypto from "crypto";
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+// const razorpay = new Razorpay({
+//   key_id: process.env.RAZORPAY_KEY_ID,
+//   key_secret: process.env.RAZORPAY_KEY_SECRET,
+// });
 
 export const createOrder = async (req, res) => {
   try {
@@ -23,11 +23,11 @@ export const createOrder = async (req, res) => {
       totalPrice: item.totalPrice,
     }));
 
-    const razorpayOrder = await razorpay.orders.create({
-      amount: totalAmount * 100, // in paise
-      currency: "INR",
-      receipt: `order_rcptid_${Date.now()}`,
-    });
+    // const razorpayOrder = await razorpay.orders.create({
+    //   amount: totalAmount * 100, // in paise
+    //   currency: "INR",
+    //   receipt: `order_rcptid_${Date.now()}`,
+    // });
 
     const order = await Order.create({
       user: req.user._id,
@@ -36,13 +36,13 @@ export const createOrder = async (req, res) => {
       paymentMethod,
       paymentStatus: "pending",
       totalAmount,
-      razorpayOrderId: razorpayOrder.id,
+    //   razorpayOrderId: razorpayOrder.id,
     });
 
     res.status(201).json({
       success: true,
       order,
-      razorpayOrder,
+    //   razorpayOrder,
     });
   } catch (err) {
     console.error("Create Order Error:", err);
