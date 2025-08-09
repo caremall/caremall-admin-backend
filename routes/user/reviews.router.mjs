@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { createReview, deleteReview, getAllReviews, getReviewById, updateReview } from "../../controllers/user/reviews.controller.mjs";
 import { verifyUserToken } from "../../middlewares/verifyToken.mjs";
+import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 
 const router = Router()
 
-router.post('/', verifyUserToken, createReview)
+router.post('/', verifyUserToken, catchAsyncErrors(createReview))
 router.get('/', getAllReviews)
 router.get('/:id', getReviewById)
 router.put('/:id', verifyUserToken, updateReview)

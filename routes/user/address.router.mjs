@@ -7,6 +7,7 @@ import {
     setDefaultAddress,
 } from '../../controllers/user/addresses.controller.mjs';
 import { verifyUserToken } from '../../middlewares/verifyToken.mjs';
+import { catchAsyncErrors } from '../../utils/catchAsyncErrors.mjs';
 
 const router = express.Router();
 
@@ -17,7 +18,7 @@ router.use(verifyUserToken);
  * @route POST /addresses
  * @desc Add a new address
  */
-router.post('/', addAddress);
+router.post('/', catchAsyncErrors(addAddress));
 
 /**
  * @route GET /addresses
@@ -29,7 +30,7 @@ router.get('/', getUserAddresses);
  * @route PUT /addresses/:id
  * @desc Update an address by ID
  */
-router.put('/:id', updateAddress);
+router.put('/:id', catchAsyncErrors(updateAddress));
 
 /**
  * @route DELETE /addresses/:id

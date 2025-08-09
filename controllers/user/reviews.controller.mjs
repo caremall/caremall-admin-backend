@@ -1,7 +1,6 @@
 import Review from "../../models/Review.mjs";
 
 export const createReview = async (req, res) => {
-    try {
         const { productId, rating, comment, images } = req.body;
         const { _id } = req.user
         const existingReview = await Review.findOne({ productId, userId: _id });
@@ -18,10 +17,6 @@ export const createReview = async (req, res) => {
         });
 
         res.status(201).json({ message: 'Review submitted', success: true, review });
-    } catch (error) {
-        console.error('Create Review Error:', error);
-        res.status(500).json({ message: 'Failed to create review' });
-    }
 };
 
 

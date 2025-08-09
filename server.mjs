@@ -7,7 +7,7 @@ import cors from "cors";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import router from "./routes/index.mjs";
-import errorHandler from "./utils/errorHandler.mjs";
+import errorHandler from "./middlewares/errorHandler.mjs";
 
 const app = express();
 

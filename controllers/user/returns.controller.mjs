@@ -2,7 +2,6 @@ import Return from '../../models/Return.mjs';
 import Order from '../../models/Order.mjs';
 
 export const createReturnRequest = async (req, res) => {
-    try {
         const userId = req.user._id;
         const {
             order,
@@ -30,10 +29,6 @@ export const createReturnRequest = async (req, res) => {
         });
 
         res.status(201).json({ success: true, return: newReturn });
-    } catch (err) {
-        console.error('Error creating return:', err);
-        res.status(500).json({ success: false, message: 'Failed to create return request' });
-    }
 };
 
 export const getUserReturns = async (req, res) => {

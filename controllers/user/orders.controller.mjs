@@ -8,7 +8,6 @@ import crypto from "crypto";
 // });
 
 export const createOrder = async (req, res) => {
-  try {
     const { items, shippingAddress, paymentMethod, totalAmount } = req.body;
 
     if (!items || items.length === 0) {
@@ -44,10 +43,7 @@ export const createOrder = async (req, res) => {
       order,
     //   razorpayOrder,
     });
-  } catch (err) {
-    console.error("Create Order Error:", err);
-    res.status(500).json({ message: "Failed to place order" });
-  }
+  
 };
 
 export const verifyOrder = async (req, res) => {

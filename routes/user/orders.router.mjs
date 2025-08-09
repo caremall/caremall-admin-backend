@@ -7,12 +7,13 @@ import {
     verifyOrder,
 } from '../../controllers/user/orders.controller.mjs';
 import { verifyUserToken } from '../../middlewares/verifyToken.mjs';
+import { catchAsyncErrors } from '../../utils/catchAsyncErrors.mjs';
 
 
 
 const router = express.Router();
 
-router.post('/', verifyUserToken, createOrder);
+router.post('/', verifyUserToken, catchAsyncErrors(createOrder));
 
 router.post('/', verifyUserToken, verifyOrder);
 

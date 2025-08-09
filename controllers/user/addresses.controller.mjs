@@ -5,7 +5,6 @@ import Address from '../../models/Address.mjs';
  * @desc Add new address
  */
 export const addAddress = async (req, res) => {
-    try {
         const userId = req.user._id;
         const { isDefault, addressType } = req.body;
 
@@ -37,10 +36,7 @@ export const addAddress = async (req, res) => {
         });
 
         res.status(201).json({ message: 'Address added', address });
-    } catch (error) {
-        console.error('Add Address Error:', error);
-        res.status(500).json({ message: 'Failed to add address' });
-    }
+   
 };
 
 
@@ -65,7 +61,6 @@ export const getUserAddresses = async (req, res) => {
  * @desc Update an address
  */
 export const updateAddress = async (req, res) => {
-    try {
         const userId = req.user._id;
         const { id } = req.params;
         const { isDefault, addressType } = req.body;
@@ -101,10 +96,7 @@ export const updateAddress = async (req, res) => {
         await address.save();
 
         res.status(200).json({ message: 'Address updated', address });
-    } catch (error) {
-        console.error('Update Address Error:', error);
-        res.status(500).json({ message: 'Failed to update address' });
-    }
+   
 };
 
 
