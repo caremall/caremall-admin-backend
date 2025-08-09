@@ -1,10 +1,8 @@
 import User from '../../models/User.mjs';
 import { generateUserAccessToken, generateUserRefreshToken, verifyUserRefreshToken } from '../../utils/generateTokens.mjs';
 
-export const signup = async (req, res) => {
+export const signup = asyncHandler(async (req, res) => {
     const { name, email, password, phone } = req.body;
-
-    try {
         const userExists = await User.findOne({ email })
         if (userExists) return res.status(200).json({ message: 'User already exists' })
 
@@ -23,11 +21,8 @@ export const signup = async (req, res) => {
         });
 
         res.status(201).json({ accessToken, user, message: 'Signed up successfully' })
-    } catch (err) {
-        console.log(err)
-        res.status(500).json({ message: 'Server error' })
-    }
-};
+});
+
 
 
 export const login = async (req, res) => {

@@ -7,6 +7,7 @@ import cors from "cors";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import router from "./routes/index.mjs";
+import errorHandler from "./utils/errorHandler.mjs";
 
 const app = express();
 
@@ -36,6 +37,8 @@ app.use((err, req, res, next) => {
     message: err.message || "Internal Server Error",
   });
 });
+
+app.use(errorHandler);
 
 mongoose.connection.once("open", () => {
   app.listen(process.env.PORT, () =>
