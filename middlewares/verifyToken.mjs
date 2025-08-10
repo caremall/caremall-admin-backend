@@ -1,6 +1,7 @@
 
 import jwt from "jsonwebtoken"
 import Admin from "../models/Admin.mjs"
+import User from "../models/User.mjs"
 
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET
 
@@ -37,3 +38,19 @@ export const verifyToken = (req, res, next) => {
         res.json({ success: false, error_msg: 'Internal server error' })
     }
 }
+
+export const verifyUserToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    req.user = await User.findById(decoded?.userId).select("-password");
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Token expired or invalid" });
+  }
+};

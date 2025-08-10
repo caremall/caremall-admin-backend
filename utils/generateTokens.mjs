@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 
+//admin token generation
 export const generateAccessToken = (admin) => {
     const { _id, fullName, email, role } = admin;
 
@@ -20,3 +21,24 @@ export const generateRefreshToken = (admin) => {
     )
     return refreshToken
 }
+
+//user token generation
+export const generateUserAccessToken = (userId) => {
+  return jwt.sign({ userId }, process.env.ACCESS_TOKEN_SECRET, {
+    expiresIn: "1d",
+  });
+};
+
+export const generateUserRefreshToken = (userId) => {
+  return jwt.sign({ userId }, process.env.REFRESH_TOKEN_SECRET, {
+    expiresIn: "7d",
+  });
+};
+
+export const verifyUserAccessToken = (token) => {
+  return jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+};
+
+export const verifyUserRefreshToken = (token) => {
+  return jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
+};
