@@ -5,6 +5,7 @@ import {
     getOrderById,
     cancelOrder,
     verifyOrder,
+    verifyOrderSignature,
 } from '../../controllers/user/orders.controller.mjs';
 import { verifyUserToken } from '../../middlewares/verifyToken.mjs';
 import { catchAsyncErrors } from '../../utils/catchAsyncErrors.mjs';
@@ -17,12 +18,13 @@ router.post('/', verifyUserToken, catchAsyncErrors(createOrder));
 
 router.post('/verify', verifyUserToken, verifyOrder);
 
+router.post('/verify-signature', verifyUserToken, verifyOrderSignature);
+
 router.get('/', verifyUserToken, getUserOrders);
 
 router.get('/:id', verifyUserToken, getOrderById);
 
 router.patch('/:id/cancel', verifyUserToken, cancelOrder);
-
 
 
 
