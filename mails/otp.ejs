@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Your OTP Code</title>
+    <style>
+        body {
+            background: linear-gradient(to right, #f8f9fa, #eef2f3);
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        .container {
+            max-width: 500px;
+            background: #ffffff;
+            margin: 0 auto;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0px 4px 20px rgba(0,0,0,0.08);
+            border-top: 4px solid #FF0000;
+        }
+        h2 {
+            color: #333333;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        p {
+            color: #555555;
+            font-size: 15px;
+            margin-bottom: 15px;
+        }
+        .otp {
+            font-size: 32px;
+            font-weight: bold;
+            color: #ffffff;
+            background: #FF0000;
+            text-align: center;
+            padding: 14px 0;
+            border-radius: 8px;
+            letter-spacing: 4px;
+            margin: 20px 0;
+        }
+        .note {
+            font-size: 14px;
+            color: #777777;
+            text-align: center;
+            margin-top: 10px;
+        }
+        .footer {
+            font-size: 12px;
+            color: #aaaaaa;
+            text-align: center;
+            margin-top: 25px;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Hello <%= name %>,</h2>
+        <p>We received a request to log in to your account using an OTP.</p>
+        <p>Your one-time password is:</p>
+
+        <div class="otp"><%= otp %></div>
+
+        <p class="note">This OTP will be valid for the next 5 minutes. Please do not share it with anyone.</p>
+
+        <p>If you did not request this, please ignore this email.</p>
+
+        <div class="footer">
+            &copy; <%= new Date().getFullYear() %> CAREMALL — All rights reserved.
+        </div>
+    </div>
+</body>
+</html>
