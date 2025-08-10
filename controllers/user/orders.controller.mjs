@@ -46,36 +46,83 @@ export const createOrder = async (req, res) => {
   
 };
 
+// export const verifyOrder = async (req, res) => {
+//   try {
+//     const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+
+//     const body = razorpayOrderId + "|" + razorpayPaymentId;
+
+//     const expectedSignature = crypto
+//       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+//       .update(body.toString())
+//       .digest("hex");
+
+//     if (expectedSignature !== razorpaySignature) {
+//       return res.status(400).json({ message: "Invalid payment signature" });
+//     }
+
+//     // Update order in DB
+//     const order = await Order.findOneAndUpdate(
+//       { razorpayOrderId },
+//       {
+//         paymentStatus: "paid",
+//         razorpayPaymentId,
+//         razorpaySignature,
+//       },
+//       { new: true }
+//     );
+
+//     res.status(200).json({ success: true, order });
+//   } catch (err) {
+//     console.error("Verify Order Error:", err);
+//     res.status(500).json({ message: "Failed to verify order" });
+//   }
+// };
+
 export const verifyOrder = async (req, res) => {
   try {
-    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+    const { razorpayPaymentId, razorpayOrderId } = req.body;
 
-    const body = razorpayOrderId + "|" + razorpayPaymentId;
-
-    const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(body.toString())
-      .digest("hex");
-
-    if (expectedSignature !== razorpaySignature) {
-      return res.status(400).json({ message: "Invalid payment signature" });
+    if (!razorpayPaymentId || !razorpayOrderId) {
+      return res
+        .status(400)
+        .json({ message: "Payment ID and Order ID are required" });
     }
 
-    // Update order in DB
+    // Fetch payment details from Razorpay API
+    const payment = await razorpay.payments.fetch(razorpayPaymentId);
+
+    // Check if payment status is 'captured' (success)
+    if (payment.status !== "captured") {
+      return res.status(400).json({ message: "Payment not completed" });
+    }
+
+    // Optionally verify if the payment belongs to the expected order
+    if (payment.order_id !== razorpayOrderId) {
+      return res
+        .status(400)
+        .json({ message: "Payment does not match order ID" });
+    }
+
+    // Update order in your database as paid
     const order = await Order.findOneAndUpdate(
       { razorpayOrderId },
       {
         paymentStatus: "paid",
-        razorpayPaymentId,
-        razorpaySignature,
+        razorpayPaymentId: payment.id,
+        razorpaySignature: null, // Since signature not used here
       },
       { new: true }
     );
 
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
     res.status(200).json({ success: true, order });
-  } catch (err) {
-    console.error("Verify Order Error:", err);
-    res.status(500).json({ message: "Failed to verify order" });
+  } catch (error) {
+    console.error("Verify Order Without Signature Error:", error);
+    res.status(500).json({ message: "Failed to verify order payment" });
   }
 };
 
