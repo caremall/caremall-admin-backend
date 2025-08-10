@@ -15,7 +15,7 @@ const router = express.Router();
 
 router.post('/', verifyUserToken, catchAsyncErrors(createOrder));
 
-router.post('/', verifyUserToken, verifyOrder);
+router.post('/verify', verifyUserToken, verifyOrder);
 
 router.get('/', verifyUserToken, getUserOrders);
 
