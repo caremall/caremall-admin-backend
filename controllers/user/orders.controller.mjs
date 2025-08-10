@@ -46,38 +46,38 @@ export const createOrder = async (req, res) => {
   
 };
 
-// export const verifyOrder = async (req, res) => {
-//   try {
-//     const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+export const verifyOrderSignature = async (req, res) => {
+  try {
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
 
-//     const body = razorpayOrderId + "|" + razorpayPaymentId;
+    const body = razorpayOrderId + "|" + razorpayPaymentId;
 
-//     const expectedSignature = crypto
-//       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-//       .update(body.toString())
-//       .digest("hex");
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest("hex");
 
-//     if (expectedSignature !== razorpaySignature) {
-//       return res.status(400).json({ message: "Invalid payment signature" });
-//     }
+    // if (expectedSignature !== razorpaySignature) {
+    //   return res.status(400).json({ message: "Invalid payment signature" });
+    // }
 
-//     // Update order in DB
-//     const order = await Order.findOneAndUpdate(
-//       { razorpayOrderId },
-//       {
-//         paymentStatus: "paid",
-//         razorpayPaymentId,
-//         razorpaySignature,
-//       },
-//       { new: true }
-//     );
+    // Update order in DB
+    const order = await Order.findOneAndUpdate(
+      { razorpayOrderId },
+      {
+        paymentStatus: "paid",
+        razorpayPaymentId,
+        razorpaySignature: razorpaySignature|| null, 
+      },
+      { new: true }
+    );
 
-//     res.status(200).json({ success: true, order });
-//   } catch (err) {
-//     console.error("Verify Order Error:", err);
-//     res.status(500).json({ message: "Failed to verify order" });
-//   }
-// };
+    res.status(200).json({ success: true, order });
+  } catch (err) {
+    console.error("Verify Order Error:", err);
+    res.status(500).json({ message: "Failed to verify order" });
+  }
+};
 
 export const verifyOrder = async (req, res) => {
   try {
