@@ -41,7 +41,7 @@ export const createOrder = async (req, res) => {
     res.status(201).json({
       success: true,
       order,
-      razorpayOrder,
+      razorpayOrderId: razorpayOrder.id,
     });
   
 };
