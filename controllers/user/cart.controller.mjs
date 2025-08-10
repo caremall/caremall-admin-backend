@@ -186,46 +186,59 @@ export const getCart = async (req, res) => {
 
 
 export const updateCartItem = async (req, res) => {
-    try {
-        const userId = req.user._id;
-        const { productId, variantId = null, action } = req.body;
+  try {
+    const userId = req.user._id;
+    const { productId, variantId = null, action, quantity } = req.body;
 
-        const cart = await Cart.findOne({ user: userId });
-        if (!cart) return res.status(404).json({ message: 'Cart not found' });
+    const cart = await Cart.findOne({ user: userId });
+    if (!cart) return res.status(404).json({ message: "Cart not found" });
 
-        const index = cart.items.findIndex(
-            item =>
-                item.product.toString() === productId &&
-                ((item.variant && item.variant.toString()) || '') === (variantId || '')
-        );
+    const index = cart.items.findIndex(
+      (item) =>
+        item.product.toString() === productId &&
+        ((item.variant && item.variant.toString()) || "") === (variantId || "")
+    );
 
-        if (index === -1) return res.status(404).json({ message: 'Item not found in cart' });
+    if (index === -1)
+      return res.status(404).json({ message: "Item not found in cart" });
 
-        let item = cart.items[index];
+    let item = cart.items[index];
 
-        if (action === 'increment') {
-            item.quantity += 1;
-        } else if (action === 'decrement') {
-            item.quantity -= 1;
-            if (item.quantity < 1) {
-                cart.items.splice(index, 1);
-            }
-        } else {
-            return res.status(400).json({ message: 'Invalid action' });
-        }
-
-        if (cart.items[index]) {
-            cart.items[index].totalPrice = cart.items[index].quantity * cart.items[index].priceAtCart;
-        }
-
-        cart.cartTotal = cart.items.reduce((acc, curr) => acc + curr.totalPrice, 0);
-        await cart.save();
-
-        res.status(200).json({ message: 'Cart updated', cart });
-    } catch (error) {
-        console.error('Update cart item error:', error);
-        res.status(500).json({ message: 'Failed to update cart item' });
+    // 🔹 Direct quantity update if given
+    if (typeof quantity === "number") {
+      if (quantity < 1) {
+        // Remove item if quantity is zero or negative
+        cart.items.splice(index, 1);
+      } else {
+        item.quantity = quantity;
+        item.totalPrice = item.quantity * item.priceAtCart;
+      }
     }
+    // 🔹 Otherwise fall back to action type
+    else if (action === "increment") {
+      item.quantity += 1;
+      item.totalPrice = item.quantity * item.priceAtCart;
+    } else if (action === "decrement") {
+      item.quantity -= 1;
+      if (item.quantity < 1) {
+        cart.items.splice(index, 1);
+      } else {
+        item.totalPrice = item.quantity * item.priceAtCart;
+      }
+    } else {
+      return res.status(400).json({ message: "Invalid action or quantity" });
+    }
+
+    // 🔹 Recalculate cart total
+    cart.cartTotal = cart.items.reduce((acc, curr) => acc + curr.totalPrice, 0);
+
+    await cart.save();
+
+    res.status(200).json({ message: "Cart updated", cart });
+  } catch (error) {
+    console.error("Update cart item error:", error);
+    res.status(500).json({ message: "Failed to update cart item" });
+  }
 };
 
 
