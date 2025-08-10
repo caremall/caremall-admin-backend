@@ -23,7 +23,7 @@ router.get('/', getCart);
 
 router.put('/update', updateCartItem);
 
-router.delete('/remove', removeCartItem);
+router.post('/remove', removeCartItem);
 
 router.delete('/clear', clearCart);
 
