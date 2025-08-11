@@ -4,6 +4,7 @@ export const createOffer = async (req, res) => {
     let {
       title,
       description,
+      couponCode,
       offerType,
       discountUnit,
       discountValue,
@@ -18,6 +19,7 @@ export const createOffer = async (req, res) => {
 
     // Trim strings
     title = title?.trim();
+    couponCode = couponCode?.trim();
 
     // Sanitize enums for drafts
     if (status === "draft") {
@@ -52,7 +54,7 @@ export const createOffer = async (req, res) => {
     }
 
     // Check if offer title already exists
-    const existingOffer = await Offer.findOne({ offerTitle: title });
+    const existingOffer = await Offer.findOne({ couponCode });
     if (existingOffer) {
       return res
         .status(400)
@@ -63,6 +65,7 @@ export const createOffer = async (req, res) => {
       offerTitle: title,
       offerDescription: description,
       offerType,
+      couponCode,
       offerDiscountUnit: discountUnit,
       offerDiscountValue:
         discountValue !== undefined ? parseFloat(discountValue) : undefined,
