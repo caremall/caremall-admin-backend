@@ -1,6 +1,7 @@
 import Razorpay from 'razorpay';
 import Order from '../../models/Order.mjs'
 import crypto from "crypto";
+import Offer from '../../models/offerManagement.mjs';
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -8,7 +9,8 @@ const razorpay = new Razorpay({
 });
 
 export const createOrder = async (req, res) => {
-    const { items, shippingAddress, paymentMethod, totalAmount } = req.body;
+    const { items, shippingAddress, paymentMethod, totalAmount, couponCode } =
+      req.body;
 
     if (!items || items.length === 0) {
       return res.status(400).json({ message: "No items in order" });
@@ -22,8 +24,64 @@ export const createOrder = async (req, res) => {
       totalPrice: item.totalPrice,
     }));
 
+    let finalAmount=totalAmount;
+    let appliedOffer=null;
+
+    if(couponCode) {
+      const offer = await Offer.findOne({
+        couponCode: couponCode.trim(),
+        offerStatus: "published", // or 'active'
+      });
+      if (!offer) {
+        return res
+          .status(400)
+          .json({ message: "Invalid or expired coupon code" });
+      }
+      if (
+        offer.offerRedeemTimePeriod &&
+        offer.offerRedeemTimePeriod.length === 2
+      ) {
+        const now = new Date();
+        if (
+          now < offer.offerRedeemTimePeriod[0] ||
+          now > offer.offerRedeemTimePeriod[1]
+        ) {
+          return res
+            .status(400)
+            .json({ message: "Coupon is not valid at this time" });
+        }
+      }
+      if (
+        offer.offerMinimumOrderValue &&
+        totalAmount < offer.offerMinimumOrderValue
+      ) {
+        return res.status(400).json({
+          message: `Minimum order value for this coupon is ₹${offer.offerMinimumOrderValue}`,
+        });
+      }
+
+      let discount = 0;
+      if (offer.offerDiscountUnit === "percentage") {
+        discount = (totalAmount * offer.offerDiscountValue) / 100;
+      } else if (offer.offerDiscountUnit === "fixed") {
+        discount = offer.offerDiscountValue;
+      }
+
+      // Ensure discount is not greater than total
+      discount = Math.min(discount, totalAmount);
+
+      finalAmount = totalAmount - discount;
+      appliedOffer = {
+        couponId: offer._id,
+        couponCode: offer.couponCode,
+        discountValue:discount,
+        offerTitle: offer.offerTitle,
+      };
+    }
+
+
     const razorpayOrder = await razorpay.orders.create({
-      amount: totalAmount * 100, // in paise
+      amount: finalAmount * 100, // in paise
       currency: "INR",
       receipt: `order_rcptid_${Date.now()}`,
     });
@@ -35,6 +93,8 @@ export const createOrder = async (req, res) => {
       paymentMethod,
       paymentStatus: "pending",
       totalAmount,
+      finalAmount,
+      appliedOffer,
       razorpayOrderId: razorpayOrder.id,
     });
 
