@@ -14,8 +14,9 @@ import ordersRouter from "./orders.router.mjs";
 import retursRouter from "./returns.router.mjs";
 import userRouter from "./users.router.mjs";
 import offerRouter from "./offers.router.mjs";
+import heroBannerRouter from "./heroBanner.router.mjs";
 
-const adminRouter=Router()
+const adminRouter = Router()
 
 adminRouter.use("/upload", uploadRouter);
 adminRouter.use("/auth", authRouter);
@@ -29,10 +30,11 @@ adminRouter.use("/returns", retursRouter);
 adminRouter.use("/variants", variantRouter);
 adminRouter.use("/blogs", blogsRouter);
 adminRouter.use("/reviews", reviewRouter);
-adminRouter.use("/product-types", productTypeRouter);
+adminRouter.use("/product-types", productTypeRouter)
 adminRouter.use("/offer", offerRouter);
 adminRouter.use("/users", userRouter);
 adminRouter.use("/offer", offerRouter);
+adminRouter.use('/hero-banners', heroBannerRouter)
 
 //!admin parent routes
 //get all admins
