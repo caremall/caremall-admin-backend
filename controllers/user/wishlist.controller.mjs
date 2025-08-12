@@ -10,7 +10,7 @@ export const getWishlist = async (req, res) => {
         const userId = req.user._id;
 
         const wishlist = await Wishlist.findOne({ user: userId })
-            .populate('items.product', 'productName productImages sellingPrice')
+            .populate('items.product', 'productName productImages sellingPrice urlSlug mrpPrice defaultVariant hasVariant')
             .populate('items.variant');
 
         if (!wishlist) return res.status(200).json({ items: [] });
