@@ -7,7 +7,13 @@ const offerSchema = new Schema(
         trim: true,
         required: function() {
           return this.offerStatus !== 'draft';
-        }
+        },
+      },
+      couponCode: {
+        type: String,
+        trim: true,
+        required:true,
+        unique: true,
       },
       offerDescription: {
         type: String,
