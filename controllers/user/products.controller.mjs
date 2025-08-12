@@ -199,3 +199,35 @@ export const getProductById = async (req, res) => {
         res.status(500).json({ message: 'Server error fetching best sellers' });
     }
 }
+
+
+
+export const getSearchSuggestions = async (reg, res) => {
+    try {
+        const search = (reg.query.q || "").trim()
+        if(!search){
+            return res.status(200).json([])
+        }
+        
+        const regex = new RegExp(search, "i");
+        
+        const results = await Product.find({
+            productStatus: "published",
+            visibility: "visible",
+            $or: [
+                {productName: regex},
+                {sku: regex},
+                {shortDescription: regex},
+                {productDescription: regex},
+            ]
+        })
+        .select("productName price thumbanail category")
+        .limit(10)
+        .lean()
+
+        res.status(200).json(results);
+    }catch(error){
+        console.error("Error feching search suggestions: ", error);
+        res.status(500).json({message: "server error while fetching search results"})
+    }
+}

@@ -230,6 +230,9 @@ export const getAllProducts = async (req, res) => {
   }
 };
 
+
+
+
 export const getProductBySlug = async (req, res) => {
   try {
     const product = await Product.findOne({
@@ -317,6 +320,62 @@ export const deleteProduct = async (req, res) => {
     if (!deleted) return res.status(404).json({ message: "Product not found" });
     res.status(200).json({ message: "Product deleted successfully" });
   } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+export const searchProducts = async (req, res) => {
+  try {
+    const search = (req.query.q || "").trim();
+    const mode = req.query.mode || "full"; // "suggest" or "full"
+
+    if (!search) {
+      return res.status(200).json({ products: [], categories: [] });
+    }
+
+    const regex = new RegExp(search, "i");
+
+    // --- CATEGORY SEARCH ---
+    const categoryQuery = Category.find({ name: regex }).select("name slug");
+
+    if (mode === "suggest") {
+      categoryQuery.limit(5); // Suggest fewer categories in autosuggest
+    }
+
+    const categories = await categoryQuery.lean();
+
+    // --- PRODUCT SEARCH ---
+    const productFilter = {
+      $or: [
+        { productName: regex },
+        { SKU: regex },
+        { barcode: regex },
+        { categoryName: regex } // if you store category name directly on product
+      ],
+      productStatus: "published",
+      visibility: "visible"
+    };
+
+    let productQuery = Product.find(productFilter);
+
+    if (mode === "suggest") {
+      // Quick suggestion data only
+      productQuery = productQuery
+        .limit(10)
+        .select("productName sellingPrice category productImages")
+        .lean();
+    } else {
+      // Full data for results page
+      productQuery = productQuery.populate("category brand").lean();
+    }
+
+    const products = await productQuery;
+
+    // Response format: separate products & categories
+    res.status(200).json({ products, categories });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
