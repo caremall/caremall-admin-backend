@@ -7,6 +7,7 @@ const calculateCartTotal = (items) => {
   return items.reduce((acc, item) => acc + item.totalPrice, 0);
 };
 
+
 export const addToCart = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -69,6 +70,7 @@ export const addToCart = async (req, res) => {
     res.status(500).json({ message: 'Failed to add item to cart' });
   }
 };
+
 
 export const bulkAddToCart = async (req, res) => {
   try {
@@ -166,6 +168,7 @@ export const bulkAddToCart = async (req, res) => {
     res.status(500).json({ message: "Failed to add bulk items to cart" });
   }
 };
+
 
 export const getCart = async (req, res) => {
   try {
