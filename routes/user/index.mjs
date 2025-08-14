@@ -10,6 +10,7 @@ import returnRouter from "./returns.router.mjs";
 import brandRouter from "./brands.router.mjs";
 import categoriesRouter from "./categories.router.mjs";
 import reviewsRouter from "./reviews.router.mjs";
+import subscriberRouter from "./subscriber.router.mjs"
 
 const userRouter=Router()
 
@@ -24,5 +25,6 @@ userRouter.use("/returns", returnRouter);
 userRouter.use("/brands", brandRouter);
 userRouter.use("/categories", categoriesRouter);
 userRouter.use("/reviews", reviewsRouter);
+userRouter.use("/subscriber",subscriberRouter)
 
 export default userRouter;

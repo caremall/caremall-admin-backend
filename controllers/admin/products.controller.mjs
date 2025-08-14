@@ -325,57 +325,36 @@ export const deleteProduct = async (req, res) => {
 };
 
 
-export const searchProducts = async (req, res) => {
+
+export const getSearchSuggestions = async (req, res) => {
   try {
     const search = (req.query.q || "").trim();
-    const mode = req.query.mode || "full"; // "suggest" or "full"
-
-    if (!search) {
-      return res.status(200).json({ products: [], categories: [] });
-    }
+    if (!search) return res.status(200).json({ products: [], categories: [] });
 
     const regex = new RegExp(search, "i");
 
-    // --- CATEGORY SEARCH ---
-    const categoryQuery = Category.find({ name: regex }).select("name slug");
-
-    if (mode === "suggest") {
-      categoryQuery.limit(5); // Suggest fewer categories in autosuggest
-    }
-
-    const categories = await categoryQuery.lean();
-
-    // --- PRODUCT SEARCH ---
-    const productFilter = {
-      $or: [
-        { productName: regex },
-        { SKU: regex },
-        { barcode: regex },
-        { categoryName: regex } // if you store category name directly on product
-      ],
-      productStatus: "published",
-      visibility: "visible"
-    };
-
-    let productQuery = Product.find(productFilter);
-
-    if (mode === "suggest") {
-      // Quick suggestion data only
-      productQuery = productQuery
+    const [products, categories] = await Promise.all([
+      Product.find({
+        $or: [
+          { productName: regex },
+          { SKU: regex },
+          { barcode: regex }
+        ],
+        productStatus: "published",
+        visibility: "visible"
+      })
         .limit(10)
         .select("productName sellingPrice category productImages")
-        .lean();
-    } else {
-      // Full data for results page
-      productQuery = productQuery.populate("category brand").lean();
-    }
+        .lean(),
 
-    const products = await productQuery;
+      Category.find({ name: regex })
+        .limit(10)
+        .select("name slug thumbnail")
+        .lean()
+    ]);
 
-    // Response format: separate products & categories
     res.status(200).json({ products, categories });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: err.message });
   }
 };
