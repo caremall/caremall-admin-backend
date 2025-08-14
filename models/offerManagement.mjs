@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 const { Schema, model } = mongoose;
-const offerSchema = new Schema(
-  {
+const offerSchema = new Schema({
     offerTitle: {
       type: String,
       trim: true,
@@ -84,8 +83,7 @@ const offerSchema = new Schema(
   },
   {
     timestamps: true,
-  }
-);
+  });
 
 
 const Offer = model('Offer', offerSchema);

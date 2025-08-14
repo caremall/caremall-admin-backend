@@ -93,11 +93,21 @@ const orderSchema = new Schema(
       type: Number,
       required: true,
     },
-
+    finalAmount: {
+      type: Number,
+      required: true,
+    },
     isDelivered: {
       type: Boolean,
       default: false,
     },
+    appliedOffer: {
+      couponId: { type: Schema.Types.ObjectId, ref: 'Offer' },
+      couponCode: { type: String },
+      offerTitle: { type: String },
+      discountValue: { type: Number },
+    },
+
     razorpayOrderId: { type: String },
     razorpayPaymentId: { type: String },
     razorpaySignature: { type: String },
