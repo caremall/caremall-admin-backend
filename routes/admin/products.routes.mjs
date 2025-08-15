@@ -12,7 +12,7 @@ import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 const router = Router();
 
 
-router.get("/search", catchAsyncErrors(getSearchSuggestions));
+router.get("/search", getSearchSuggestions);
 
 router.route("/").get(getAllProducts).post(catchAsyncErrors(createProduct));
 
