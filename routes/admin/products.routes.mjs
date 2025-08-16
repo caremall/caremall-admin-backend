@@ -13,8 +13,10 @@ const router = Router();
 router.route("/").get(getAllProducts).post(catchAsyncErrors(createProduct));
 
 router
-  .route("/:slug")
+  .route("/get-by-slug/:slug")
   .get(getProductBySlug)
+
+  router.route("/:id")
   .put(updateProduct)
   .delete(deleteProduct);
 
