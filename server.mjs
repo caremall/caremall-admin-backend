@@ -9,10 +9,12 @@ import cookieParser from "cookie-parser";
 import router from "./routes/index.mjs";
 import errorHandler from "./middlewares/errorHandler.mjs";
 
+
 const app = express();
 
 configDotenv();
 connectDB(process.env.DATABASE_URI);
+
 
 app.use(cors(corsOptions));
 app.use(express.json());

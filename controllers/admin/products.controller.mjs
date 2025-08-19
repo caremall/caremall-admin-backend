@@ -1,5 +1,6 @@
 import Product from "../../models/Product.mjs";
 import Variant from "../../models/Variant.mjs";
+import Category from "../../models/Category.mjs";
 
 export const createProduct = async (req, res) => {
     const {
@@ -230,6 +231,9 @@ export const getAllProducts = async (req, res) => {
   }
 };
 
+
+
+
 export const getProductBySlug = async (req, res) => {
   try {
     const product = await Product.findOne({
@@ -318,5 +322,65 @@ export const deleteProduct = async (req, res) => {
     res.status(200).json({ message: "Product deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+export const getSearchSuggestions = async (req, res) => {
+  try {
+    const search = (req.query.q || "").trim();
+    if (!search) return res.status(200).json({ products: [], categories: [] });
+
+    console.log("Search query:", search);
+
+    const regex = new RegExp(search, "i");
+
+    const [products, categories] = await Promise.all([
+      Product.find({
+        $or: [
+          { productName: regex },
+          { SKU: regex },
+          { barcode: regex }
+        ],
+        productStatus: "published",
+        visibility: "visible"
+      })
+        .limit(10)
+        .select("productName sellingPrice category productImages")
+        .lean(),
+      
+     
+
+      Category.find({ name: regex }) 
+        .limit(10)
+        .select("name slug")
+        .lean()
+    ]);
+
+        console.log("\n--- Product Suggestions ---");
+    products.forEach(product => {
+      console.log({
+        thumbnail: product.productImages?.[0] || "No Image",
+        name: product.productName,
+        price: product.sellingPrice,
+        category: product.category?.name || "No Category"
+      });
+    });
+
+    // Log category suggestions
+    console.log("\n--- Category Suggestions ---");
+    categories.forEach(category => {
+      console.log({
+        name: category.name,
+        price: null, // Categories don't have prices
+        category: "Category"
+      });
+    });
+
+    res.status(200).json({ products, categories });
+  } catch (err) {
+    console.error("Error in getSearchSuggestions:", err);
+    res.status(500).json({ message: err.message });
   }
 };

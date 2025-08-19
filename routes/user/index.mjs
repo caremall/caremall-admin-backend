@@ -10,8 +10,12 @@ import returnRouter from "./returns.router.mjs";
 import brandRouter from "./brands.router.mjs";
 import categoriesRouter from "./categories.router.mjs";
 import reviewsRouter from "./reviews.router.mjs";
+
+import subscriberRouter from "./subscriber.router.mjs"
+
 import heroBannerRouter from "./heroBanner.router.mjs";
 import offerRouter from "./offers.router.mjs";
+
 
 const userRouter = Router()
 
@@ -28,5 +32,6 @@ userRouter.use("/hero-banners", heroBannerRouter);
 userRouter.use("/offers", offerRouter);
 userRouter.use("/categories", categoriesRouter);
 userRouter.use("/reviews", reviewsRouter);
+userRouter.use("/subscriber",subscriberRouter)
 
 export default userRouter;
