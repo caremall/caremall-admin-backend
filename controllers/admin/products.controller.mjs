@@ -170,46 +170,11 @@ export const getAllProducts = async (req, res) => {
     }
 
     const products = await Product.find(query)
-      .populate("brand category")
+      .populate("brand category defaultVariant")
       .sort(sortBy)
       .lean();
 
-    const productIdsWithVariants = products
-      .filter((p) => p.hasVariant && p.defaultVariant)
-      .map((p) => p.defaultVariant);
-
-    const defaultVariants = await Variant.find({
-      _id: { $in: productIdsWithVariants },
-    }).lean();
-
-    const defaultVariantMap = {};
-    for (const variant of defaultVariants) {
-      defaultVariantMap[variant._id.toString()] = variant;
-    }
-
-    const enrichedProducts = products.map((product) => {
-      if (product.hasVariant && product.defaultVariant) {
-        const variant = defaultVariantMap[product.defaultVariant.toString()];
-        if (variant) {
-          return {
-            ...product,
-            SKU: variant.SKU,
-            barcode: variant.barcode,
-            productImages: variant.images,
-            costPrice: variant.costPrice,
-            sellingPrice: variant.sellingPrice,
-            mrpPrice: variant.mrpPrice,
-            discountPercent: variant.discountPercent ?? product.discountPercent,
-            taxRate: variant.taxRate ?? product.taxRate,
-          };
-        }
-      }
-      return product;
-    });
-
-    const total = await Product.countDocuments(query);
-
-    res.status(200).json(enrichedProducts);
+    res.status(200).json(products);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
