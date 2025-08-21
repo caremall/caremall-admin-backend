@@ -2,20 +2,20 @@ import Product from "../../models/Product.mjs";
 import ProductType from "../../models/ProductType.mjs";
 
 export const createProductType = async (req, res) => {
-    const { name } = req.body;
+  const { name } = req.body;
 
-    const nameExists = await ProductType.findOne({ name: name });
-    if (nameExists)
-      return res.json({ message: "Prodcut type name already exists" });
+  const nameExists = await ProductType.findOne({ name: name });
+  if (nameExists)
+    return res.json({ message: "Prodcut type name already exists" });
 
-    const productType = await ProductType.create(req.body);
+  await ProductType.create(req.body);
 
-    res.status(201).json({ success: true, message: "Product type created" });
+  res.status(201).json({ success: true, message: "Product type created" });
 };
 
 export const getAllProductTypes = async (req, res) => {
   try {
-    const { search, attributeName, page = 1, limit = 10 } = req.query;
+    const { search, attributeName } = req.query;
 
     const filter = {};
 
@@ -27,29 +27,11 @@ export const getAllProductTypes = async (req, res) => {
       filter["attributes.name"] = { $regex: attributeName, $options: "i" };
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const types = await ProductType.find(filter)
+      .sort({ createdAt: -1 })
+      .lean()
 
-    const [types, total] = await Promise.all([
-      ProductType.find(filter)
-        .skip(skip)
-        .limit(parseInt(limit))
-        .sort({ createdAt: -1 }), // optional sorting
-      ProductType.countDocuments(filter),
-    ]);
-
-    const totalPages = Math.ceil(total / limit);
-
-    res.status(200).json({
-      data: types,
-      meta: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages,
-        hasNextPage: parseInt(page) < totalPages,
-        hasPrevPage: parseInt(page) > 1,
-      },
-    });
+    res.status(200).json(types)
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
