@@ -2,54 +2,52 @@ import Category from "../../models/Category.mjs";
 import Product from "../../models/Product.mjs";
 
 export const createCategory = async (req, res) => {
-    let { type, name, image, description, parentId, categoryCode, status } =
-      req.body;
+  let { type, name, image, description, parentId, categoryCode, status } =
+    req.body;
 
-    parentId = parentId?.trim() || undefined;
+  parentId = parentId?.trim() || undefined;
 
-    if (!parentId || type === "Main") {
-      parentId = undefined;
-    }
+  if (!parentId || type === "Main") {
+    parentId = undefined;
+  }
 
-    const nameConflict = await Category.findOne({ name, parentId });
+  const nameConflict = await Category.findOne({ name, parentId });
 
-    if (nameConflict) {
-      return res
-        .status(200)
-        .json({
-          message:
-            type === "Main"
-              ? "A category with the same name already exists."
-              : "A category with the same name already exists under this parent.",
-        });
-    }
+  if (nameConflict) {
+    return res
+      .status(200)
+      .json({
+        message:
+          type === "Main"
+            ? "A category with the same name already exists."
+            : "A category with the same name already exists under this parent.",
+      });
+  }
 
-    const codeConflict = await Category.findOne({ categoryCode });
+  const codeConflict = await Category.findOne({ categoryCode });
 
-    if (codeConflict) {
-      return res
-        .status(200)
-        .json({ message: "Category code is already in use." });
-    }
+  if (codeConflict) {
+    return res
+      .status(200)
+      .json({ message: "Category code is already in use." });
+  }
 
-    await Category.create({
-      type,
-      image,
-      name,
-      description,
-      parentId: parentId,
-      categoryCode,
-      status,
-    });
+  await Category.create({
+    type,
+    image,
+    name,
+    description,
+    parentId: parentId,
+    categoryCode,
+    status,
+  });
 
-    res.status(201).json({ message: "Category created", success: true });
+  res.status(201).json({ message: "Category created", success: true });
 };
 
 export const getAllCategories = async (req, res) => {
   try {
     const {
-      page = 1,
-      limit = 10,
       search = "",
       type,
       status,
@@ -65,25 +63,12 @@ export const getAllCategories = async (req, res) => {
       filter.name = { $regex: search, $options: "i" };
     }
 
-    const skip = (page - 1) * limit;
 
-    const [data, total] = await Promise.all([
-      Category.find(filter)
-        .skip(skip)
-        .limit(Number(limit))
-        .sort({ createdAt: -1 }),
-      Category.countDocuments(filter),
-    ]);
 
-    res.status(200).json({
-      data,
-      meta: {
-        total,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(total / limit),
-      },
-    });
+    const categories = await Category.find(filter)
+      .sort({ createdAt: -1 })
+
+    res.status(200).json(categories);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to fetch categories" });

@@ -2,130 +2,130 @@ import Product from "../../models/Product.mjs";
 import Variant from "../../models/Variant.mjs";
 
 export const createProduct = async (req, res) => {
-    const {
-      productName,
-      productDescription,
-      brand,
-      category,
-      hasVariant,
-      SKU,
-      barcode,
-      variants = [],
-      urlSlug,
-    } = req.body;
+  const {
+    productName,
+    productDescription,
+    brand,
+    category,
+    hasVariant,
+    SKU,
+    barcode,
+    variants = [],
+    urlSlug,
+  } = req.body;
 
-    const missingFields = [];
-    if (!productName || productName.trim() === "")
-      missingFields.push("productName");
-    if (!urlSlug || urlSlug.trim() === "") missingFields.push("urlSlug");
-    if (!productDescription || productDescription.trim() === "")
-      missingFields.push("productDescription");
-    if (!brand || brand.trim() === "") missingFields.push("brand");
-    if (!category || category.trim() === "") missingFields.push("category");
+  const missingFields = [];
+  if (!productName || productName.trim() === "")
+    missingFields.push("productName");
+  if (!urlSlug || urlSlug.trim() === "") missingFields.push("urlSlug");
+  if (!productDescription || productDescription.trim() === "")
+    missingFields.push("productDescription");
+  if (!brand || brand.trim() === "") missingFields.push("brand");
+  if (!category || category.trim() === "") missingFields.push("category");
 
-    if (missingFields.length > 0) {
-      return res
-        .status(200)
-        .json({
-          message: `Missing required fields: ${missingFields.join(", ")}`,
-        });
+  if (missingFields.length > 0) {
+    return res
+      .status(200)
+      .json({
+        message: `Missing required fields: ${missingFields.join(", ")}`,
+      });
+  }
+
+  const nameExists = await Product.findOne({
+    productName: productName.trim(),
+  });
+  if (nameExists) {
+    return res.status(200).json({ message: "Product name is already taken" });
+  }
+  const slugExist = await Product.findOne({ urlSlug: urlSlug.trim() });
+  if (slugExist) {
+    return res.status(200).json({ message: "Slug is already taken" });
+  }
+
+  if (!hasVariant) {
+    if (SKU && SKU.trim() !== "") {
+      const skuExists = await Product.findOne({ SKU: SKU.trim() });
+      if (skuExists)
+        return res
+          .status(200)
+          .json({ message: "This SKU is already in use" });
     }
-
-    const nameExists = await Product.findOne({
-      productName: productName.trim(),
-    });
-    if (nameExists) {
-      return res.status(200).json({ message: "Product name is already taken" });
+    if (barcode && barcode.trim() !== "") {
+      const barcodeExists = await Product.findOne({
+        barcode: barcode.trim(),
+      });
+      if (barcodeExists)
+        return res
+          .status(200)
+          .json({ message: "This Barcode is already in use" });
     }
-    const slugExist = await Product.findOne({ urlSlug: urlSlug.trim() });
-    if (slugExist) {
-      return res.status(200).json({ message: "Slug is already taken" });
-    }
+  }
 
-    if (!hasVariant) {
-      if (SKU && SKU.trim() !== "") {
-        const skuExists = await Product.findOne({ SKU: SKU.trim() });
-        if (skuExists)
+  if (hasVariant && Array.isArray(variants)) {
+    for (let variant of variants) {
+      if (variant.SKU) {
+        const exists = await Variant.findOne({ SKU: variant.SKU.trim() });
+        if (exists)
           return res
             .status(200)
-            .json({ message: "This SKU is already in use" });
+            .json({
+              message: `Variant SKU '${variant.SKU}' is already in use`,
+            });
       }
-      if (barcode && barcode.trim() !== "") {
-        const barcodeExists = await Product.findOne({
-          barcode: barcode.trim(),
+      if (variant.barcode) {
+        const exists = await Variant.findOne({
+          barcode: variant.barcode.trim(),
         });
-        if (barcodeExists)
+        if (exists)
           return res
             .status(200)
-            .json({ message: "This Barcode is already in use" });
+            .json({
+              message: `Variant Barcode '${variant.barcode}' is already in use`,
+            });
       }
     }
+  }
 
-    if (hasVariant && Array.isArray(variants)) {
-      for (let variant of variants) {
-        if (variant.SKU) {
-          const exists = await Variant.findOne({ SKU: variant.SKU.trim() });
-          if (exists)
-            return res
-              .status(200)
-              .json({
-                message: `Variant SKU '${variant.SKU}' is already in use`,
-              });
-        }
-        if (variant.barcode) {
-          const exists = await Variant.findOne({
-            barcode: variant.barcode.trim(),
-          });
-          if (exists)
-            return res
-              .status(200)
-              .json({
-                message: `Variant Barcode '${variant.barcode}' is already in use`,
-              });
-        }
-      }
+  const productData = { ...req.body };
+
+  if (hasVariant) {
+    delete productData.SKU;
+    delete productData.barcode;
+    delete productData.productImages;
+    delete productData.costPrice;
+    delete productData.sellingPrice;
+    delete productData.mrpPrice;
+    if (!productData.productType) delete productData.productType;
+  } else {
+    delete productData.productType;
+  }
+
+  ["brand", "category", "productType"].forEach((field) => {
+    if (productData[field] === "") delete productData[field];
+  });
+
+  const newProduct = await Product.create(productData);
+
+  if (hasVariant && Array.isArray(variants) && variants.length > 0) {
+    const variantDocs = variants.map((variant) => ({
+      ...variant,
+      productId: newProduct._id,
+    }));
+
+    const newVariants = await Variant.insertMany(variantDocs);
+
+    const defaultVar = newVariants.find((v) => v.isDefault);
+    if (defaultVar) {
+      newProduct.defaultVariant = defaultVar._id;
+      await newProduct.save();
     }
+  }
 
-    const productData = { ...req.body };
-
-    if (hasVariant) {
-      delete productData.SKU;
-      delete productData.barcode;
-      delete productData.productImages;
-      delete productData.costPrice;
-      delete productData.sellingPrice;
-      delete productData.mrpPrice;
-      if (!productData.productType) delete productData.productType;
-    } else {
-      delete productData.productType;
-    }
-
-    ["brand", "category", "productType"].forEach((field) => {
-      if (productData[field] === "") delete productData[field];
-    });
-
-    const newProduct = await Product.create(productData);
-
-    if (hasVariant && Array.isArray(variants) && variants.length > 0) {
-      const variantDocs = variants.map((variant) => ({
-        ...variant,
-        productId: newProduct._id,
-      }));
-
-      const newVariants = await Variant.insertMany(variantDocs);
-
-      const defaultVar = newVariants.find((v) => v.isDefault);
-      if (defaultVar) {
-        newProduct.defaultVariant = defaultVar._id;
-        await newProduct.save();
-      }
-    }
-
-    res.status(201).json({
-      success: true,
-      message: "Product created successfully",
-      product: newProduct,
-    });
+  res.status(201).json({
+    success: true,
+    message: "Product created successfully",
+    product: newProduct,
+  });
 };
 
 export const getAllProducts = async (req, res) => {
@@ -139,8 +139,6 @@ export const getAllProducts = async (req, res) => {
       minPrice,
       maxPrice,
       sort,
-      page = 1,
-      limit = 8,
     } = req.query;
 
     const query = {};
@@ -165,8 +163,6 @@ export const getAllProducts = async (req, res) => {
       if (maxPrice) query.sellingPrice.$lte = parseFloat(maxPrice);
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
     let sortBy = { createdAt: -1 };
     if (sort) {
       const [field, order] = sort.split(":");
@@ -176,8 +172,6 @@ export const getAllProducts = async (req, res) => {
     const products = await Product.find(query)
       .populate("brand category")
       .sort(sortBy)
-      .skip(skip)
-      .limit(parseInt(limit))
       .lean();
 
     const productIdsWithVariants = products
@@ -215,15 +209,7 @@ export const getAllProducts = async (req, res) => {
 
     const total = await Product.countDocuments(query);
 
-    res.status(200).json({
-      data: enrichedProducts,
-      meta: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(total / limit),
-      },
-    });
+    res.status(200).json(enrichedProducts);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });

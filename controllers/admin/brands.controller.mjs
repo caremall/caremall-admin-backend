@@ -2,37 +2,37 @@ import Brand from "../../models/Brand.mjs";
 import Product from "../../models/Product.mjs";
 
 export const createBrand = async (req, res) => {
-    const {
-      brandName,
-      tagline,
-      description,
-      termsAndConditions,
-      status,
-      imageUrl,
-    } = req.body;
+  const {
+    brandName,
+    tagline,
+    description,
+    termsAndConditions,
+    status,
+    imageUrl,
+  } = req.body;
 
-    const existingBrand = await Brand.findOne({ brandName: brandName.trim() });
-    if (existingBrand) {
-      return res.status(200).json({ message: "Brand already exists" });
-    }
+  const existingBrand = await Brand.findOne({ brandName: brandName.trim() });
+  if (existingBrand) {
+    return res.status(200).json({ message: "Brand already exists" });
+  }
 
-    const newBrand = await Brand.create({
-      brandName,
-      tagline,
-      description,
-      termsAndConditions,
-      imageUrl,
-      status,
-    });
+  const newBrand = await Brand.create({
+    brandName,
+    tagline,
+    description,
+    termsAndConditions,
+    imageUrl,
+    status,
+  });
 
-    res
-      .status(201)
-      .json({ success: true, message: "Brand created", data: newBrand });
+  res
+    .status(201)
+    .json({ success: true, message: "Brand created", data: newBrand });
 };
 
 export const getAllBrands = async (req, res) => {
   try {
-    const { search = "", status, page = 1, limit = 10 } = req.query;
+    const { search = "", status } = req.query;
 
     const query = {
       ...(search && {
@@ -41,21 +41,9 @@ export const getAllBrands = async (req, res) => {
       ...(status && { status }),
     };
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const brands = await Brand.find(query).sort({ createdAt: -1 })
 
-    const [brands, total] = await Promise.all([
-      Brand.find(query).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
-      Brand.countDocuments(query),
-    ]);
-
-    res.status(200).json({
-      data: brands,
-      meta: {
-        page: Number(page),
-        totalPages: Math.ceil(total / limit),
-        total,
-      },
-    });
+    res.status(200).json(brands);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });

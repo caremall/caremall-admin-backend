@@ -21,7 +21,6 @@ const adminRouter = Router()
 adminRouter.use("/upload", uploadRouter);
 adminRouter.use("/auth", authRouter);
 adminRouter.use("/roles", roleRouter);
-// adminRouter.use("/admins", adminRouter);
 adminRouter.use("/categories", categoryRouter);
 adminRouter.use("/brands", brandRouter);
 adminRouter.use("/products", productsRouter);
