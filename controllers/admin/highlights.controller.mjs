@@ -24,7 +24,7 @@ export const createHighlight = async (req, res) => {
 export const getHighlights = async (req, res) => {
     try {
         const highlights = await Highlight.find().populate('product').lean();
-        res.status(200).json({ highlights });
+        res.status(200).json(highlights);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Failed to fetch highlights", error: error.message });
