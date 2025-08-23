@@ -14,14 +14,12 @@ export const createCategory = async (req, res) => {
   const nameConflict = await Category.findOne({ name, parentId });
 
   if (nameConflict) {
-    return res
-      .status(200)
-      .json({
-        message:
-          type === "Main"
-            ? "A category with the same name already exists."
-            : "A category with the same name already exists under this parent.",
-      });
+    return res.status(200).json({
+      message:
+        type === "Main"
+          ? "A category with the same name already exists."
+          : "A category with the same name already exists under this parent.",
+    });
   }
 
   const codeConflict = await Category.findOne({ categoryCode });
@@ -47,14 +45,9 @@ export const createCategory = async (req, res) => {
 
 export const getAllCategories = async (req, res) => {
   try {
-    const {
-      search = "",
-      type,
-      status,
-      parentId,
-    } = req.query;
+    const { search = "", type, status, parentId } = req.query;
 
-    const filter = {};
+    const filter = { type: "Main" };
 
     if (type) filter.type = type;
     if (status) filter.status = status;
@@ -63,10 +56,9 @@ export const getAllCategories = async (req, res) => {
       filter.name = { $regex: search, $options: "i" };
     }
 
-
-
     const categories = await Category.find(filter)
-      .sort({ createdAt: -1 })
+      .populate("products").populate("subcategories")
+      .sort({ createdAt: -1 });
 
     res.status(200).json(categories);
   } catch (err) {
@@ -77,7 +69,7 @@ export const getAllCategories = async (req, res) => {
 
 export const getCategoryById = async (req, res) => {
   try {
-    const category = await Category.findById(req.params.id);
+    const category = await Category.findById(req.params.id).populate("products").populate("subcategories");
     if (!category)
       return res.status(404).json({ message: "Category not found" });
 
@@ -111,14 +103,12 @@ export const updateCategory = async (req, res) => {
     });
 
     if (nameConflict) {
-      return res
-        .status(200)
-        .json({
-          message:
-            type === "Main"
-              ? "Another category with the same name exists."
-              : "Another category with the same name exists under this parent.",
-        });
+      return res.status(200).json({
+        message:
+          type === "Main"
+            ? "Another category with the same name exists."
+            : "Another category with the same name exists under this parent.",
+      });
     }
 
     const codeConflict = await Category.findOne({
@@ -127,11 +117,9 @@ export const updateCategory = async (req, res) => {
     });
 
     if (codeConflict) {
-      return res
-        .status(200)
-        .json({
-          message: "Category code is already in use by another category.",
-        });
+      return res.status(200).json({
+        message: "Category code is already in use by another category.",
+      });
     }
 
     const category = await Category.findById(id);
