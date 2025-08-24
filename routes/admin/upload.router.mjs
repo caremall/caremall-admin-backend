@@ -1,4 +1,4 @@
-// routes/upload.js
+
 import { Router } from "express";
 import upload from "../../middlewares/upload.mjs";
 import s3 from "../../utils/s3Client.mjs";
@@ -41,6 +41,40 @@ router.post("/", upload.single("image"), async (req, res) => {
     return res
       .status(500)
       .json({ message: "Upload failed", error: error.message });
+  }
+})
+
+router.post("/video", upload.single("video"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const { originalname, buffer, mimetype } = req.file;
+
+    const uploadParams = {
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: `videos/${Date.now()}_${originalname}`, // save in videos folder
+      Body: buffer,
+      ContentType: mimetype, // important for video playback
+    };
+
+    const parallelUpload = new Upload({
+      client: s3,
+      params: uploadParams,
+    });
+
+    const result = await parallelUpload.done();
+
+    return res.status(200).json({
+      message: "Upload successful",
+      videoUrl: `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${uploadParams.Key}`,
+    });
+  } catch (error) {
+    console.error("Upload Error:", error);
+    return res
+      .status(500)
+      .json({ message: "Upload failed", message: error.message });
   }
 });
 

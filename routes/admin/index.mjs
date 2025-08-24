@@ -30,6 +30,7 @@ adminRouter.use("/returns", retursRouter);
 adminRouter.use("/variants", variantRouter);
 adminRouter.use("/blogs", blogsRouter);
 adminRouter.use("/reviews", reviewRouter);
+adminRouter.use('/highlights', highlightRouter)
 adminRouter.use("/product-types", productTypeRouter)
 adminRouter.use("/offer", offerRouter);
 adminRouter.use("/users", userRouter);
