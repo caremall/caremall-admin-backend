@@ -29,10 +29,12 @@ export const getCategoryProducts = async (req, res) => {
     if (!category) return res.status(404).json({ message: 'Category not found' });
 
     // Prepare category ids for queries
-    const categoriesToFilter = [
-      new mongoose.Types.ObjectId(categoryId),
-      ...category.subcategories.map(sub => new mongoose.Types.ObjectId(sub._id)),
-    ];
+  const categoriesToFilter = [
+    new mongoose.Types.ObjectId(String(categoryId)),
+    ...category.subcategories.map(
+      (sub) => new mongoose.Types.ObjectId(String(sub._id))
+    ),
+  ];
 
     // 2. Find products in categories with status
     const productIds = await Product.find({
@@ -96,7 +98,7 @@ export const getCategoryProducts = async (req, res) => {
     };
 
     if (brands.length > 0) {
-      productFilter.brand = { $in: brands.map(id => new mongoose.Types.ObjectId(id)) };
+      productFilter.brand = { $in: brands.map(id => new mongoose.Types.ObjectId(String(id))) };
     }
 
     // For products without variants, filter by sellingPrice and discountPercent too
