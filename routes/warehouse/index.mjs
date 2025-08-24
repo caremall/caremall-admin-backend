@@ -6,15 +6,16 @@ import productsRouter from "./products.routes.mjs";
 import variantRouter from "./variants.router.mjs";
 import productTypeRouter from "./productType.router.mjs";
 import ordersRouter from "./orders.router.mjs";
+import { verifyToken } from "../../middlewares/verifyToken.mjs";
 const warehouseRouter = Router()
 
 warehouseRouter.use("/auth", authRouter);
 
-warehouseRouter.use("/categories", categoryRouter);
-warehouseRouter.use("/brands", brandRouter);
-warehouseRouter.use("/products", productsRouter);
-warehouseRouter.use("/variants", variantRouter);
-warehouseRouter.use("/product-types", productTypeRouter);
-adminRouter.use("/orders", ordersRouter);
+warehouseRouter.use("/categories", verifyToken, categoryRouter);
+warehouseRouter.use("/brands", verifyToken, brandRouter);
+warehouseRouter.use("/products", verifyToken, productsRouter);
+warehouseRouter.use("/variants", verifyToken, variantRouter);
+warehouseRouter.use("/product-types", verifyToken, productTypeRouter);
+warehouseRouter.use("/orders", verifyToken, ordersRouter);
 
 export default warehouseRouter;
