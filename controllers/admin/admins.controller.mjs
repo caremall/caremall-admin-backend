@@ -1,6 +1,7 @@
 import { encrypt } from "../../utils/encryptPassword.mjs";
 import Admin from "../../models/Admin.mjs";
 import bcrypt from "bcryptjs";
+import Role from "../../models/Role.mjs"; // Import Role model
 
 export const getAllAdmins = async (req, res) => {
   try {
@@ -8,8 +9,6 @@ export const getAllAdmins = async (req, res) => {
       status,
       role,
       search,
-      page = 1,
-      limit = 10,
       sortBy = "createdAt",
       order = "desc",
     } = req.query;
@@ -21,7 +20,11 @@ export const getAllAdmins = async (req, res) => {
     }
 
     if (role && role !== "all") {
-      query.role = role;
+      const roleDoc = await Role.findOne({ name: role.trim() });
+      if (!roleDoc) {
+        return res.status(400).json({ message: `Role "${role}" not found.` });
+      }
+      query.role = roleDoc._id;
     }
 
     if (search) {
@@ -35,19 +38,19 @@ export const getAllAdmins = async (req, res) => {
 
     const total = await Admin.countDocuments(query);
 
+    // No pagination - fetch all matching admins
     const admins = await Admin.find(query)
       .populate("role")
-      .sort({ [sortBy]: order === "asc" ? 1 : -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .populate("assignedWarehouses")
+      .sort({ [sortBy]: order === "asc" ? 1 : -1 });
 
     res.status(200).json({
       data: admins,
       meta: {
         total,
-        perPage: Number(limit),
-        currentPage: Number(page),
-        totalPages: Math.ceil(total / limit),
+        perPage: total, // Since all results are returned
+        currentPage: 1, // Only one page
+        totalPages: 1, // Only one page
         sortBy,
         order,
       },
@@ -63,7 +66,7 @@ export const getAllAdmins = async (req, res) => {
 export const getAdminById = async (req, res) => {
   try {
     const { id } = req.params;
-    const admin = await Admin.findById(id).populate("role");
+    const admin = await Admin.findById(id).populate("role").populate("assignedWarehouses");
 
     if (!admin) return res.status(404).json({ message: "Admin not found" });
 

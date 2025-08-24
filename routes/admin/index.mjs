@@ -15,6 +15,7 @@ import retursRouter from "./returns.router.mjs";
 import userRouter from "./users.router.mjs";
 import offerRouter from "./offers.router.mjs";
 import heroBannerRouter from "./heroBanner.router.mjs";
+import adminWarehouseRouter from "./warehouse.router.mjs";
 
 const adminRouter = Router()
 
@@ -34,6 +35,7 @@ adminRouter.use("/offer", offerRouter);
 adminRouter.use("/users", userRouter);
 adminRouter.use("/offer", offerRouter);
 adminRouter.use('/hero-banners', heroBannerRouter)
+adminRouter.use('/warehouse', adminWarehouseRouter)
 
 //!admin parent routes
 //get all admins
