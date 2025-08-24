@@ -5,6 +5,7 @@ import brandRouter from "./brands.router.mjs";
 import productsRouter from "./products.routes.mjs";
 import variantRouter from "./variants.router.mjs";
 import productTypeRouter from "./productType.router.mjs";
+import ordersRouter from "./orders.router.mjs";
 const warehouseRouter = Router()
 
 warehouseRouter.use("/auth", authRouter);
@@ -14,5 +15,6 @@ warehouseRouter.use("/brands", brandRouter);
 warehouseRouter.use("/products", productsRouter);
 warehouseRouter.use("/variants", variantRouter);
 warehouseRouter.use("/product-types", productTypeRouter);
+adminRouter.use("/orders", ordersRouter);
 
 export default warehouseRouter;
