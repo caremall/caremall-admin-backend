@@ -16,6 +16,7 @@ import userRouter from "./users.router.mjs";
 import offerRouter from "./offers.router.mjs";
 import heroBannerRouter from "./heroBanner.router.mjs";
 import adminWarehouseRouter from "./warehouse.router.mjs";
+import highlightRouter from "./highlights.router.mjs";
 
 const adminRouter = Router()
 
