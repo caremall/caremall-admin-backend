@@ -1,5 +1,5 @@
-import { s3Client, PutObjectCommand } from "./s3Client.js";
 import { v4 as uuidv4 } from "uuid";
+import { PutObjectCommand, s3Client } from "./s3Client.v3.mjs";
 
 // Set your default folder here
 const DEFAULT_FOLDER = "images/";
