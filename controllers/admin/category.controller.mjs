@@ -1,46 +1,65 @@
 import Category from "../../models/Category.mjs";
 import Product from "../../models/Product.mjs";
+import { uploadBase64Image } from "../../utils/uploadImage.mjs";
 
 export const createCategory = async (req, res) => {
-  let { type, name, image, description, parentId, categoryCode, status } =
-    req.body;
+  try {
+    let { type, name, image, description, parentId, categoryCode, status } =
+      req.body;
 
-  parentId = parentId?.trim() || undefined;
+    parentId = parentId?.trim() || undefined;
 
-  if (!parentId || type === "Main") {
-    parentId = undefined;
-  }
+    if (!parentId || type === "Main") {
+      parentId = undefined;
+    }
 
-  const nameConflict = await Category.findOne({ name, parentId });
+    // Check name conflict
+    const nameConflict = await Category.findOne({ name, parentId });
+    if (nameConflict) {
+      return res.status(200).json({
+        message:
+          type === "Main"
+            ? "A category with the same name already exists."
+            : "A category with the same name already exists under this parent.",
+      });
+    }
 
-  if (nameConflict) {
-    return res.status(200).json({
-      message:
-        type === "Main"
-          ? "A category with the same name already exists."
-          : "A category with the same name already exists under this parent.",
+    // Check code conflict
+    const codeConflict = await Category.findOne({ categoryCode });
+    if (codeConflict) {
+      return res
+        .status(200)
+        .json({ message: "Category code is already in use." });
+    }
+
+    // Upload image if provided as base64 string
+    let uploadedImageUrl = null;
+    if (image) {
+      uploadedImageUrl = await uploadBase64Image(image, "category-images/");
+    }
+
+    // Create category with uploaded image URL
+    await Category.create({
+      type,
+      image: uploadedImageUrl,
+      name,
+      description,
+      parentId,
+      categoryCode,
+      status,
     });
+
+    res.status(201).json({ message: "Category created", success: true });
+  } catch (error) {
+    console.error("Create Category error:", error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
   }
-
-  const codeConflict = await Category.findOne({ categoryCode });
-
-  if (codeConflict) {
-    return res
-      .status(200)
-      .json({ message: "Category code is already in use." });
-  }
-
-  await Category.create({
-    type,
-    image,
-    name,
-    description,
-    parentId: parentId,
-    categoryCode,
-    status,
-  });
-
-  res.status(201).json({ message: "Category created", success: true });
 };
 
 export const getAllCategories = async (req, res) => {
@@ -96,6 +115,7 @@ export const updateCategory = async (req, res) => {
       return res.status(200).json({ message: "Required fields are missing" });
     }
 
+    // Name conflict check excluding current category
     const nameConflict = await Category.findOne({
       name,
       parentId,
@@ -111,6 +131,7 @@ export const updateCategory = async (req, res) => {
       });
     }
 
+    // Category code conflict check excluding current category
     const codeConflict = await Category.findOne({
       categoryCode,
       _id: { $ne: id },
@@ -126,11 +147,23 @@ export const updateCategory = async (req, res) => {
     if (!category)
       return res.status(404).json({ message: "Category not found" });
 
+    // Check if image is base64 string (simple check for 'data:image/')
+    if (image && typeof image === "string" && image.startsWith("data:image/")) {
+      // Upload new image and replace the image URL
+      const uploadedImageUrl = await uploadBase64Image(
+        image,
+        "category-images/"
+      );
+      category.image = uploadedImageUrl;
+    } else if (image) {
+      // If image provided but not base64, set as is (could be URL)
+      category.image = image;
+    }
+
     category.name = name ?? category.name;
     category.type = type ?? category.type;
     category.description = description ?? category.description;
     category.status = status ?? category.status;
-    category.image = image ?? category.image;
     category.parentId =
       type === "Main" ? undefined : parentId ?? category.parentId;
     category.categoryCode = categoryCode ?? category.categoryCode;
@@ -143,6 +176,7 @@ export const updateCategory = async (req, res) => {
     res.status(500).json({ message: "Failed to update category" });
   }
 };
+
 
 export const changeCategoryStatus = async (req, res) => {
   try {

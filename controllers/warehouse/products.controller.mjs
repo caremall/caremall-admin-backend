@@ -1,133 +1,172 @@
 import Product from "../../models/Product.mjs";
 import Variant from "../../models/Variant.mjs";
 import Category from "../../models/Category.mjs";
+import { uploadBase64Images } from "../../utils/uploadImage.mjs";
+import Inventory from "../../models/inventory.mjs";
 
 export const createProduct = async (req, res) => {
-  const {
-    productName,
-    productDescription,
-    brand,
-    category,
-    hasVariant,
-    SKU,
-    barcode,
-    variants = [],
-    urlSlug,
-  } = req.body;
+  try {
+    const body = { ...req.body };
 
-  const missingFields = [];
-  if (!productName || productName.trim() === "")
-    missingFields.push("productName");
-  if (!urlSlug || urlSlug.trim() === "") missingFields.push("urlSlug");
-  if (!productDescription || productDescription.trim() === "")
-    missingFields.push("productDescription");
-  if (!brand || brand.trim() === "") missingFields.push("brand");
-  if (!category || category.trim() === "") missingFields.push("category");
+    // Basic validation for some required fields
+    const missingFields = [];
+    const requiredFields = [
+      "productName",
+      "shortDescription",
+      "productDescription",
+      "brand",
+      "category",
+      "urlSlug",
+      "warehouse",
+    ];
 
-  if (missingFields.length > 0) {
-    return res
-      .status(200)
-      .json({
-        message: `Missing required fields: ${missingFields.join(", ")}`,
-      });
-  }
+    requiredFields.forEach((field) => {
+      if (
+        !body[field] ||
+        (typeof body[field] === "string" && body[field].trim() === "")
+      ) {
+        missingFields.push(field);
+      }
+    });
 
-  const nameExists = await Product.findOne({
-    productName: productName.trim(),
-  });
-  if (nameExists) {
-    return res.status(200).json({ message: "Product name is already taken" });
-  }
-  const slugExist = await Product.findOne({ urlSlug: urlSlug.trim() });
-  if (slugExist) {
-    return res.status(200).json({ message: "Slug is already taken" });
-  }
-
-  if (!hasVariant) {
-    if (SKU && SKU.trim() !== "") {
-      const skuExists = await Product.findOne({ SKU: SKU.trim() });
-      if (skuExists)
-        return res
-          .status(200)
-          .json({ message: "This SKU is already in use" });
+    if (missingFields.length > 0) {
+      return res
+        .status(400)
+        .json({
+          message: `Missing required fields: ${missingFields.join(", ")}`,
+        });
     }
-    if (barcode && barcode.trim() !== "") {
-      const barcodeExists = await Product.findOne({
-        barcode: barcode.trim(),
-      });
-      if (barcodeExists)
+
+    // Check duplicate constraints
+    if (await Product.findOne({ productName: body.productName.trim() })) {
+      return res.status(400).json({ message: "Product name is already taken" });
+    }
+    if (await Product.findOne({ urlSlug: body.urlSlug.trim() })) {
+      return res.status(400).json({ message: "Slug is already taken" });
+    }
+
+    // Handle SKU/barcode uniqueness for non-variant product
+    if (body.hasVariant === false) {
+      if (body.SKU && (await Product.findOne({ SKU: body.SKU.trim() }))) {
+        return res.status(400).json({ message: "This SKU is already in use" });
+      }
+      if (
+        body.barcode &&
+        (await Product.findOne({ barcode: body.barcode.trim() }))
+      ) {
         return res
-          .status(200)
+          .status(400)
           .json({ message: "This Barcode is already in use" });
+      }
     }
-  }
 
-  if (hasVariant && Array.isArray(variants)) {
-    for (let variant of variants) {
-      if (variant.SKU) {
-        const exists = await Variant.findOne({ SKU: variant.SKU.trim() });
-        if (exists)
+    // Handle variant SKU/barcode uniqueness
+    if (body.hasVariant && Array.isArray(body.variants)) {
+      for (const variant of body.variants) {
+        if (
+          variant.SKU &&
+          (await Variant.findOne({ SKU: variant.SKU.trim() }))
+        ) {
           return res
-            .status(200)
+            .status(400)
             .json({
               message: `Variant SKU '${variant.SKU}' is already in use`,
             });
-      }
-      if (variant.barcode) {
-        const exists = await Variant.findOne({
-          barcode: variant.barcode.trim(),
-        });
-        if (exists)
+        }
+        if (
+          variant.barcode &&
+          (await Variant.findOne({ barcode: variant.barcode.trim() }))
+        ) {
           return res
-            .status(200)
+            .status(400)
             .json({
               message: `Variant Barcode '${variant.barcode}' is already in use`,
             });
+        }
       }
     }
-  }
 
-  const productData = { ...req.body };
-
-  if (hasVariant) {
-    delete productData.SKU;
-    delete productData.barcode;
-    delete productData.productImages;
-    delete productData.costPrice;
-    delete productData.sellingPrice;
-    delete productData.mrpPrice;
-    if (!productData.productType) delete productData.productType;
-  } else {
-    delete productData.productType;
-  }
-
-  ["brand", "category", "productType"].forEach((field) => {
-    if (productData[field] === "") delete productData[field];
-  });
-
-  const newProduct = await Product.create(productData);
-
-  if (hasVariant && Array.isArray(variants) && variants.length > 0) {
-    const variantDocs = variants.map((variant) => ({
-      ...variant,
-      productId: newProduct._id,
-    }));
-
-    const newVariants = await Variant.insertMany(variantDocs);
-
-    const defaultVar = newVariants.find((v) => v.isDefault);
-    if (defaultVar) {
-      newProduct.defaultVariant = defaultVar._id;
-      await newProduct.save();
+    // Upload product images if present
+    if (body.productImages) {
+      body.productImages = await uploadBase64Images(
+        body.productImages,
+        "product-images/"
+      );
     }
-  }
 
-  res.status(201).json({
-    success: true,
-    message: "Product created successfully",
-    product: newProduct,
-  });
+    // Remove SKU, barcode, pricing if hasVariant true
+    if (body.hasVariant) {
+      delete body.SKU;
+      delete body.barcode;
+      delete body.costPrice;
+      delete body.sellingPrice;
+      delete body.mrpPrice;
+      if (!body.productType) delete body.productType;
+    } else {
+      delete body.productType;
+    }
+
+    // Create product
+    const newProduct = await Product.create(body);
+
+    // Create variants if present
+    let newVariants = [];
+    if (
+      body.hasVariant &&
+      Array.isArray(body.variants) &&
+      body.variants.length > 0
+    ) {
+      const variantDocs = body.variants.map((variant) => ({
+        ...variant,
+        productId: newProduct._id,
+      }));
+
+      newVariants = await Variant.insertMany(variantDocs);
+
+      const defaultVar = newVariants.find((v) => v.isDefault);
+      if (defaultVar) {
+        newProduct.defaultVariant = defaultVar._id;
+        await newProduct.save();
+      }
+    }
+
+    // Create inventory records if present
+    if (Array.isArray(body.inventories) && body.inventories.length > 0) {
+      const inventoriesToCreate = body.inventories.map((inv) => {
+        const doc = {
+          warehouse: inv.warehouse,
+          availableQuantity: inv.availableQuantity || 0,
+          minimumQuantity: inv.minimumQuantity || 0,
+          reorderQuantity: inv.reorderQuantity || 0,
+          maximumQuantity: inv.maximumQuantity || 0,
+          product: newProduct._id,
+          updatedAt: inv.updatedAt || Date.now(),
+        };
+        if (inv.variant) doc.variant = inv.variant;
+        return doc;
+      });
+
+      await Inventory.insertMany(inventoriesToCreate);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Product created successfully",
+      product: newProduct,
+    });
+  } catch (error) {
+    console.error("Create Product error:", error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+  }
 };
+
+
 
 export const getAllProducts = async (req, res) => {
   try {

@@ -1,33 +1,51 @@
 import Brand from "../../models/Brand.mjs";
 import Product from "../../models/Product.mjs";
+import { uploadBase64Image } from "../../utils/uploadImage.mjs";
 
 export const createBrand = async (req, res) => {
-  const {
-    brandName,
-    tagline,
-    description,
-    termsAndConditions,
-    status,
-    imageUrl,
-  } = req.body;
+  try {
+    const {
+      brandName,
+      tagline,
+      description,
+      termsAndConditions,
+      status,
+      imageUrl,
+    } = req.body;
 
-  const existingBrand = await Brand.findOne({ brandName: brandName.trim() });
-  if (existingBrand) {
-    return res.status(200).json({ message: "Brand already exists" });
+    // Check existing brand
+    const existingBrand = await Brand.findOne({ brandName: brandName.trim() });
+    if (existingBrand) {
+      return res.status(200).json({ message: "Brand already exists" });
+    }
+
+    // Upload base64 image to S3 if imageUrl provided as base64
+    let uploadedImageUrl = null;
+    if (imageUrl) {
+      uploadedImageUrl = await uploadBase64Image(imageUrl, "brand-images/");
+    }
+
+    // Create brand document with uploaded image URL
+    const newBrand = await Brand.create({
+      brandName,
+      tagline,
+      description,
+      termsAndConditions,
+      imageUrl: uploadedImageUrl,
+      status,
+    });
+
+    res
+      .status(201)
+      .json({ success: true, message: "Brand created", data: newBrand });
+  } catch (error) {
+    console.error("Create Brand error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
-
-  const newBrand = await Brand.create({
-    brandName,
-    tagline,
-    description,
-    termsAndConditions,
-    imageUrl,
-    status,
-  });
-
-  res
-    .status(201)
-    .json({ success: true, message: "Brand created", data: newBrand });
 };
 
 export const getAllBrands = async (req, res) => {
@@ -89,12 +107,27 @@ export const updateBrand = async (req, res) => {
         .json({ message: "Brand with this brand name already exists" });
     }
 
+    // If imageUrl is base64, upload to S3 and get new URL
+    if (
+      imageUrl &&
+      typeof imageUrl === "string" &&
+      imageUrl.startsWith("data:image/")
+    ) {
+      const uploadedImageUrl = await uploadBase64Image(
+        imageUrl,
+        "brand-images/"
+      );
+      brand.imageUrl = uploadedImageUrl;
+    } else if (imageUrl) {
+      // If not base64, use as is (could be existing URL)
+      brand.imageUrl = imageUrl;
+    }
+
     brand.brandName = brandName || brand.brandName;
     brand.tagline = tagline || brand.tagline;
     brand.description = description || brand.description;
     brand.termsAndConditions = termsAndConditions || brand.termsAndConditions;
     brand.status = status || brand.status;
-    brand.imageUrl = imageUrl || brand.imageUrl;
 
     await brand.save();
 
