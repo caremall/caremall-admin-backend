@@ -102,7 +102,7 @@ const orderSchema = new Schema(
       default: false,
     },
     appliedOffer: {
-      couponId: { type: Schema.Types.ObjectId, ref: 'Offer' },
+      couponId: { type: Schema.Types.ObjectId, ref: "Offer" },
       couponCode: { type: String },
       offerTitle: { type: String },
       discountValue: { type: Number },
@@ -113,6 +113,25 @@ const orderSchema = new Schema(
     razorpaySignature: { type: String },
 
     deliveredAt: Date,
+    allocatedWarehouse: {
+      type: Schema.Types.ObjectId,
+      ref: "Warehouse",
+      default: null,
+    },
+    warehouseAllocationStatus: {
+      type: String,
+      enum: ["unallocated", "allocated"],
+      default: "unallocated",
+    },
+    allocatedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "Admin", // where User has role operationsmanager
+      default: null,
+    },
+    allocatedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
 const categorySchema = new mongoose.Schema(
   {
@@ -38,6 +38,11 @@ const categorySchema = new mongoose.Schema(
       enum: ["active", "inactive"],
       default: "active",
     },
+     warehouse: {
+          type: Schema.Types.ObjectId,
+          ref: "Warehouse",
+          required: true, // required because product must belong to a warehouse
+        },
   },
   {
     timestamps: true,
