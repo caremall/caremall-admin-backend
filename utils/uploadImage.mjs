@@ -18,12 +18,12 @@ export async function uploadBase64Image(base64Image, folder = DEFAULT_FOLDER) {
   const fileName = `${folder}${uuidv4()}.${extension}`;
 
   const params = {
-    Bucket: process.env.AWS_S3_BUCKET_NAME,
+    Bucket: process.env.AWS_BUCKET_NAME,
     Key: fileName,
     Body: imageData,
     ContentEncoding: "base64",
     ContentType: contentType,
-    ACL: "public-read",
+    // ACL: "public-read",
   };
 
   const command = new PutObjectCommand(params);

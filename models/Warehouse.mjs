@@ -9,6 +9,10 @@ const warehouseSchema = new Schema(
       required: true,
       trim: true,
     },
+    description:{
+      type: String,
+      trim: true,
+    },
     type: {
       type: String,
       enum: ["state warehouse", "district warehouse", "delivery hub"],
