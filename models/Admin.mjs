@@ -57,7 +57,7 @@ adminSchema.virtual("assignedWarehouses", {
   ref: "Warehouse", // model to use
   localField: "_id", // find warehouses where 'manager' matches admin _id
   foreignField: "manager",
-  justOne: false, // set true if one warehouse per admin
+  justOne: true, // set true if one warehouse per admin
 });
 
 const Admin = model('Admin', adminSchema);

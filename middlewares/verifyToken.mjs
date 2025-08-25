@@ -20,7 +20,7 @@ export const verifyToken = (req, res, next) => {
         return res.status(403).json({ message: "Forbidden", auth: false });
       }
 
-      const admin = await Admin.findById(decoded._id).select(
+      const admin = await Admin.findById(decoded._id).populate("role").populate("assignedWarehouses").select(
         "-password -encryptedPassword"
       );
 

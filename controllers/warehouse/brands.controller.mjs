@@ -13,10 +13,22 @@ export const createBrand = async (req, res) => {
       imageUrl,
     } = req.body;
 
-    // Check existing brand
-    const existingBrand = await Brand.findOne({ brandName: brandName.trim() });
+    const assignedWarehouse = req.user?.assignedWarehouses;
+    const warehouseId = assignedWarehouse?._id || null;
+
+    // Check existing brand by name scoped to warehouse if warehouseId exists
+    // or just by brandName if no warehouse linked
+    const existingBrandQuery = warehouseId
+      ? { brandName: brandName.trim(), warehouse: warehouseId }
+      : { brandName: brandName.trim(), warehouse: { $exists: false } };
+
+    const existingBrand = await Brand.findOne(existingBrandQuery);
     if (existingBrand) {
-      return res.status(200).json({ message: "Brand already exists" });
+      return res.status(200).json({
+        message: warehouseId
+          ? "Brand already exists in this warehouse"
+          : "Brand already exists",
+      });
     }
 
     // Upload base64 image to S3 if imageUrl provided as base64
@@ -25,15 +37,22 @@ export const createBrand = async (req, res) => {
       uploadedImageUrl = await uploadBase64Image(imageUrl, "brand-images/");
     }
 
-    // Create brand document with uploaded image URL
-    const newBrand = await Brand.create({
+    // Prepare brand data
+    const brandData = {
       brandName,
       tagline,
       description,
       termsAndConditions,
       imageUrl: uploadedImageUrl,
       status,
-    });
+    };
+
+    // Assign warehouse if warehouseId exists
+    if (warehouseId) {
+      brandData.warehouse = warehouseId;
+    }
+
+    const newBrand = await Brand.create(brandData);
 
     res
       .status(201)
@@ -61,7 +80,7 @@ export const getAllBrands = async (req, res) => {
       ...(status && { status }),
     };
 
-    const brands = await Brand.find(query).sort({ createdAt: -1 })
+    const brands = await Brand.find(query).populate("warehouse").sort({ createdAt: -1 })
 
     res.status(200).json(brands);
   } catch (err) {
@@ -72,7 +91,7 @@ export const getAllBrands = async (req, res) => {
 
 export const getBrandById = async (req, res) => {
   try {
-    const brand = await Brand.findById(req.params.id);
+    const brand = await Brand.findById(req.params.id).populate("warehouse");
     if (!brand) {
       return res.status(404).json({ message: "Brand not found" });
     }

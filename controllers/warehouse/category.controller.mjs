@@ -7,14 +7,76 @@ export const createCategory = async (req, res) => {
     let { type, name, image, description, parentId, categoryCode, status } =
       req.body;
 
-    parentId = parentId?.trim() || undefined;
+    const assignedWarehouse = req.user?.assignedWarehouses; // assignedWarehouses is an object or undefined
+    const warehouseId = assignedWarehouse?._id || null;
 
+    // Allow category creation without warehouse if none assigned
+    if (!warehouseId) {
+      parentId = parentId?.trim() || undefined;
+      if (!parentId || type === "Main") {
+        parentId = undefined;
+      }
+
+      // Check name conflict globally (without warehouse)
+      const nameConflict = await Category.findOne({
+        name,
+        parentId,
+        warehouse: { $exists: false },
+      });
+      if (nameConflict) {
+        return res.status(200).json({
+          message:
+            type === "Main"
+              ? "A category with the same name already exists."
+              : "A category with the same name already exists under this parent.",
+        });
+      }
+
+      // Check code conflict globally
+      const codeConflict = await Category.findOne({
+        categoryCode,
+        warehouse: { $exists: false },
+      });
+      if (codeConflict) {
+        return res
+          .status(200)
+          .json({ message: "Category code is already in use." });
+      }
+
+      // Upload image if provided as base64 string
+      let uploadedImageUrl = null;
+      if (image) {
+        uploadedImageUrl = await uploadBase64Image(image, "category-images/");
+      }
+
+      // Create category without warehouse reference
+      await Category.create({
+        type,
+        image: uploadedImageUrl,
+        name,
+        description,
+        parentId,
+        categoryCode,
+        status,
+      });
+
+      return res
+        .status(201)
+        .json({ message: "Category created without warehouse", success: true });
+    }
+
+    // If warehouse exists, proceed with warehouse scoped creation
+    parentId = parentId?.trim() || undefined;
     if (!parentId || type === "Main") {
       parentId = undefined;
     }
 
-    // Check name conflict
-    const nameConflict = await Category.findOne({ name, parentId });
+    // Check name conflict within warehouse
+    const nameConflict = await Category.findOne({
+      name,
+      parentId,
+      warehouse: warehouseId,
+    });
     if (nameConflict) {
       return res.status(200).json({
         message:
@@ -24,8 +86,11 @@ export const createCategory = async (req, res) => {
       });
     }
 
-    // Check code conflict
-    const codeConflict = await Category.findOne({ categoryCode });
+    // Check code conflict within warehouse
+    const codeConflict = await Category.findOne({
+      categoryCode,
+      warehouse: warehouseId,
+    });
     if (codeConflict) {
       return res
         .status(200)
@@ -38,7 +103,7 @@ export const createCategory = async (req, res) => {
       uploadedImageUrl = await uploadBase64Image(image, "category-images/");
     }
 
-    // Create category with uploaded image URL
+    // Create category linked to warehouse
     await Category.create({
       type,
       image: uploadedImageUrl,
@@ -47,18 +112,19 @@ export const createCategory = async (req, res) => {
       parentId,
       categoryCode,
       status,
+      warehouse: warehouseId,
     });
 
-    res.status(201).json({ message: "Category created", success: true });
+    res
+      .status(201)
+      .json({ message: "Category created with warehouse", success: true });
   } catch (error) {
     console.error("Create Category error:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 };
 
@@ -77,7 +143,7 @@ export const getAllCategories = async (req, res) => {
     }
 
     const categories = await Category.find(filter)
-      .populate("products").populate("subcategories")
+      .populate("products").populate("subcategories").populate("warehouse")
       .sort({ createdAt: -1 });
 
     res.status(200).json(categories);
@@ -89,7 +155,7 @@ export const getAllCategories = async (req, res) => {
 
 export const getCategoryById = async (req, res) => {
   try {
-    const category = await Category.findById(req.params.id).populate("products").populate("subcategories");
+    const category = await Category.findById(req.params.id).populate("products").populate("subcategories").populate("warehouse");
     if (!category)
       return res.status(404).json({ message: "Category not found" });
 
