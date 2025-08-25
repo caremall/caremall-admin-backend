@@ -32,7 +32,7 @@ const warehouseSchema = new Schema(
     },
     location: {
       lat: { type: Number },
-      lang: { type: Number },
+      lng: { type: Number },
     },
     manager: {
       type: Schema.Types.ObjectId,
