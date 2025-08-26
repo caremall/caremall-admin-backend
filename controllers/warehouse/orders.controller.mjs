@@ -125,33 +125,16 @@ export const deleteOrder = async (req, res) => {
   }
 };
 
-export const allocateWarehouse = async (req, res) => {
+export const getAllocatedOrders = async (req, res) => {
   try {
-    const orderId = req.params.id;
-    const { warehouseId } = req.body;
-    const allocatedByUserId = req.user._id;
-    if (!warehouseId || !allocatedByUserId) {
-      return res
-        .status(400)
-        .json({ message: "warehouseId and allocatedByUserId are required" });
-    }
-
-    const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ message: "Order not found" });
-
-    // Update order allocation details
-    order.allocatedWarehouse = warehouseId;
-    order.warehouseAllocationStatus = "allocated";
-    order.allocatedBy = allocatedByUserId;
-    order.allocatedAt = new Date();
-
-    await order.save();
-
-    res
-      .status(200)
-      .json({ message: "Warehouse allocated successfully", order });
+    const warehouseId = req.user.assignedWarehouses._id;
+    const orders = await Order.find({ allocatedWarehouse: warehouseId })
+      .populate("user")
+      .populate("items.product")
+      .populate("items.variant")
+      .sort({ createdAt: -1 });
+    res.status(200).json({ data: orders });
   } catch (error) {
-    console.error("Allocate Warehouse Error:", error);
-    res.status(500).json({ message: "Failed to allocate warehouse" });
+    res.status(500).json({ message: "Failed to fetch warehouse orders" });
   }
 };
