@@ -124,3 +124,30 @@ export const deleteWarehouse = async (req, res) => {
       .json({ message: "Failed to delete warehouse", error: err.message });
   }
 };
+
+// Delete multiple warehouses by IDs
+export const deleteWarehouses = async (req, res) => {
+  try {
+    const { ids } = req.body; // Expect ids as an array of warehouse IDs
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "ids must be a non-empty array" });
+    }
+
+    // Validate all IDs
+    const invalidIds = ids.filter(id => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({ message: "One or more invalid warehouse IDs", invalidIds });
+    }
+
+    // Delete all warehouses with IDs in the array
+    const deleteResult = await Warehouse.deleteMany({ _id: { $in: ids } });
+
+    res.status(200).json({ 
+      message: `${deleteResult.deletedCount} warehouses deleted successfully` 
+    });
+  } catch (err) {
+    console.error("Delete multiple warehouses error:", err);
+    res.status(500).json({ message: "Failed to delete warehouses", error: err.message });
+  }
+};
+
