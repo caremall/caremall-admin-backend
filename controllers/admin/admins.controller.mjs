@@ -205,3 +205,32 @@ export const resetPassword = async (req, res) => {
       .json({ message: "Failed to reset password", error: err.message });
   }
 };
+
+// Soft delete multiple admins by IDs
+export const deleteAdmins = async (req, res) => {
+  try {
+    const { ids } = req.body; // Expect ids as an array of admin IDs
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "ids must be a non-empty array" });
+    }
+
+    // Validate all IDs
+    const invalidIds = ids.filter(id => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({ message: "One or more invalid admin IDs", invalidIds });
+    }
+
+    // Update status to "removed" for all admins with matching IDs
+    const updateResult = await Admin.updateMany(
+      { _id: { $in: ids }, status: { $ne: "removed" } },
+      { $set: { status: "removed" } }
+    );
+
+    res.status(200).json({ 
+      message: `${updateResult.modifiedCount} admins removed successfully` 
+    });
+  } catch (err) {
+    console.error("Delete multiple admins error:", err);
+    res.status(500).json({ message: "Failed to remove admins", error: err.message });
+  }
+};

@@ -6,6 +6,7 @@ import {
   updateAdmin,
   deleteAdmin,
   changeAdminStatus,
+  deleteAdmins,
 } from "../../controllers/admin/admins.controller.mjs";
 import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 
@@ -28,5 +29,7 @@ router.patch("/:id/status", changeAdminStatus);
 
 // DELETE /api/admins/:id
 router.delete("/:id", deleteAdmin);
+
+router.put("/delete-multiple",deleteAdmins)
 
 export default router;
