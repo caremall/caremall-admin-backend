@@ -20,15 +20,7 @@ export const login = async (req, res) => {
     const admin = await Admin.findOne({ email }).populate("role");
 
     if (!admin) return res.status(404).json({ message: "Admin not found" });
-    const role = await Role.findById(admin.role);
-    if (
-      !role ||
-      (role.name !== "operationsManager")
-    ) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
     const isMatch = await bcrypt.compare(password, admin.password);
-
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
 
