@@ -3,8 +3,6 @@ import Order from "../../models/Order.mjs";
 export const getAllOrders = async (req, res) => {
   try {
     const {
-      page = 1,
-      limit = 10,
       search = "",
       status,
       startDate,
@@ -47,19 +45,14 @@ export const getAllOrders = async (req, res) => {
       .populate("user", "name email")
       .populate("items.product", "productName")
       .populate("items.variant", "variantAttributes")
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .populate("allocatedWarehouse", "name location")
+      .populate("allocatedBy", "fullName email")
+      .sort({ createdAt: -1 });
 
     const total = await Order.countDocuments(query);
 
     res.status(200).json({
       data: orders,
-      meta: {
-        total,
-        page: Number(page),
-        pages: Math.ceil(total / limit),
-      },
     });
   } catch (error) {
     console.error("Get All Orders Error:", error);
@@ -72,6 +65,8 @@ export const getOrderById = async (req, res) => {
     const order = await Order.findById(req.params.id)
       .populate("user", "name email")
       .populate("items.product", "productName")
+      .populate("allocatedWarehouse")
+      .populate("allocatedBy")
       .populate("items.variant", "variantName");
 
     if (!order) return res.status(404).json({ message: "Order not found" });
@@ -127,5 +122,36 @@ export const deleteOrder = async (req, res) => {
   } catch (error) {
     console.error("Delete Order Error:", error);
     res.status(500).json({ message: "Failed to delete order" });
+  }
+};
+
+export const allocateWarehouse = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { warehouseId } = req.body;
+    const allocatedByUserId = req.user._id;
+    if (!warehouseId || !allocatedByUserId) {
+      return res
+        .status(400)
+        .json({ message: "warehouseId and allocatedByUserId are required" });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    // Update order allocation details
+    order.allocatedWarehouse = warehouseId;
+    order.warehouseAllocationStatus = "allocated";
+    order.allocatedBy = allocatedByUserId;
+    order.allocatedAt = new Date();
+
+    await order.save();
+
+    res
+      .status(200)
+      .json({ message: "Warehouse allocated successfully", order });
+  } catch (error) {
+    console.error("Allocate Warehouse Error:", error);
+    res.status(500).json({ message: "Failed to allocate warehouse" });
   }
 };
