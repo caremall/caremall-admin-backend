@@ -25,7 +25,7 @@ export const login = async (req, res) => {
 
     if (
       !role ||
-      (role.name !== "warehouseManager" && role.name !== "operationsManager")
+      (role.name !== "warehouseManager")
     ) {
       return res.status(401).json({ message: "Unauthorized" });
     }
