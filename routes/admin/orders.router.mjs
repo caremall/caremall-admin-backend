@@ -7,6 +7,7 @@ import {
   markOrderDelivered,
   updateOrderStatus,
 } from "../../controllers/admin/orders.controller.mjs";
+import { verifyToken } from "../../middlewares/verifyToken.mjs";
 
 const router = Router();
 
@@ -25,6 +26,6 @@ router.patch("/:id/deliver", markOrderDelivered);
 // DELETE order
 router.delete("/:id", deleteOrder);
 
-router.put("/allocate-warehouse/:id",allocateWarehouse)
+router.put("/allocate-warehouse/:id",verifyToken,allocateWarehouse)
 
 export default router;
