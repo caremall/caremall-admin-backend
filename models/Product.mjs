@@ -127,7 +127,6 @@ const productSchema = new Schema(
     warehouse: {
       type: Schema.Types.ObjectId,
       ref: "Warehouse",
-      required: true, // required because product must belong to a warehouse
     },
   },
   { timestamps: true }

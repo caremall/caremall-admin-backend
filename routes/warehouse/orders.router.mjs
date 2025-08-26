@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
-  allocateWarehouse,
   deleteOrder,
+  getAllocatedOrders,
   getAllOrders,
   getOrderById,
   markOrderDelivered,
@@ -10,6 +10,7 @@ import {
 
 const router = Router();
 
+router.get("/allocated",getAllocatedOrders)
 // GET all orders with filter, search, pagination
 router.get("/", getAllOrders);
 
@@ -25,6 +26,5 @@ router.patch("/:id/deliver", markOrderDelivered);
 // DELETE order
 router.delete("/:id", deleteOrder);
 
-router.put("/allocate-warehouse/:id",allocateWarehouse)
 
 export default router;
