@@ -3,6 +3,7 @@ import Product from "../../models/Product.mjs";
 import Variant from "../../models/Variant.mjs";
 import Category from "../../models/Category.mjs";
 import { enrichProductsWithDefaultVariants } from "../../utils/enrichedProducts.mjs";
+import Warehouse from "../../models/Warehouse.mjs";
 
 export const getFilteredProducts = async (req, res) => {
     try {
@@ -115,7 +116,6 @@ export const getFilteredProducts = async (req, res) => {
         res.status(500).json({ message: 'Server error while filtering products' });
     }
 };
-
 
 export const getMostWantedProducts = async (req, res) => {
     try {
@@ -263,4 +263,57 @@ export const getProductsByCategory = async (req, res) => {
   );
 
   res.status(200).json(result);
+};
+export const getNearbyProducts = async (req, res) => {
+  try {
+    const { lat, lng, radius = 10 } = req.query;
+    if (!lat || !lng) {
+      return res
+        .status(400)
+        .json({ message: "Latitude and longitude are required" });
+    }
+
+    const radiusInMeters = radius * 1000; // Convert km to meters
+
+    // Find warehouses near the location within radius
+    const nearbyWarehouses = await Warehouse.find({
+      location: {
+        $geoWithin: {
+          $centerSphere: [
+            [parseFloat(lng), parseFloat(lat)], // lng, lat order
+            radiusInMeters / 6378137, // Earth radius in meters to radians
+          ],
+        },
+      },
+      status: "Active",
+    }).select("_id");
+
+    const warehouseIds = nearbyWarehouses.map((w) => w._id);
+
+    if (warehouseIds.length === 0) {
+      return res.status(200).json({
+        data: [],
+        totalCount: 0,
+      });
+    }
+
+    // Find all products linked to the nearby warehouses
+    const productQuery = {
+      warehouse: { $in: warehouseIds },
+      productStatus: "published",
+      visibility: "visible",
+    };
+
+    const products = await Product.find(productQuery)
+      .populate("brand category")
+      .lean();
+
+    res.status(200).json({
+      data: products,
+      totalCount: products.length,
+    });
+  } catch (error) {
+    console.error("Error fetching nearby products:", error);
+    res.status(500).json({ message: "Server error fetching nearby products" });
+  }
 };
