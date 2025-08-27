@@ -51,6 +51,12 @@ const orderSchema = new Schema(
       state: String,
       postalCode: String,
       country: String,
+      landmark: String,
+      district: String,
+      mapLocation:{
+        latitude: Number,
+        longitude: Number,
+      }
     },
     billingAddress: {
       fullName: String,
@@ -61,6 +67,12 @@ const orderSchema = new Schema(
       state: String,
       postalCode: String,
       country: String,
+      landmark: String,
+      district: String,
+      mapLocation:{
+        latitude: Number,
+        longitude: Number,
+      }
     },
     paymentMethod: {
       type: String,
