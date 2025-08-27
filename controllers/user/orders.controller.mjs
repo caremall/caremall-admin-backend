@@ -2,6 +2,7 @@ import Razorpay from 'razorpay';
 import Order from '../../models/Order.mjs'
 import crypto from "crypto";
 import Offer from '../../models/offerManagement.mjs';
+import Address from '../../models/Address.mjs';
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -9,12 +10,27 @@ const razorpay = new Razorpay({
 });
 
 export const createOrder = async (req, res) => {
-    const { items, shippingAddress, paymentMethod, totalAmount, couponCode } =
+    const { items, shippingAddressId,billingAddressId, paymentMethod, totalAmount, couponCode } =
       req.body;
 
     if (!items || items.length === 0) {
       return res.status(400).json({ message: "No items in order" });
     }
+
+     const shippingAddressDoc = await Address.findById(
+       shippingAddressId
+     ).lean();
+     if (!shippingAddressDoc) {
+       return res.status(400).json({ message: "Invalid shipping address" });
+     }
+
+     const billingAddressDoc = billingAddressId
+       ? await Address.findById(billingAddressId).lean()
+       : null;
+
+     if (billingAddressId && !billingAddressDoc) {
+       return res.status(400).json({ message: "Invalid billing address" });
+     }
 
     const formattedItems = items.map((item) => ({
       product: item.product,
@@ -89,7 +105,34 @@ export const createOrder = async (req, res) => {
     const order = await Order.create({
       user: req.user._id,
       items: formattedItems,
-      shippingAddress,
+      shippingAddress: {
+        fullName: shippingAddressDoc.fullName,
+        phone: shippingAddressDoc.phone,
+        addressLine1: shippingAddressDoc.addressLine1,
+        addressLine2: shippingAddressDoc.addressLine2,
+        landmark: shippingAddressDoc.landmark,
+        district: shippingAddressDoc.district,
+        city: shippingAddressDoc.city,
+        state: shippingAddressDoc.state,
+        postalCode: shippingAddressDoc.postalCode,
+        country: shippingAddressDoc.country,
+        mapLocation: shippingAddressDoc.mapLocation,
+      },
+      billingAddress: billingAddressDoc
+        ? {
+            fullName: billingAddressDoc.fullName,
+            phone: billingAddressDoc.phone,
+            addressLine1: billingAddressDoc.addressLine1,
+            addressLine2: billingAddressDoc.addressLine2,
+            landmark: billingAddressDoc.landmark,
+            district: billingAddressDoc.district,
+            city: billingAddressDoc.city,
+            state: billingAddressDoc.state,
+            postalCode: billingAddressDoc.postalCode,
+            country: billingAddressDoc.country,
+            mapLocation: billingAddressDoc.mapLocation,
+          }
+        : null,
       paymentMethod,
       paymentStatus: "pending",
       totalAmount,
