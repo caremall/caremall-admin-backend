@@ -25,8 +25,12 @@ export const getCategoryProducts = async (req, res) => {
     }
 
     // 1. Fetch category and subcategories
-    const category = await Category.findById(categoryId).populate('subcategories');
-    if (!category) return res.status(404).json({ message: 'Category not found' });
+  const category = await Category.findById(categoryId)
+    .select("_id type image name categoryCode status")
+    .populate({
+      path: "subcategories",
+      select: "_id type image name categoryCode status parentId",
+    });
 
     // Prepare category ids for queries
   const categoriesToFilter = [
@@ -127,7 +131,13 @@ export const getCategoryProducts = async (req, res) => {
     }
 
     // 8. Fetch filtered products
-    const products = await Product.find(productFilter).populate('brand').sort({ sellingPrice: 1 });
+const products = await Product.find(productFilter)
+  .select(
+    "_id productName brand category urlSlug productStatus hasVariant sellingPrice defaultVariant productImages"
+  )
+  .populate("brand", "_id brandName imageUrl") // select only essential brand fields
+  .sort({ sellingPrice: 1 });
+
 
     // 9. Aggregate variant attributes dynamically for filter options (all category products variants)
     const variantAttributesAggregation = await Variant.aggregate([
