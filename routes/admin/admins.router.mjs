@@ -21,6 +21,9 @@ router.get("/:id", getAdminById);
 // POST /api/admins
 router.post("/", catchAsyncErrors(createAdmin));
 
+// PUT /api/admins
+router.put("/delete-multiple",deleteAdmins)
+
 // PUT /api/admins/:id
 router.put("/:id", updateAdmin);
 
@@ -30,6 +33,5 @@ router.patch("/:id/status", changeAdminStatus);
 // DELETE /api/admins/:id
 router.delete("/:id", deleteAdmin);
 
-router.put("/delete-multiple",deleteAdmins)
 
 export default router;
