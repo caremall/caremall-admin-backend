@@ -4,6 +4,7 @@ import {
   getReviewByIdAdmin,
   updateReviewStatus,
   deleteReviewAdmin,
+  getReviewsByProduct,
 } from "../../controllers/admin/reviews.controller.mjs";
 
 const router = express.Router();
@@ -13,6 +14,7 @@ router.get("/", getAllReviewsAdmin);
 
 // GET /admin/reviews/:id
 router.get("/:id", getReviewByIdAdmin);
+router.get("/product/:id", getReviewsByProduct);
 
 // PATCH /admin/reviews/:id/status
 router.patch("/:id/status", updateReviewStatus);

@@ -17,6 +17,8 @@ import offerRouter from "./offers.router.mjs";
 import heroBannerRouter from "./heroBanner.router.mjs";
 import adminWarehouseRouter from "./warehouse.router.mjs";
 import highlightRouter from "./highlights.router.mjs";
+import productCardRouter from "./product.card.router.mjs";
+import offerCardRouter from "./offer.card.routes.mjs";
 
 const adminRouter = Router()
 
@@ -38,7 +40,8 @@ adminRouter.use("/users", userRouter);
 adminRouter.use("/offer", offerRouter);
 adminRouter.use('/hero-banners', heroBannerRouter)
 adminRouter.use('/warehouse', adminWarehouseRouter)
-
+adminRouter.use('/product-cards', productCardRouter)
+adminRouter.use('/offer-cards', offerCardRouter)
 //!admin parent routes
 //get all admins
 adminRouter.get("/", getAllAdmins);

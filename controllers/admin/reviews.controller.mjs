@@ -4,7 +4,7 @@ import User from "../../models/User.mjs";
 
 export const getAllReviewsAdmin = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, search } = req.query;
+    const { status, search } = req.query;
     const filter = {};
 
     if (status) filter.status = status;
@@ -28,16 +28,11 @@ export const getAllReviewsAdmin = async (req, res) => {
       .populate("userId", "name email")
       .populate("productId", "productName")
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
 
     res.status(200).json({
       data: reviews,
       met: {
         total,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(total / limit),
       },
     });
   } catch (error) {
@@ -94,5 +89,35 @@ export const deleteReviewAdmin = async (req, res) => {
   } catch (error) {
     console.error("Admin Delete Review Error:", error);
     res.status(500).json({ message: "Failed to delete review" });
+  }
+};
+
+export const getReviewsByProduct = async (req, res) => {
+  try {
+    const productId = req.params.productId;
+    if (!productId) {
+      return res.status(400).json({ message: "Product ID is required" });
+    }
+
+    const { status } = req.query;
+    const filter = { productId };
+
+    if (status) {
+      filter.status = status;
+    }
+
+    const reviews = await Review.find(filter)
+      .populate("userId", "name email")
+      .populate("productId", "productName")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({
+      data: reviews,
+      total: reviews.length,
+    });
+  } catch (error) {
+    console.error("Get Reviews by Product Error:", error);
+    res.status(500).json({ message: "Failed to fetch reviews" });
   }
 };
