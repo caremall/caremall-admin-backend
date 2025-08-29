@@ -1,20 +1,34 @@
 import Highlight from "../../models/Highlight.mjs";
-import { uploadBase64Video } from "../../utils/uploadImage.mjs";
+import { uploadBase64Image, uploadBase64Video } from "../../utils/uploadImage.mjs";
 
 export const createHighlight = async (req, res) => {
   try {
-    const { product, base64Video } = req.body;
+    const { product, base64Video, base64Image } = req.body;
 
-    if (!product || !base64Video) {
-      return res
-        .status(400)
-        .json({ message: "Product ID and video URL are required" });
+    if (!product) {
+      return res.status(400).json({ message: "Product ID is required" });
     }
-    const videoUrl = await uploadBase64Video(base64Video);
+
+    // Upload video if provided
+    let videoUrl = "";
+    if (base64Video) {
+      videoUrl = await uploadBase64Video(base64Video);
+    }
+
+    // Upload a single image if provided
+    let imageUrl = "";
+    if (base64Image) {
+      const uploaded = await uploadBase64Image(
+        base64Image,
+        "highlight-images/"
+      );
+      imageUrl = uploaded;
+    }
 
     const highlight = await Highlight.create({
       product,
       video: videoUrl,
+      image: imageUrl, 
     });
 
     res.status(201).json({ message: "Highlight created", highlight });

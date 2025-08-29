@@ -19,6 +19,7 @@ import adminWarehouseRouter from "./warehouse.router.mjs";
 import highlightRouter from "./highlights.router.mjs";
 import productCardRouter from "./product.card.router.mjs";
 import offerCardRouter from "./offer.card.routes.mjs";
+import photoGalleryRouter from "./photo.gallery.router.mjs";
 
 const adminRouter = Router()
 
@@ -42,6 +43,7 @@ adminRouter.use('/hero-banners', heroBannerRouter)
 adminRouter.use('/warehouse', adminWarehouseRouter)
 adminRouter.use('/product-cards', productCardRouter)
 adminRouter.use('/offer-cards', offerCardRouter)
+adminRouter.use('/photo-gallery', photoGalleryRouter)
 //!admin parent routes
 //get all admins
 adminRouter.get("/", getAllAdmins);

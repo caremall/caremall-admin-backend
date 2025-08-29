@@ -5,7 +5,8 @@ const { Schema } = mongoose;
 const productHighlightSchema = new Schema(
     {
         product: { type: Schema.Types.ObjectId, ref: "Product", required: true },
-        video: { type: String, required: true },
+        video: { type: String },
+        image: { type: String },
     },
     { timestamps: true }
 );
