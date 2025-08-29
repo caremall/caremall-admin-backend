@@ -22,7 +22,7 @@ router.get("/:id", getAdminById);
 router.post("/", catchAsyncErrors(createAdmin));
 
 // PUT /api/admins
-router.put("/delete-multiple",deleteAdmins)
+router.put("/delete-multiple", deleteAdmins);
 
 // PUT /api/admins/:id
 router.put("/:id", updateAdmin);

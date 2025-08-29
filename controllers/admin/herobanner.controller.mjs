@@ -19,7 +19,7 @@ export const createHeroBanner = async (req, res) => {
 
     let uploadedImageUrl = null;
     if (bannerImage) {
-      uploadedImageUrl = await uploadBase64Image(imageUrl, "hero-banners/");
+      uploadedImageUrl = await uploadBase64Image(bannerImage, "hero-banners/");
     }
 
     const banner = await HeroBanner.create({
