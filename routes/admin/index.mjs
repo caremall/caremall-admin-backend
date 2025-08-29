@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { changeAdminStatus, createAdmin, deleteAdmin, getAdminById, getAllAdmins, updateAdmin } from "../../controllers/admin/admins.controller.mjs";
+import { changeAdminStatus, createAdmin, deleteAdmin, deleteAdmins, getAdminById, getAllAdmins, updateAdmin } from "../../controllers/admin/admins.controller.mjs";
 import uploadRouter from "./upload.router.mjs";
 import authRouter from "./auth.router.mjs";
 import roleRouter from "./role.router.mjs";
@@ -53,6 +53,9 @@ adminRouter.get("/:id", getAdminById);
 
 // POST /api/admins
 adminRouter.post("/", createAdmin);
+
+// PUT /api/admins
+adminRouter.put("/delete-multiple",deleteAdmins)
 
 // PUT /api/admins/:id
 adminRouter.put("/:id", updateAdmin);
