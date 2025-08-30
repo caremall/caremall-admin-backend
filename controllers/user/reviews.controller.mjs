@@ -191,23 +191,29 @@ export const likeReview = async (req, res) => {
 
     const userId = req.user._id.toString();
 
-    // If user already liked, return message
-    if (review.likes.some(id => id.toString() === userId)) {
-      return res.status(400).json({ message: "You have already liked this review." });
+    const liked = review.likes.some((id) => id.toString() === userId);
+    const disliked = review.dislikes.some((id) => id.toString() === userId);
+
+    if (liked) {
+      // User clicked like again → toggle off like
+      review.likes = review.likes.filter((id) => id.toString() !== userId);
+    } else {
+      // Add like
+      review.likes.push(userId);
+      // Remove dislike if present
+      if (disliked) {
+        review.dislikes = review.dislikes.filter(
+          (id) => id.toString() !== userId
+        );
+      }
     }
-
-    // Remove user from dislikes if present
-    review.dislikes = review.dislikes.filter(id => id.toString() !== userId);
-
-    // Add user to likes
-    review.likes.push(userId);
 
     await review.save();
 
-    res.status(200).json({ 
-      message: "Review liked", 
-      likesCount: review.likes.length, 
-      dislikesCount: review.dislikes.length 
+    res.status(200).json({
+      message: liked ? "Like removed" : "Review liked",
+      likesCount: review.likes.length,
+      dislikesCount: review.dislikes.length,
     });
   } catch (error) {
     console.error("Like Review Error:", error);
@@ -222,23 +228,29 @@ export const dislikeReview = async (req, res) => {
 
     const userId = req.user._id.toString();
 
-    // If user already disliked, return message
-    if (review.dislikes.some(id => id.toString() === userId)) {
-      return res.status(400).json({ message: "You have already disliked this review." });
+    const disliked = review.dislikes.some((id) => id.toString() === userId);
+    const liked = review.likes.some((id) => id.toString() === userId);
+
+    if (disliked) {
+      // User clicked dislike again → toggle off dislike
+      review.dislikes = review.dislikes.filter(
+        (id) => id.toString() !== userId
+      );
+    } else {
+      // Add dislike
+      review.dislikes.push(userId);
+      // Remove like if present
+      if (liked) {
+        review.likes = review.likes.filter((id) => id.toString() !== userId);
+      }
     }
-
-    // Remove user from likes if present
-    review.likes = review.likes.filter(id => id.toString() !== userId);
-
-    // Add user to dislikes
-    review.dislikes.push(userId);
 
     await review.save();
 
-    res.status(200).json({ 
-      message: "Review disliked", 
-      dislikesCount: review.dislikes.length, 
-      likesCount: review.likes.length 
+    res.status(200).json({
+      message: disliked ? "Dislike removed" : "Review disliked",
+      dislikesCount: review.dislikes.length,
+      likesCount: review.likes.length,
     });
   } catch (error) {
     console.error("Dislike Review Error:", error);
