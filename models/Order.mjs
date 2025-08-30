@@ -53,10 +53,10 @@ const orderSchema = new Schema(
       country: String,
       landmark: String,
       district: String,
-      mapLocation:{
+      mapLocation: {
         latitude: Number,
         longitude: Number,
-      }
+      },
     },
     billingAddress: {
       fullName: String,
@@ -69,10 +69,10 @@ const orderSchema = new Schema(
       country: String,
       landmark: String,
       district: String,
-      mapLocation:{
+      mapLocation: {
         latitude: Number,
         longitude: Number,
-      }
+      },
     },
     paymentMethod: {
       type: String,
@@ -113,10 +113,9 @@ const orderSchema = new Schema(
       type: Boolean,
       default: false,
     },
-    appliedOffer: {
-      couponId: { type: Schema.Types.ObjectId, ref: "Offer" },
+    appliedCoupon: {
+      couponId: { type: Schema.Types.ObjectId, ref: "Coupon" },
       couponCode: { type: String },
-      offerTitle: { type: String },
       discountValue: { type: Number },
     },
 

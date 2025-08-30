@@ -3,6 +3,7 @@ import Order from "../../models/Order.mjs";
 import crypto from "crypto";
 import Offer from "../../models/offerManagement.mjs";
 import Address from "../../models/Address.mjs";
+import Coupon from "../../models/coupon.mjs";
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -10,146 +11,135 @@ const razorpay = new Razorpay({
 });
 
 export const createOrder = async (req, res) => {
-  const {
-    items,
-    shippingAddressId,
-    billingAddressId,
-    paymentMethod,
-    totalAmount,
-    couponCode,
-  } = req.body;
+  try {
+    const {
+      items,
+      shippingAddressId,
+      billingAddressId,
+      paymentMethod,
+      totalAmount,
+      couponCode,
+    } = req.body;
 
-  if (!items || items.length === 0) {
-    return res.status(400).json({ message: "No items in order" });
-  }
-
-  const shippingAddressDoc = await Address.findById(shippingAddressId).lean();
-  if (!shippingAddressDoc) {
-    return res.status(400).json({ message: "Invalid shipping address" });
-  }
-
-  const billingAddressDoc = billingAddressId
-    ? await Address.findById(billingAddressId).lean()
-    : null;
-
-  if (billingAddressId && !billingAddressDoc) {
-    return res.status(400).json({ message: "Invalid billing address" });
-  }
-  const finalBillingAddress = billingAddressDoc || shippingAddressDoc;
-
-  const formattedItems = items.map((item) => ({
-    product: item.product,
-    variant: item.variant || null,
-    quantity: item.quantity,
-    priceAtOrder: item.priceAtOrder,
-    totalPrice: item.totalPrice,
-  }));
-
-  let finalAmount = totalAmount;
-  let appliedOffer = null;
-
-  if (couponCode) {
-    const offer = await Offer.findOne({
-      couponCode: couponCode.trim(),
-      offerStatus: "published", // or 'active'
-    });
-    if (!offer) {
-      return res
-        .status(400)
-        .json({ message: "Invalid or expired coupon code" });
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "No items in order" });
     }
-    if (
-      offer.offerRedeemTimePeriod &&
-      offer.offerRedeemTimePeriod.length === 2
-    ) {
-      const now = new Date();
-      if (
-        now < offer.offerRedeemTimePeriod[0] ||
-        now > offer.offerRedeemTimePeriod[1]
-      ) {
-        return res
-          .status(400)
-          .json({ message: "Coupon is not valid at this time" });
+
+    // Fetch and validate shipping address
+    const shippingAddressDoc = await Address.findById(shippingAddressId).lean();
+    if (!shippingAddressDoc) {
+      return res.status(400).json({ message: "Invalid shipping address" });
+    }
+
+    // Fetch and validate billing address if provided, else use shipping address
+    let billingAddressDoc = null;
+    if (billingAddressId) {
+      billingAddressDoc = await Address.findById(billingAddressId).lean();
+      if (!billingAddressDoc) {
+        return res.status(400).json({ message: "Invalid billing address" });
       }
     }
-    if (
-      offer.offerMinimumOrderValue &&
-      totalAmount < offer.offerMinimumOrderValue
-    ) {
-      return res.status(400).json({
-        message: `Minimum order value for this coupon is ₹${offer.offerMinimumOrderValue}`,
+    const finalBillingAddress = billingAddressDoc || shippingAddressDoc;
+
+    // Format items
+    const formattedItems = items.map((item) => ({
+      product: item.product,
+      variant: item.variant || null,
+      quantity: item.quantity,
+      priceAtOrder: item.priceAtOrder,
+      totalPrice: item.totalPrice,
+    }));
+
+    let finalAmount = Number(totalAmount);
+    if (isNaN(finalAmount) || finalAmount <= 0) {
+      return res.status(400).json({ message: "Invalid total amount" });
+    }
+    let appliedCoupon = null;
+
+    // Apply coupon if available
+    if (couponCode?.trim()) {
+      const coupon = await Coupon.findOne({
+        code: couponCode.trim(),
+        active: true,
       });
+
+      if (!coupon) {
+        return res
+          .status(400)
+          .json({ message: "Invalid or inactive coupon code" });
+      }
+
+      // Check usage limit if set
+      if (
+        coupon.usageLimit !== null &&
+        coupon.usageCount >= coupon.usageLimit
+      ) {
+        return res.status(400).json({ message: "Coupon usage limit exceeded" });
+      }
+
+      // Check expiry date if set
+      if (coupon.expiryDate && new Date() > new Date(coupon.expiryDate)) {
+        return res.status(400).json({ message: "Coupon has expired" });
+      }
+
+      // Calculate discount
+      let discount = 0;
+      if (coupon.discountType === "percentage") {
+        discount = (finalAmount * coupon.discountValue) / 100;
+        if (coupon.maxDiscountAmount !== null) {
+          discount = Math.min(discount, coupon.maxDiscountAmount);
+        }
+      } else if (coupon.discountType === "fixed") {
+        discount = coupon.discountValue;
+      }
+
+      // Ensure discount does not exceed total amount
+      discount = Math.min(discount, finalAmount);
+      finalAmount = finalAmount - discount;
+
+      appliedCoupon = {
+        couponId: coupon._id,
+        couponCode: coupon.code,
+        discountValue: discount,
+      };
+
+      // Increment coupon usage count
+      await Coupon.findByIdAndUpdate(coupon._id, { $inc: { usageCount: 1 } });
     }
 
-    let discount = 0;
-    if (offer.offerDiscountUnit === "percentage") {
-      discount = (totalAmount * offer.offerDiscountValue) / 100;
-    } else if (offer.offerDiscountUnit === "fixed") {
-      discount = offer.offerDiscountValue;
-    }
+    // Create Razorpay order
+    const razorpayOrder = await razorpay.orders.create({
+      amount: Math.round(finalAmount * 100), // in paise
+      currency: "INR",
+      receipt: `order_rcptid_${Date.now()}`,
+    });
 
-    // Ensure discount is not greater than total
-    discount = Math.min(discount, totalAmount);
+    // Save order to DB
+    const order = await Order.create({
+      user: req.user._id,
+      items: formattedItems,
+      shippingAddress: { ...shippingAddressDoc },
+      billingAddress: { ...finalBillingAddress },
+      paymentMethod,
+      paymentStatus: "pending",
+      totalAmount,
+      finalAmount,
+      appliedCoupon,
+      razorpayOrderId: razorpayOrder.id,
+    });
 
-    finalAmount = totalAmount - discount;
-    appliedOffer = {
-      couponId: offer._id,
-      couponCode: offer.couponCode,
-      discountValue: discount,
-      offerTitle: offer.offerTitle,
-    };
+    res.status(201).json({
+      success: true,
+      message: "Order created successfully",
+      order,
+      razorpayOrderId: razorpayOrder.id,
+    });
+  } catch (error) {
+    console.error("Create Order Error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
-
-  const razorpayOrder = await razorpay.orders.create({
-    amount: finalAmount * 100, // in paise
-    currency: "INR",
-    receipt: `order_rcptid_${Date.now()}`,
-  });
-
-const order = await Order.create({
-  user: req.user._id,
-  items: formattedItems,
-  shippingAddress: {
-    fullName: shippingAddressDoc.fullName,
-    phone: shippingAddressDoc.phone,
-    addressLine1: shippingAddressDoc.addressLine1,
-    addressLine2: shippingAddressDoc.addressLine2,
-    landmark: shippingAddressDoc.landmark,
-    district: shippingAddressDoc.district,
-    city: shippingAddressDoc.city,
-    state: shippingAddressDoc.state,
-    postalCode: shippingAddressDoc.postalCode,
-    country: shippingAddressDoc.country,
-    mapLocation: shippingAddressDoc.mapLocation,
-  },
-  billingAddress: {
-    fullName: finalBillingAddress.fullName,
-    phone: finalBillingAddress.phone,
-    addressLine1: finalBillingAddress.addressLine1,
-    addressLine2: finalBillingAddress.addressLine2,
-    landmark: finalBillingAddress.landmark,
-    district: finalBillingAddress.district,
-    city: finalBillingAddress.city,
-    state: finalBillingAddress.state,
-    postalCode: finalBillingAddress.postalCode,
-    country: finalBillingAddress.country,
-    mapLocation: finalBillingAddress.mapLocation,
-  },
-  paymentMethod,
-  paymentStatus: "pending",
-  totalAmount,
-  finalAmount,
-  appliedOffer,
-  razorpayOrderId: razorpayOrder.id,
-});
-
-
-  res.status(201).json({
-    success: true,
-    order,
-    razorpayOrderId: razorpayOrder.id,
-  });
 };
+
 
 export const verifyOrder = async (req, res) => {
   try {
