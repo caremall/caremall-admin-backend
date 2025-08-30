@@ -43,23 +43,36 @@ export const createReview = async (req, res) => {
 
 
 export const getAllReviews = async (req, res) => {
-    try {
-        const { productId, userId } = req.query;
+  try {
+    const { productId, userId } = req.query;
 
-        const filter = {};
-        if (productId) filter.product = productId;
-        if (userId) filter.user = userId;
+    const filter = {};
+    if (productId) filter.productId = productId;
+    if (userId) filter.userId = userId;
 
-        const reviews = await Review.find(filter)
-            .populate('userId', 'name email')
-            .populate('productId', 'productName')
-            .sort({ createdAt: -1 });
+    const reviews = await Review.find(filter)
+      .populate("userId", "name email")
+      .populate("productId", "productName")
+      .sort({ createdAt: -1 })
+      .lean();
 
-        res.status(200).json(reviews);
-    } catch (error) {
-        console.error('Fetch Reviews Error:', error);
-        res.status(500).json({ message: 'Failed to fetch reviews' });
+    let averageRating = 0;
+    if (reviews.length) {
+      averageRating =
+        reviews.reduce((sum, review) => sum + review.rating, 0) /
+        reviews.length;
+      averageRating = Number(averageRating.toFixed(2));
     }
+
+    res.status(200).json({
+      averageRating,
+      reviewCount: reviews.length,
+      reviews,
+    });
+  } catch (error) {
+    console.error("Fetch Reviews Error:", error);
+    res.status(500).json({ message: "Failed to fetch reviews" });
+  }
 };
 
 
@@ -162,27 +175,31 @@ export const deleteReview = async (req, res) => {
 export const getReviewsByProductId = async (req, res) => {
   try {
     const productId = req.params.id;
-
     if (!productId) {
       return res.status(400).json({ message: "Product ID is required" });
     }
 
-    const reviews = await Review.find({ productId })
-      .populate("userId", "name email")
-      .populate("productId", "productName")
-      .sort({ createdAt: -1 })
-      .lean();
+    const reviews = await Review.find({ productId }).lean();
+
+    const totalReviews = reviews.length;
+    const satisfiedReviews = reviews.filter((r) => r.rating >= 4).length;
+    const satisfiedPercentage =
+      totalReviews > 0
+        ? Number(((satisfiedReviews / totalReviews) * 100).toFixed(0))
+        : 0;
 
     res.status(200).json({
       success: true,
-      count: reviews.length,
+      reviewCount: totalReviews,
+      satisfiedPercentage,
       reviews,
     });
   } catch (error) {
-    console.error("Get Reviews by Product ID Error:", error);
+    console.error("Get Reviews Error:", error);
     res.status(500).json({ message: "Failed to fetch reviews" });
   }
 };
+
 // Like Review
 export const likeReview = async (req, res) => {
   try {
