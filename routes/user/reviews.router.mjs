@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createReview, deleteReview, getAllReviews, getReviewById, getReviewsByProductId, updateReview } from "../../controllers/user/reviews.controller.mjs";
+import { createReview, deleteReview, dislikeReview, getAllReviews, getReviewById, getReviewsByProductId, likeReview, updateReview } from "../../controllers/user/reviews.controller.mjs";
 import { verifyUserToken } from "../../middlewares/verifyToken.mjs";
 import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 
@@ -11,7 +11,7 @@ router.get('/:id', getReviewById)
 router.get('/product/:id', getReviewsByProductId)
 router.put('/:id', verifyUserToken, updateReview)
 router.delete('/:id', verifyUserToken, deleteReview)
-
-
+router.post("/like/:id",verifyUserToken,likeReview)
+router.post("/dislike/:id",verifyUserToken,dislikeReview)
 
 export default router

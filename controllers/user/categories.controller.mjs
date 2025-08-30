@@ -297,10 +297,25 @@ export const getCategoryProducts = async (req, res) => {
 
 export const getAllCategories = async (req, res) => {
   try {
-    const categories = await Category.find();
-    res.json(categories);
-  } catch (error) {
-    console.log(error);
-    res.json({ message: "Internal server error" });
+    const { search = "", type, status, parentId,isPopular } = req.query;
+
+    const filter = {};
+
+    if (type) filter.type = type;
+    if (status) filter.status = status;
+    if (parentId) filter.parentId = parentId;
+    if(isPopular) filter.isPopular = isPopular === 'true';
+    if (search) {
+      filter.name = { $regex: search, $options: "i" };
+    }
+
+    const categories = await Category.find(filter)
+      .populate("products").populate("subcategories")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(categories);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch categories" });
   }
 };

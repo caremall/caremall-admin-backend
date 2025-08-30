@@ -10,13 +10,13 @@ import returnRouter from "./returns.router.mjs";
 import brandRouter from "./brands.router.mjs";
 import categoriesRouter from "./categories.router.mjs";
 import reviewsRouter from "./reviews.router.mjs";
-
 import subscriberRouter from "./subscriber.router.mjs"
-
 import heroBannerRouter from "./heroBanner.router.mjs";
 import offerRouter from "./offers.router.mjs";
-
-
+import highlightsRouter from "./highlights.router.mjs";
+import offerCardRouter from "./offer.card.routes.mjs";
+import photoGalleryRouter from "./photo.gallery.router.mjs";
+import productCardRouter from "./product.card.router.mjs";
 const userRouter = Router()
 
 userRouter.use("/auth", authRouter);
@@ -33,5 +33,8 @@ userRouter.use("/offers", offerRouter);
 userRouter.use("/categories", categoriesRouter);
 userRouter.use("/reviews", reviewsRouter);
 userRouter.use("/subscriber",subscriberRouter)
-
+userRouter.use("/highlights", highlightsRouter);
+userRouter.use("/offer-cards", offerCardRouter);
+userRouter.use("/photo-gallery", photoGalleryRouter);
+userRouter.use("/product-cards", productCardRouter);
 export default userRouter;

@@ -4,7 +4,7 @@ import { uploadBase64Image } from "../../utils/uploadImage.mjs";
 
 export const createCategory = async (req, res) => {
   try {
-    let { type, name, image, description, parentId, categoryCode, status } =
+    let { type, name, image,isPopular, description, parentId, categoryCode, status } =
       req.body;
 
     parentId = parentId?.trim() || undefined;
@@ -46,6 +46,7 @@ export const createCategory = async (req, res) => {
       description,
       parentId,
       categoryCode,
+      isPopular,
       status,
     });
 
@@ -102,7 +103,7 @@ export const getCategoryById = async (req, res) => {
 export const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    let { type, name, image, description, parentId, categoryCode, status } =
+    let { type, name, image,isPopular, description, parentId, categoryCode, status } =
       req.body;
 
     parentId = parentId?.trim() || undefined;
@@ -164,6 +165,7 @@ export const updateCategory = async (req, res) => {
     category.type = type ?? category.type;
     category.description = description ?? category.description;
     category.status = status ?? category.status;
+    category.isPopular = isPopular ?? category.isPopular;
     category.parentId =
       type === "Main" ? undefined : parentId ?? category.parentId;
     category.categoryCode = categoryCode ?? category.categoryCode;

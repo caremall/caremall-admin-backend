@@ -38,6 +38,10 @@ const categorySchema = new mongoose.Schema(
       enum: ["active", "inactive"],
       default: "active",
     },
+    isPopular: {
+      type: Boolean,
+      default: false,
+    },
      warehouse: {
           type: Schema.Types.ObjectId,
           ref: "Warehouse",

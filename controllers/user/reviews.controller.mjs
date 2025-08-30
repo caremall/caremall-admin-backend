@@ -183,3 +183,65 @@ export const getReviewsByProductId = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch reviews" });
   }
 };
+// Like Review
+export const likeReview = async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.id);
+    if (!review) return res.status(404).json({ message: "Review not found" });
+
+    const userId = req.user._id.toString();
+
+    // If user already liked, return message
+    if (review.likes.some(id => id.toString() === userId)) {
+      return res.status(400).json({ message: "You have already liked this review." });
+    }
+
+    // Remove user from dislikes if present
+    review.dislikes = review.dislikes.filter(id => id.toString() !== userId);
+
+    // Add user to likes
+    review.likes.push(userId);
+
+    await review.save();
+
+    res.status(200).json({ 
+      message: "Review liked", 
+      likesCount: review.likes.length, 
+      dislikesCount: review.dislikes.length 
+    });
+  } catch (error) {
+    console.error("Like Review Error:", error);
+    res.status(500).json({ message: "Failed to like review" });
+  }
+};
+
+export const dislikeReview = async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.id);
+    if (!review) return res.status(404).json({ message: "Review not found" });
+
+    const userId = req.user._id.toString();
+
+    // If user already disliked, return message
+    if (review.dislikes.some(id => id.toString() === userId)) {
+      return res.status(400).json({ message: "You have already disliked this review." });
+    }
+
+    // Remove user from likes if present
+    review.likes = review.likes.filter(id => id.toString() !== userId);
+
+    // Add user to dislikes
+    review.dislikes.push(userId);
+
+    await review.save();
+
+    res.status(200).json({ 
+      message: "Review disliked", 
+      dislikesCount: review.dislikes.length, 
+      likesCount: review.likes.length 
+    });
+  } catch (error) {
+    console.error("Dislike Review Error:", error);
+    res.status(500).json({ message: "Failed to dislike review" });
+  }
+};
