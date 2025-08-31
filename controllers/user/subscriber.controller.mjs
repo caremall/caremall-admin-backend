@@ -21,7 +21,7 @@ export const subscribe = async (req, res) => {
     
     await Subscriber.create({ email, confirmed: false, confirmationToken: token });
 
-    const confirmationLink = `http://localhost:3000/api/v1/user/subscriber/confirm/${token}`
+    const confirmationLink = `${process.env.BASE_URL}/api/v1/user/subscriber/confirm/${token}`
 
     await sendMail({
       email: email,
