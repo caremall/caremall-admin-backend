@@ -1,3 +1,4 @@
+import Address from "../../models/Address.mjs";
 import User from "../../models/User.mjs";
 import {
   generateUserAccessToken,
@@ -174,6 +175,7 @@ export const getLoggedInUserDetails = async (req, res) => {
   try {
     const userId = req.user._id; // Assuming authentication middleware sets req.user
 
+    // Fetch user excluding sensitive fields
     const user = await User.findById(userId).select(
       "-password -otp -otpExpires"
     );
@@ -181,15 +183,20 @@ export const getLoggedInUserDetails = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Fetch all addresses for this user
+    const addresses = await Address.find({ user: userId }).lean();
+
     res.status(200).json({
       success: true,
       user,
+      addresses,
     });
   } catch (error) {
     console.error("Get Logged In User Details Error:", error);
     res.status(500).json({ message: "Failed to get user details" });
   }
 };
+
 
 export const editProfile = async (req, res) => {
   try {

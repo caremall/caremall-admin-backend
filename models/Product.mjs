@@ -7,7 +7,9 @@ const productSchema = new Schema(
     productDescription: { type: String, required: true },
     brand: { type: Schema.Types.ObjectId, ref: "Brand", required: true },
     category: { type: Schema.Types.ObjectId, ref: "Category", required: true },
-
+    warrantyPolicy: {
+      type: String,
+    },
     hasVariant: { type: Boolean, required: true },
 
     SKU: {
@@ -132,4 +134,4 @@ const productSchema = new Schema(
   { timestamps: true }
 );
 
-export default model('Product', productSchema)
+export default model("Product", productSchema);

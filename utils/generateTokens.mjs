@@ -22,15 +22,11 @@ export const generateRefreshToken = (admin) => {
 
 //user token generation
 export const generateUserAccessToken = (userId) => {
-  return jwt.sign({ userId }, process.env.ACCESS_TOKEN_SECRET, {
-    expiresIn: "1d",
-  });
+  return jwt.sign({ userId }, process.env.ACCESS_TOKEN_SECRET);
 };
 
 export const generateUserRefreshToken = (userId) => {
-  return jwt.sign({ userId }, process.env.REFRESH_TOKEN_SECRET, {
-    expiresIn: "7d",
-  });
+  return jwt.sign({ userId }, process.env.REFRESH_TOKEN_SECRET);
 };
 
 export const verifyUserAccessToken = (token) => {
