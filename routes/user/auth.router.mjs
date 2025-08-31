@@ -1,6 +1,8 @@
 import { Router } from "express";
 import {
   deleteAccount,
+  editProfile,
+  getLoggedInUserDetails,
   login,
   loginWithOtp,
   logout,
@@ -15,6 +17,8 @@ const router = Router();
 
 router.post("/signup", catchAsyncErrors(signup));
 router.post("/login", login);
+router.get("/me", verifyToken, getLoggedInUserDetails);
+router.put("/edit-profile", verifyToken, editProfile);
 router.post("/send-otp", sendOtp);
 router.post("/login-otp", loginWithOtp);
 router.post("/refresh-token", refreshAccessToken);

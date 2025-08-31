@@ -343,7 +343,7 @@ export const getProductSearchSuggestions = async (reg, res) => {
         { productDescription: regex },
       ],
     })
-      .select("productName price thumbanail category")
+      .select("productName sellingPrice thumbnail category urlSlug")
       .limit(10)
       .lean();
 
@@ -376,7 +376,7 @@ export const getSearchSuggestions = async (req, res) => {
         { productDescription: regex },
       ],
     })
-      .select("productName price thumbnail category")
+      .select("productName sellingPrice thumbnail category urlSlug")
       .limit(10)
       .lean();
 
