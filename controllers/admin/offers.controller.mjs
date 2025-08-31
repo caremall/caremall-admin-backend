@@ -1,106 +1,101 @@
 import Offer from "../../models/offerManagement.mjs";
 
 export const createOffer = async (req, res) => {
-    let {
-      title,
-      description,
-      offerType,
-      discountUnit,
-      discountValue,
-      minimumOrderValue,
-      imageUrl,
-      bookingDates,
-      eligibleItems,
-      isFeatured,
-      status,
-      author = "Admin",
-    } = req.body;
+  let {
+    title,
+    description,
+    offerType,
+    discountUnit,
+    discountValue,
+    code,
+    minimumOrderValue,
+    imageUrl,
+    bookingDates,
+    eligibleItems,
+    isFeatured,
+    status,
+    author = "Admin",
+  } = req.body;
 
-    // Trim strings
-    title = title?.trim();
+  // Trim strings
+  title = title?.trim();
+  code = code?.trim();
 
-    // Sanitize enums for drafts
-    if (status === "draft") {
-      if (!["product", "category", "brand", "cart"].includes(offerType)) {
-        offerType = undefined;
-      }
-      if (!["percentage", "fixed"].includes(discountUnit)) {
-        discountUnit = undefined;
-      }
-      // Validate bookingDates: must be array of 2 valid dates, else empty array
-      if (
-        !Array.isArray(bookingDates) ||
-        bookingDates.length !== 2 ||
-        bookingDates.some((d) => isNaN(new Date(d).getTime()))
-      ) {
-        bookingDates = [];
-      } else {
-        // Convert strings to Date objects if valid
-        bookingDates = bookingDates.map((d) => new Date(d));
-      }
-    } else {
-      // For published/inactive, convert bookingDates properly
-      if (
-        Array.isArray(bookingDates) &&
-        bookingDates.length === 2 &&
-        !bookingDates.some((d) => isNaN(new Date(d).getTime()))
-      ) {
-        bookingDates = bookingDates.map((d) => new Date(d));
-      } else {
-        return res.status(400).json({ message: "Invalid bookingDates" });
-      }
+  // Sanitize enums for drafts
+  if (status === "draft") {
+    if (!["product", "category", "brand", "cart"].includes(offerType)) {
+      offerType = undefined;
     }
+    if (!["percentage", "fixed"].includes(discountUnit)) {
+      discountUnit = undefined;
+    }
+    // Validate bookingDates: must be array of 2 valid dates, else empty array
+    if (
+      !Array.isArray(bookingDates) ||
+      bookingDates.length !== 2 ||
+      bookingDates.some((d) => isNaN(new Date(d).getTime()))
+    ) {
+      bookingDates = [];
+    } else {
+      // Convert strings to Date objects if valid
+      bookingDates = bookingDates.map((d) => new Date(d));
+    }
+  } else {
+    // For published/inactive, convert bookingDates properly
+    if (
+      Array.isArray(bookingDates) &&
+      bookingDates.length === 2 &&
+      !bookingDates.some((d) => isNaN(new Date(d).getTime()))
+    ) {
+      bookingDates = bookingDates.map((d) => new Date(d));
+    } else {
+      return res.status(400).json({ message: "Invalid bookingDates" });
+    }
+  }
 
+  const newOffer = await Offer.create({
+    offerTitle: title,
+    offerDescription: description,
+    offerType,
+    code,
+    offerDiscountUnit: discountUnit,
+    offerDiscountValue:
+      discountValue !== undefined ? parseFloat(discountValue) : undefined,
+    offerMinimumOrderValue:
+      minimumOrderValue !== undefined
+        ? parseFloat(minimumOrderValue)
+        : undefined,
+    offerImageUrl: imageUrl,
+    offerRedeemTimePeriod: bookingDates,
+    offerEligibleItems: eligibleItems || [],
+    isOfferFeatured: isFeatured,
+    offerStatus: status,
+    offerAuthor: author.trim(),
+  });
 
-    const newOffer = await Offer.create({
-      offerTitle: title,
-      offerDescription: description,
-      offerType,
-      offerDiscountUnit: discountUnit,
-      offerDiscountValue:
-        discountValue !== undefined ? parseFloat(discountValue) : undefined,
-      offerMinimumOrderValue:
-        minimumOrderValue !== undefined
-          ? parseFloat(minimumOrderValue)
-          : undefined,
-      offerImageUrl: imageUrl,
-      offerRedeemTimePeriod: bookingDates,
-      offerEligibleItems: eligibleItems || [],
-      isOfferFeatured: isFeatured,
-      offerStatus: status,
-      offerAuthor: author.trim(),
-    });
-
-    res.status(201).json({
-      success: true,
-      message: "Offer created successfully",
-      data: newOffer,
-    });
+  res.status(201).json({
+    success: true,
+    message: "Offer created successfully",
+    data: newOffer,
+  });
 };
 
 export const getAllOffers = async (req, res) => {
   try {
-    const { search = "", status, page = 1, limit = 10 } = req.query;
+    const { search = "", status } = req.query;
     const query = {
       ...(search && { offerTitle: { $regex: search, $options: "i" } }),
       ...(status && { offerStatus: status }),
     };
 
-    const skip = (Number(page) - 1) * Number(limit);
-
     const [offers, total] = await Promise.all([
-      Offer.find(query).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+      Offer.find(query).sort({ createdAt: -1 }),
       Offer.countDocuments(query),
     ]);
 
     res.status(200).json({
       success: true,
       data: offers,
-      meta: {
-        page: Number(page),
-        totalPages: Math.ceil(total / limit),
-        total,
-      },
     });
   } catch (error) {
     console.error("Get All Offers Error:", error);
@@ -129,6 +124,7 @@ export const updateOffer = async (req, res) => {
       description,
       offerType,
       discountUnit,
+      code,
       discountValue,
       minimumOrderValue,
       imageUrl,
@@ -185,6 +181,7 @@ export const updateOffer = async (req, res) => {
       minimumOrderValue !== undefined
         ? parseFloat(minimumOrderValue)
         : offer.offerMinimumOrderValue;
+    offer.code = code?.trim() || offer.code;
     offer.offerImageUrl = imageUrl || offer.offerImageUrl;
     offer.offerRedeemTimePeriod =
       bookingDates.length === 2 ? bookingDates : offer.offerRedeemTimePeriod;

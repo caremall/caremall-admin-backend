@@ -1,4 +1,3 @@
-import Coupon from '../../models/coupon.mjs';
 import Offer from '../../models/offerManagement.mjs';
 
 // Get active published offers with a valid duration
@@ -38,27 +37,41 @@ export const applyCouponCode = async (req, res) => {
     return res.status(400).json({ message: "Valid total price is required" });
 
   try {
-    const coupon = await Coupon.findOne({
+    const offer = await Offer.findOne({
       code: couponCode.trim(),
-      active: true,
+      offerStatus: "published", // Only allow published offers
     });
-    if (!coupon)
+
+    if (!offer)
       return res.status(404).json({ message: "Invalid or inactive coupon" });
 
-    if (coupon.expiryDate && coupon.expiryDate < new Date())
-      return res.status(400).json({ message: "Coupon expired" });
+    // Check usage limits
+    // if (offer.usageLimit !== null && offer.usageCount >= offer.usageLimit)
+    //   return res.status(400).json({ message: "Coupon usage limit reached" });
 
-    if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit)
-      return res.status(400).json({ message: "Coupon usage limit reached" });
+    // Check if current date is within redeem period (optional)
+    if (
+      offer.offerRedeemTimePeriod &&
+      offer.offerRedeemTimePeriod.length === 2 &&
+      (new Date() < offer.offerRedeemTimePeriod[0] ||
+        new Date() > offer.offerRedeemTimePeriod[1])
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Coupon not redeemable at this time" });
+    }
 
     let discountAmount = 0;
 
-    if (coupon.discountType === "fixed") {
-      discountAmount = coupon.discountValue;
-    } else if (coupon.discountType === "percentage") {
-      discountAmount = (coupon.discountValue / 100) * totalPrice;
-      if (coupon.maxDiscountAmount !== null) {
-        discountAmount = Math.min(discountAmount, coupon.maxDiscountAmount);
+    if (offer.offerDiscountUnit === "fixed") {
+      discountAmount = offer.offerDiscountValue;
+    } else if (offer.offerDiscountUnit === "percentage") {
+      discountAmount = (offer.offerDiscountValue / 100) * totalPrice;
+      if (
+        offer.maxDiscountAmount !== undefined &&
+        offer.maxDiscountAmount !== null
+      ) {
+        discountAmount = Math.min(discountAmount, offer.maxDiscountAmount);
       }
     }
 
@@ -68,7 +81,8 @@ export const applyCouponCode = async (req, res) => {
       success: true,
       discountAmount,
       finalPrice: totalPrice - discountAmount,
-      message: `Coupon applied successfully.`,
+      message: "Coupon applied successfully.",
+      offerId: offer._id, // optional: include offer ID for further processing
     });
   } catch (error) {
     console.error("Apply Coupon Error:", error);

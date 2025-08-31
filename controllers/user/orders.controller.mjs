@@ -31,7 +31,7 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: "Invalid shipping address" });
     }
 
-    // Fetch and validate billing address if provided, else use shipping address
+    // Fetch and validate billing address or fallback to shipping
     let billingAddressDoc = null;
     if (billingAddressId) {
       billingAddressDoc = await Address.findById(billingAddressId).lean();
@@ -41,7 +41,7 @@ export const createOrder = async (req, res) => {
     }
     const finalBillingAddress = billingAddressDoc || shippingAddressDoc;
 
-    // Format items
+    // Format items for order
     const formattedItems = items.map((item) => ({
       product: item.product,
       variant: item.variant || null,
@@ -56,65 +56,69 @@ export const createOrder = async (req, res) => {
     }
     let appliedCoupon = null;
 
-    // Apply coupon if available
+    // Apply coupon via Offer model
     if (couponCode?.trim()) {
-      const coupon = await Coupon.findOne({
+      const offer = await Offer.findOne({
         code: couponCode.trim(),
-        active: true,
+        offerStatus: "published",
       });
 
-      if (!coupon) {
+      if (!offer) {
         return res
           .status(400)
           .json({ message: "Invalid or inactive coupon code" });
       }
 
-      // Check usage limit if set
-      if (
-        coupon.usageLimit !== null &&
-        coupon.usageCount >= coupon.usageLimit
-      ) {
-        return res.status(400).json({ message: "Coupon usage limit exceeded" });
-      }
+      // if (offer.usageLimit !== null && offer.usageCount >= offer.usageLimit) {
+      //   return res.status(400).json({ message: "Coupon usage limit exceeded" });
+      // }
 
-      // Check expiry date if set
-      if (coupon.expiryDate && new Date() > new Date(coupon.expiryDate)) {
-        return res.status(400).json({ message: "Coupon has expired" });
+      if (
+        offer.offerRedeemTimePeriod &&
+        offer.offerRedeemTimePeriod.length === 2 &&
+        (new Date() < offer.offerRedeemTimePeriod[0] ||
+          new Date() > offer.offerRedeemTimePeriod[1])
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Coupon not redeemable at this time" });
       }
 
       // Calculate discount
       let discount = 0;
-      if (coupon.discountType === "percentage") {
-        discount = (finalAmount * coupon.discountValue) / 100;
-        if (coupon.maxDiscountAmount !== null) {
-          discount = Math.min(discount, coupon.maxDiscountAmount);
+      if (offer.offerDiscountUnit === "percentage") {
+        discount = (finalAmount * offer.offerDiscountValue) / 100;
+        if (
+          offer.maxDiscountAmount !== undefined &&
+          offer.maxDiscountAmount !== null
+        ) {
+          discount = Math.min(discount, offer.maxDiscountAmount);
         }
-      } else if (coupon.discountType === "fixed") {
-        discount = coupon.discountValue;
+      } else if (offer.offerDiscountUnit === "fixed") {
+        discount = offer.offerDiscountValue;
       }
 
-      // Ensure discount does not exceed total amount
       discount = Math.min(discount, finalAmount);
       finalAmount = finalAmount - discount;
 
       appliedCoupon = {
-        couponId: coupon._id,
-        couponCode: coupon.code,
+        couponId: offer._id,
+        couponCode: offer.code,
         discountValue: discount,
       };
 
-      // Increment coupon usage count
-      await Coupon.findByIdAndUpdate(coupon._id, { $inc: { usageCount: 1 } });
+      // Increment offer usage count
+      await Offer.findByIdAndUpdate(offer._id, { $inc: { usageCount: 1 } });
     }
 
     // Create Razorpay order
     const razorpayOrder = await razorpay.orders.create({
-      amount: Math.round(finalAmount * 100), // in paise
+      amount: Math.round(finalAmount * 100), // convert to paise
       currency: "INR",
       receipt: `order_rcptid_${Date.now()}`,
     });
 
-    // Save order to DB
+    // Create and save order in DB
     const order = await Order.create({
       user: req.user._id,
       items: formattedItems,
