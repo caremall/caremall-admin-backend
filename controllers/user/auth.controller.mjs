@@ -144,4 +144,19 @@ export const logout = (req, res) => {
     res.json({ message: 'Logged out successfully' })
 };
 
+export const deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user._id; // Assuming user ID is available from auth middleware
 
+    // Delete the user document by ID
+    await User.findByIdAndDelete(userId);
+
+    // Clear refresh token cookie
+    res.clearCookie("refreshToken");
+
+    res.status(200).json({ message: "Account deleted successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to delete account" });
+  }
+};
