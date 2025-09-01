@@ -109,7 +109,26 @@ export const updateHeroBanner = async (req, res) => {
       return res.status(404).json({ message: "Hero banner not found" });
     }
 
-    const updates = req.body;
+    const updates = { ...req.body };
+
+    // Robust image update logic:
+    if (updates.bannerImage) {
+      // Detect base64 image by prefix
+      if (updates.bannerImage.startsWith("data:image/")) {
+        // Upload new image and store URL
+        banner.bannerImage = await uploadBase64Image(
+          updates.bannerImage,
+          "hero-banners/"
+        );
+      } else {
+        // Assume it's a URL; just assign
+        banner.bannerImage = updates.bannerImage;
+      }
+      // Remove from updates to not override again below
+      delete updates.bannerImage;
+    }
+
+    // Apply all other updates except bannerImage
     Object.assign(banner, updates);
 
     await banner.save();

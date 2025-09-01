@@ -194,13 +194,29 @@ export const createProduct = async (req, res) => {
     const newProduct = await Product.create(productData);
 
     // Create variants if any
+    // Inside createProduct after newProduct is created
+
     if (hasVariant && Array.isArray(variants) && variants.length > 0) {
-      const variantDocs = variants.map((variant) => ({
-        ...variant,
-        SKU: variant.SKU?.trim(),
-        barcode: variant.barcode?.trim(),
-        productId: newProduct._id,
-      }));
+      // Upload variant images if provided and map variants with uploaded images
+      const variantDocs = await Promise.all(
+        variants.map(async (variant) => {
+          let uploadedVariantImages = [];
+          if (variant.images && variant.images.length > 0) {
+            uploadedVariantImages = await uploadBase64Images(
+              variant.images,
+              "variant-images/"
+            );
+          }
+
+          return {
+            ...variant,
+            SKU: variant.SKU?.trim(),
+            barcode: variant.barcode?.trim(),
+            images: uploadedVariantImages,
+            productId: newProduct._id,
+          };
+        })
+      );
 
       const createdVariants = await Variant.insertMany(variantDocs);
 
@@ -411,11 +427,9 @@ export const updateProduct = async (req, res) => {
             _id: { $ne: variant._id },
           });
           if (exists) {
-            return res
-              .status(400)
-              .json({
-                message: `Variant SKU '${variant.SKU}' is already in use`,
-              });
+            return res.status(400).json({
+              message: `Variant SKU '${variant.SKU}' is already in use`,
+            });
           }
         }
         if (variant.barcode) {
@@ -424,22 +438,29 @@ export const updateProduct = async (req, res) => {
             _id: { $ne: variant._id },
           });
           if (exists) {
-            return res
-              .status(400)
-              .json({
-                message: `Variant Barcode '${variant.barcode}' is already in use`,
-              });
+            return res.status(400).json({
+              message: `Variant Barcode '${variant.barcode}' is already in use`,
+            });
           }
         }
       }
     }
 
-    // Update productImages if provided
-    let uploadedImageUrls = null;
-    if (productImages) {
-      uploadedImageUrls = Array.isArray(productImages)
-        ? await uploadBase64Images(productImages, "products/")
-        : await uploadBase64Images([productImages], "products/");
+    // Handle productImages: upload only base64 images and preserve existing URLs
+    let finalProductImages = [];
+    if (productImages && productImages.length > 0) {
+      finalProductImages = await Promise.all(
+        productImages.map(async (img) => {
+          if (
+            typeof img === "string" &&
+            /^data:image\/[a-zA-Z]+;base64,/.test(img)
+          ) {
+            const uploadedUrls = await uploadBase64Images([img], "products/");
+            return uploadedUrls[0];
+          }
+          return img; // already a URL
+        })
+      );
     }
 
     // Update the product with provided fields (omit undefined)
@@ -461,8 +482,8 @@ export const updateProduct = async (req, res) => {
         !hasVariant && { barcode: barcode ? barcode.trim() : undefined }),
       ...(defaultVariant !== undefined && { defaultVariant }),
       ...(productType !== undefined && hasVariant && { productType }),
-      ...(uploadedImageUrls !== null &&
-        !hasVariant && { productImages: uploadedImageUrls }),
+      ...(finalProductImages.length > 0 &&
+        !hasVariant && { productImages: finalProductImages }),
       ...(tags !== undefined && { tags: Array.isArray(tags) ? tags : [] }),
       ...(costPrice !== undefined && !hasVariant && { costPrice }),
       ...(sellingPrice !== undefined && !hasVariant && { sellingPrice }),
@@ -502,35 +523,49 @@ export const updateProduct = async (req, res) => {
     Object.assign(existingProduct, updateFields);
     await existingProduct.save();
 
-    // Handle variants update if provided (create/update/delete as needed)
+    // Handle variants update if provided (create/update) including variant images upload
     if (hasVariant && Array.isArray(variants)) {
       for (let variant of variants) {
-        if (variant._id) {
-          // Update existing variant
-          await Variant.findByIdAndUpdate(
-            variant._id,
-            {
-              ...variant,
-              SKU: variant.SKU?.trim(),
-              barcode: variant.barcode?.trim(),
-              productId: productId,
-            },
-            { new: true }
+        let processedImages = [];
+
+        if (variant.images && variant.images.length > 0) {
+          processedImages = await Promise.all(
+            variant.images.map(async (img) => {
+              if (
+                typeof img === "string" &&
+                /^data:image\/[a-zA-Z]+;base64,/.test(img)
+              ) {
+                const uploadedUrls = await uploadBase64Images(
+                  [img],
+                  "variant-images/"
+                );
+                return uploadedUrls[0];
+              }
+              return img; // Already a URL
+            })
           );
-        } else {
-          // New variant
-          await Variant.create({
-            ...variant,
-            SKU: variant.SKU?.trim(),
-            barcode: variant.barcode?.trim(),
-            productId: productId,
+        }
+
+        const variantData = {
+          ...variant,
+          SKU: variant.SKU?.trim(),
+          barcode: variant.barcode?.trim(),
+          images:
+            processedImages.length > 0 ? processedImages : variant.images || [],
+          productId: productId,
+        };
+
+        if (variant._id) {
+          await Variant.findByIdAndUpdate(variant._id, variantData, {
+            new: true,
           });
+        } else {
+          await Variant.create(variantData);
         }
       }
-      // Optionally delete variants omitted from input (if desired—add logic if needed)
     }
 
-    // Update defaultVariant on product if re-defined
+    // Update defaultVariant if provided
     if (defaultVariant) {
       existingProduct.defaultVariant = defaultVariant;
       await existingProduct.save();
