@@ -327,23 +327,23 @@ export const getCategoryProducts = async (req, res) => {
   }
 };
 
-
 export const getAllCategories = async (req, res) => {
   try {
-    const { search = "", type, status, parentId,isPopular } = req.query;
+    const { search = "", type, status, parentId, isPopular } = req.query;
 
-    const filter = {};
+    const filter = { type: "Main" };
 
     if (type) filter.type = type;
     if (status) filter.status = status;
     if (parentId) filter.parentId = parentId;
-    if(isPopular) filter.isPopular = isPopular === 'true';
+    if (isPopular) filter.isPopular = isPopular === "true";
     if (search) {
       filter.name = { $regex: search, $options: "i" };
     }
 
     const categories = await Category.find(filter)
-      .populate("products").populate("subcategories")
+      .populate("products")
+      .populate("subcategories")
       .sort({ createdAt: -1 });
 
     res.status(200).json(categories);
