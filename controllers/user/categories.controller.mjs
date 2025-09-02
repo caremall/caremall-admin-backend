@@ -45,16 +45,22 @@ export const getCategoryProducts = async (req, res) => {
     }
 
     // Determine categories to filter for products
-    let categoriesToFilter = [];
-    if (category.type === "Main") {
-      // For main category, only include its subcategories (exclude main category itself to not mix products)
-      categoriesToFilter = category.subcategories.map(
-        (sub) => new mongoose.Types.ObjectId(sub._id)
-      );
-    } else {
-      // For subcategory, filter only on itself
-      categoriesToFilter = [new mongoose.Types.ObjectId(categoryId)];
-    }
+let categoriesToFilter = [];
+if (category.type === "Main") {
+  if (req.query.subcategories) {
+    // Use only specified subcategories (strictly)
+    categoriesToFilter = req.query.subcategories
+      .split(",")
+      .map((id) => new mongoose.Types.ObjectId(id.trim()));
+  } else {
+    // Use all subcategories if no explicit filter
+    categoriesToFilter = category.subcategories.map(
+      (sub) => new mongoose.Types.ObjectId(sub._id)
+    );
+  }
+} else {
+  categoriesToFilter = [new mongoose.Types.ObjectId(categoryId)];
+}
 
     // If no subcategories under main (empty array), return empty list early
     if (category.type === "Main" && categoriesToFilter.length === 0) {
