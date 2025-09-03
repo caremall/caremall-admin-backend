@@ -40,8 +40,6 @@ export const createReview = async (req, res) => {
   }
 };
 
-
-
 export const getAllReviews = async (req, res) => {
   try {
     const { productId, userId } = req.query;
@@ -75,22 +73,20 @@ export const getAllReviews = async (req, res) => {
   }
 };
 
-
 export const getReviewById = async (req, res) => {
-    try {
-        const review = await Review.findById(req.params.id)
-            .populate('userId', 'name email')
-            .populate('productId', 'productName');
+  try {
+    const review = await Review.findById(req.params.id)
+      .populate("userId", "name email")
+      .populate("productId", "productName");
 
-        if (!review) return res.status(404).json({ message: 'Review not found' });
+    if (!review) return res.status(404).json({ message: "Review not found" });
 
-        res.status(200).json(review);
-    } catch (error) {
-        console.error('Get Review Error:', error);
-        res.status(500).json({ message: 'Failed to fetch review' });
-    }
+    res.status(200).json(review);
+  } catch (error) {
+    console.error("Get Review Error:", error);
+    res.status(500).json({ message: "Failed to fetch review" });
+  }
 };
-
 
 export const updateReview = async (req, res) => {
   try {
@@ -152,24 +148,24 @@ export const updateReview = async (req, res) => {
   }
 };
 
-
-
 export const deleteReview = async (req, res) => {
-    try {
-        const review = await Review.findById(req.params.id);
-        const { _id } = req.user
-        if (!review) return res.status(404).json({ message: 'Review not found' });
+  try {
+    const review = await Review.findById(req.params.id);
+    const { _id } = req.user;
+    if (!review) return res.status(404).json({ message: "Review not found" });
 
-        if (review.userId.toString() !== _id.toString()) {
-            return res.status(403).json({ message: 'Unauthorized to delete this review' });
-        }
-
-        await Review.findByIdAndDelete(review._id)
-        res.status(200).json({ message: 'Review deleted', success: true });
-    } catch (error) {
-        console.error('Delete Review Error:', error);
-        res.status(500).json({ message: 'Failed to delete review' });
+    if (review.userId.toString() !== _id.toString()) {
+      return res
+        .status(403)
+        .json({ message: "Unauthorized to delete this review" });
     }
+
+    await Review.findByIdAndDelete(review._id);
+    res.status(200).json({ message: "Review deleted", success: true });
+  } catch (error) {
+    console.error("Delete Review Error:", error);
+    res.status(500).json({ message: "Failed to delete review" });
+  }
 };
 
 export const getReviewsByProductId = async (req, res) => {
@@ -272,5 +268,32 @@ export const dislikeReview = async (req, res) => {
   } catch (error) {
     console.error("Dislike Review Error:", error);
     res.status(500).json({ message: "Failed to dislike review" });
+  }
+};
+
+// GET /api/reviews/my?productId=<productId>
+export const getMyReviewForProduct = async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const userId = req.user._id;
+
+    if (!productId) {
+      return res.status(400).json({ message: "Product ID is required" });
+    }
+
+    const myReview = await Review.findOne({ productId, userId })
+      .populate("productId", "productName")
+      .populate("userId", "name email");
+
+    if (!myReview) {
+      return res
+        .status(404)
+        .json({ message: "No review found for this product by you." });
+    }
+
+    return res.status(200).json({ success: true, review: myReview });
+  } catch (error) {
+    console.error("Get my review error:", error);
+    res.status(500).json({ message: "Failed to fetch review" });
   }
 };
