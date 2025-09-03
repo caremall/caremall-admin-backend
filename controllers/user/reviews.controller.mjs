@@ -271,7 +271,6 @@ export const dislikeReview = async (req, res) => {
   }
 };
 
-// GET /api/reviews/my?productId=<productId>
 export const getMyReviewForProduct = async (req, res) => {
   try {
     const productId = req.params.id;
