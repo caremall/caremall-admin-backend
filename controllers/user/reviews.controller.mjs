@@ -44,7 +44,7 @@ export const getAllReviews = async (req, res) => {
   try {
     const { productId, userId } = req.query;
 
-    const filter = {};
+    const filter = {status:"approved"};
     if (productId) filter.productId = productId;
     if (userId) filter.userId = userId;
 
@@ -280,7 +280,7 @@ export const getMyReviewForProduct = async (req, res) => {
       return res.status(400).json({ message: "Product ID is required" });
     }
 
-    const myReview = await Review.findOne({ productId, userId })
+    const myReview = await Review.findOne({ productId, userId ,status:"approved"})
       .populate("productId", "productName")
       .populate("userId", "name email");
 
