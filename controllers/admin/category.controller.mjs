@@ -77,8 +77,16 @@ export const getAllCategories = async (req, res) => {
     }
 
     const categories = await Category.find(filter)
-      .populate("products").populate("subcategories")
-      .sort({ createdAt: -1 });
+         .populate({
+           path:"products",
+           select: "productName urlSlug",
+         })
+         .populate({
+           path: "subcategories",
+           select: "name categoryCode",
+         })
+         .sort({ createdAt: -1 });
+   
 
     res.status(200).json(categories);
   } catch (err) {
