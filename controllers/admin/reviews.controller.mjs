@@ -3,7 +3,6 @@ import Product from "../../models/Product.mjs";
 import User from "../../models/User.mjs";
 import mongoose from "mongoose";
 
-
 export const getAllReviewsAdmin = async (req, res) => {
   try {
     const { search, status, categoryId, brandId } = req.query;
@@ -110,7 +109,6 @@ export const getAllReviewsAdmin = async (req, res) => {
   }
 };
 
-
 export const getReviewByIdAdmin = async (req, res) => {
   try {
     const review = await Review.findById(req.params.id)
@@ -169,25 +167,51 @@ export const getReviewsByProduct = async (req, res) => {
       return res.status(400).json({ message: "Product ID is required" });
     }
 
-    const { status } = req.query;
-    const filter = { productId };
+    // Fetch product details with brand and category + subcategories
+    const product = await Product.findById(productId)
+      .populate("brand", "brandName")
+      .populate({
+        path: "category",
+        select: "name categoryCode type status parentId",
+        populate: {
+          path: "subcategories",
+          select: "name categoryCode type status",
+          match: { status: "active" },
+        },
+      })
+      .select("productImages productName SKU urlSlug category brand")
+      .lean();
 
-    if (status) {
-      filter.status = status;
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
     }
 
-    const reviews = await Review.find(filter)
+    const { status } = req.query;
+    const reviewFilter = { productId };
+    if (status) reviewFilter.status = status;
+
+    // Fetch reviews for product
+    const reviews = await Review.find(reviewFilter)
       .populate("userId", "name email")
-      .populate("productId", "productName")
       .sort({ createdAt: -1 })
       .lean();
 
+    // Calculate average rating
+    const averageRating =
+      reviews.length > 0
+        ? reviews.reduce((acc, r) => acc + (r.rating || 0), 0) / reviews.length
+        : 0;
+
+    // Respond with product + reviews + average rating
     res.status(200).json({
-      data: reviews,
-      total: reviews.length,
+      product,
+      reviews,
+      totalReviews: reviews.length,
+      averageRating: averageRating.toFixed(2), // format to 2 decimals
     });
   } catch (error) {
-    console.error("Get Reviews by Product Error:", error);
-    res.status(500).json({ message: "Failed to fetch reviews" });
+    console.error("Get Product with Reviews Error:", error);
+    res.status(500).json({ message: "Failed to fetch product and reviews" });
   }
 };
+
