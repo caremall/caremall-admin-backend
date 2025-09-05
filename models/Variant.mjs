@@ -3,53 +3,74 @@ import mongoose from 'mongoose';
 const { Schema, model } = mongoose;
 
 const variantSchema = new Schema(
-    {
-        productId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Product',
-            required: true,
-        },
-        variantAttributes: [
-            {
-                name: {
-                    type: String,
-                    required: true,
-                },
-                value: {
-                    type: String,
-                },
-            }
-        ],
-
-        SKU: {
-            type: String,
-            required: true,
-            unique: true
-        },
-
-        barcode: {
-            type: String,
-            unique: true
-        },
-
-        costPrice: { type: Number, required: true },
-
-        sellingPrice: { type: Number, required: true },
-
-        mrpPrice: { type: Number, required: true },
-
-        discountPercent: { type: Number },
-
-        taxRate: Number,
-
-        images: [String],
-
-        isDefault: {
-            type: Boolean,
-            default: false,
-        },
+  {
+    variantId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
     },
-    { timestamps: true }
+
+    productId: {
+      type: Schema.Types.ObjectId,
+      ref: "Product",
+      required: true,
+    },
+    variantAttributes: [
+      {
+        name: {
+          type: String,
+          required: true,
+        },
+        value: {
+          type: String,
+        },
+      },
+    ],
+
+    SKU: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+
+    barcode: {
+      type: String,
+      unique: true,
+    },
+
+    costPrice: { type: Number, required: true },
+
+    sellingPrice: { type: Number, required: true },
+
+    mrpPrice: { type: Number, required: true },
+
+    discountPercent: { type: Number },
+
+    taxRate: Number,
+
+    images: [String],
+
+    isDefault: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { timestamps: true }
 );
+
+variantSchema.pre("save", async function (next) {
+  if (!this.variantId) {
+    const prefix = "VAR";
+    const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let randomPart = "";
+    const length = 12;
+    for (let i = 0; i < length; i++) {
+      randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    this.variantId = prefix + randomPart;
+  }
+  next();
+});
 
 export default model('Variant', variantSchema);

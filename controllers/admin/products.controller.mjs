@@ -282,7 +282,10 @@ export const getAllProducts = async (req, res) => {
     }
 
     const products = await Product.find(query)
-      .populate("brand category defaultVariant")
+      .populate("brand category defaultVariant").populate({
+        path:"variants",
+        select: "SKU images",
+      })
       .sort(sortBy)
       .lean();
 
@@ -300,7 +303,7 @@ export const getProductBySlug = async (req, res) => {
   try {
     const product = await Product.findOne({
       urlSlug: req.params.slug,
-    }).populate("brand category");
+    }).populate("brand category variants");
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" });

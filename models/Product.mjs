@@ -2,6 +2,12 @@ import { model, Schema } from "mongoose";
 
 const productSchema = new Schema(
   {
+    productId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
     productName: { type: String, required: true, unique: true, trim: true },
     shortDescription: { type: String, required: true },
     productDescription: { type: String, required: true },
@@ -131,7 +137,29 @@ const productSchema = new Schema(
       ref: "Warehouse",
     },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
+
+// In your Product schema file
+productSchema.virtual("variants", {
+  ref: "Variant",
+  localField: "_id",
+  foreignField: "productId"
+});
+
+productSchema.pre("save", async function (next) {
+  if (!this.productId) {
+    const prefix = "PROD";
+    const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let randomPart = "";
+    const length = 12;
+    for (let i = 0; i < length; i++) {
+      randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    this.productId = prefix + randomPart;
+  }
+  next();
+});
+
 
 export default model("Product", productSchema);

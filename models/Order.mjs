@@ -118,7 +118,10 @@ const orderSchema = new Schema(
       couponCode: { type: String },
       discountValue: { type: Number },
     },
-
+    orderId: {
+      type: String,
+      unique: true,
+    },
     razorpayOrderId: { type: String },
     razorpayPaymentId: { type: String },
     razorpaySignature: { type: String },
@@ -146,5 +149,23 @@ const orderSchema = new Schema(
   },
   { timestamps: true }
 );
+
+
+orderSchema.pre("save", async function (next) {
+  if (!this.orderId) {
+    const prefix = "#ORD";
+    const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let randomPart = "";
+    const length = 8;
+
+    for (let i = 0; i < length; i++) {
+      randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    this.orderId = `${prefix}${randomPart}`;
+  }
+  next();
+});
+
 
 export default model('Order', orderSchema);
