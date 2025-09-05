@@ -101,3 +101,82 @@ export const updateInventory = async (req, res) => {
     res.status(500).json({ message: "Server error updating inventory" });
   }
 };
+
+export const getAllInventories = async (req, res) => {
+  try {
+    const {
+      warehouseId,
+      productId,
+      variantId,
+      page = 1,
+      limit = 50,
+    } = req.query;
+
+    const query = {};
+    if (warehouseId) query.warehouse = warehouseId;
+    if (productId) query.product = productId;
+    if (variantId) query.variant = variantId;
+
+    const inventories = await Inventory.find(query)
+      .populate("warehouse product variant")
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    const total = await Inventory.countDocuments(query);
+
+    res.status(200).json({
+      data: inventories,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching inventories:", error);
+    res.status(500).json({ message: "Server error fetching inventories" });
+  }
+};
+
+export const getInventoryLogs = async (req, res) => {
+  try {
+    const {
+      warehouseId,
+      productId,
+      variantId,
+      page = 1,
+      limit = 50,
+    } = req.query;
+
+    const query = {};
+    if (warehouseId) query.warehouse = warehouseId;
+    if (productId) query.product = productId;
+    if (variantId) query.variant = variantId;
+
+    const logs = await inventoryLog
+      .find(query)
+      .populate("inventory warehouse product variant updatedBy", "name email")
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const total = await inventoryLog.countDocuments(query);
+
+    res.status(200).json({
+      data: logs,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching inventory logs:", error);
+    res.status(500).json({ message: "Server error fetching inventory logs" });
+  }
+};

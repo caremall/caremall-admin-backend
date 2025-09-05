@@ -1,46 +1,115 @@
 import Review from "../../models/Review.mjs";
 import Product from "../../models/Product.mjs";
 import User from "../../models/User.mjs";
+import mongoose from "mongoose";
+
 
 export const getAllReviewsAdmin = async (req, res) => {
   try {
     const { search, status, categoryId, brandId } = req.query;
-    const query = {};
+    const matchQuery = {};
 
-    if (search) {
-      query.productName = { $regex: search, $options: "i" };
-    }
+    if (search) matchQuery.productName = { $regex: search, $options: "i" };
+    if (status) matchQuery.productStatus = status;
+    if (categoryId) matchQuery.category = mongoose.Types.ObjectId(categoryId);
+    if (brandId) matchQuery.brand = mongoose.Types.ObjectId(brandId);
 
-    if (status) {
-      query.productStatus = status;
-    }
-
-    if (categoryId) {
-      query.category = categoryId;
-    }
-
-    if (brandId) {
-      query.brand = brandId;
-    }
-
-    const products = await Product.find(query)
-      .sort({ createdAt: -1 })
-      .select("productName urlSlug brand category reviews")
-      .populate({ path: "brand", select: "brandName" })
-      .populate({ path: "category", select: "name" })
-      .populate({
-        path: "reviews",
-        select: "userId rating comment status createdAt",
-        populate: { path: "userId", select: "name" },
-      })
-      .lean();
+    const products = await Product.aggregate([
+      {
+        $match: matchQuery,
+      },
+      {
+        $lookup: {
+          from: "reviews",
+          let: { productId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$productId", "$$productId"] },
+                status: "approved",
+              },
+            },
+            {
+              $project: {
+                userId: 1,
+                rating: 1,
+                comment: 1,
+                status: 1,
+                createdAt: 1,
+              },
+            },
+            {
+              $lookup: {
+                from: "users",
+                localField: "userId",
+                foreignField: "_id",
+                as: "user",
+              },
+            },
+            { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+            {
+              $project: {
+                rating: 1,
+                comment: 1,
+                status: 1,
+                createdAt: 1,
+                user: { name: 1 },
+              },
+            },
+          ],
+          as: "reviews",
+        },
+      },
+      {
+        $addFields: {
+          averageRating: { $avg: "$reviews.rating" },
+        },
+      },
+      {
+        $lookup: {
+          from: "brands",
+          localField: "brand",
+          foreignField: "_id",
+          as: "brand",
+        },
+      },
+      {
+        $unwind: { path: "$brand", preserveNullAndEmptyArrays: true },
+      },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "category",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      {
+        $unwind: { path: "$category", preserveNullAndEmptyArrays: true },
+      },
+      {
+        $project: {
+          productName: 1,
+          urlSlug: 1,
+          brand: { brandName: 1 },
+          category: { name: 1 },
+          reviews: 1,
+          averageRating: { $ifNull: ["$averageRating", 0] },
+        },
+      },
+      { $sort: { createdAt: -1 } },
+    ]);
 
     res.status(200).json(products);
   } catch (error) {
-    console.error("Error fetching products with reviews:", error);
+    console.error(
+      "Error fetching products with reviews and average rating:",
+      error
+    );
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 export const getReviewByIdAdmin = async (req, res) => {
   try {
@@ -95,7 +164,7 @@ export const deleteReviewAdmin = async (req, res) => {
 
 export const getReviewsByProduct = async (req, res) => {
   try {
-    const productId = req.params.productId;
+    const productId = req.params.id;
     if (!productId) {
       return res.status(400).json({ message: "Product ID is required" });
     }
