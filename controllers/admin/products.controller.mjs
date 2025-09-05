@@ -284,7 +284,7 @@ export const getAllProducts = async (req, res) => {
     const products = await Product.find(query)
       .populate("brand category defaultVariant").populate({
         path:"variants",
-        select: "SKU images",
+        select: "SKU images urlSlug",
       })
       .sort(sortBy)
       .lean();

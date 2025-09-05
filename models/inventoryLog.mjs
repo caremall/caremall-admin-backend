@@ -41,9 +41,16 @@ const inventoryLogSchema = new Schema(
     note: {
       type: String,
     },
+    warehouseLocation:{
+        type: String,
+    },
     updatedBy: {
       type: Schema.Types.ObjectId,
       ref: "Admin", // or Admin model, whoever modifies inventory
+    },
+    isFavorite: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }

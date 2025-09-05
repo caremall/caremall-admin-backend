@@ -1,7 +1,5 @@
 import Inventory from "../../models/inventory.mjs";
 import inventoryLog from "../../models/inventoryLog.mjs";
-
-
 // Update inventory quantity (add or remove stock)
 export const updateInventory = async (req, res) => {
   try {
@@ -11,6 +9,10 @@ export const updateInventory = async (req, res) => {
       quantityChange, // positive to add, negative to remove
       reasonForUpdate,
       note,
+      warehouseLocation,
+      reOrderQuantity,
+      maximumQuantity,
+      minimumQuantity,
     } = req.body;
     const warehouseId = req.user.assignedWarehouses._id;
 
@@ -52,6 +54,7 @@ export const updateInventory = async (req, res) => {
         minimumQuantity: 0,
         reorderQuantity: 0,
         maximumQuantity: 0,
+        warehouseLocation: warehouseLocation || "",
       });
     }
 
@@ -63,7 +66,6 @@ export const updateInventory = async (req, res) => {
         .status(400)
         .json({ message: "Resulting quantity cannot be negative" });
     }
-
     if (
       inventory.maximumQuantity > 0 &&
       newQuantity > inventory.maximumQuantity
@@ -73,9 +75,19 @@ export const updateInventory = async (req, res) => {
       });
     }
 
-    // Update inventory quantity and updatedAt
+    // Update all fields you want to modify
+    if (warehouseLocation !== undefined)
+      inventory.warehouseLocation = warehouseLocation;
+    if (minimumQuantity !== undefined)
+      inventory.minimumQuantity = minimumQuantity;
+    if (reOrderQuantity !== undefined)
+      inventory.reorderQuantity = reOrderQuantity;
+    if (maximumQuantity !== undefined)
+      inventory.maximumQuantity = maximumQuantity;
+
     inventory.availableQuantity = newQuantity;
     inventory.updatedAt = new Date();
+
     await inventory.save();
 
     // Log the update
@@ -89,6 +101,7 @@ export const updateInventory = async (req, res) => {
       newQuantity,
       reasonForUpdate,
       note,
+      warehouseLocation: warehouseLocation || "",
       updatedBy: req.user ? req.user._id : null,
     });
 
@@ -118,7 +131,15 @@ export const getAllInventories = async (req, res) => {
     if (variantId) query.variant = variantId;
 
     const inventories = await Inventory.find(query)
-      .populate("warehouse product variant")
+      .populate("warehouse")
+      .populate({
+        path: "variant",
+        populate: {
+          path: "productId", // populate product inside variant
+          select: "productName SKU urlSlug", // select product fields you want
+        },
+      })
+      .populate("product") // also populate product directly (for inventories related to product without variant)
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
       .sort({ updatedAt: -1 })
@@ -141,6 +162,36 @@ export const getAllInventories = async (req, res) => {
   }
 };
 
+export const getInventoryById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: "Inventory ID is required" });
+    }
+
+    const inventory = await Inventory.findById(id)
+      .populate("warehouse")
+      .populate({
+        path: "variant",
+        populate: {
+          path: "productId",
+          select: "productName SKU urlSlug",
+        },
+      })
+      .populate("product")
+      .lean();
+
+    if (!inventory) {
+      return res.status(404).json({ message: "Inventory not found" });
+    }
+
+    res.status(200).json(inventory);
+  } catch (error) {
+    console.error("Error fetching inventory by ID:", error);
+    res.status(500).json({ message: "Server error fetching inventory" });
+  }
+};
+
 export const getInventoryLogs = async (req, res) => {
   try {
     const {
@@ -159,6 +210,13 @@ export const getInventoryLogs = async (req, res) => {
     const logs = await inventoryLog
       .find(query)
       .populate("inventory warehouse product variant updatedBy", "name email")
+      .populate({
+        path: "variant",
+        populate: {
+          path: "productId",
+          select: "productName SKU urlSlug",
+        },
+      })
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
       .sort({ createdAt: -1 })
@@ -178,5 +236,37 @@ export const getInventoryLogs = async (req, res) => {
   } catch (error) {
     console.error("Error fetching inventory logs:", error);
     res.status(500).json({ message: "Server error fetching inventory logs" });
+  }
+};
+
+
+export const toggleFavoriteInventoryLog = async (req, res) => {
+  try {
+    const { id } = req.params; // inventory log ID
+    if (!id) {
+      return res.status(400).json({ message: "Inventory log ID is required" });
+    }
+
+    const inventoryLog = await inventoryLog.findById(id);
+    if (!inventoryLog) {
+      return res.status(404).json({ message: "Inventory log not found" });
+    }
+
+    // Toggle favorite status
+    inventoryLog.isFavourite = !inventoryLog.isFavourite;
+    await inventoryLog.save();
+
+    res.status(200).json({
+      message: `Inventory log ${
+        inventoryLog.isFavourite ? "favorited" : "unfavorited"
+      } successfully`,
+      isFavourite: inventoryLog.isFavourite,
+      inventoryLog,
+    });
+  } catch (error) {
+    console.error("Error toggling favorite inventory log:", error);
+    res
+      .status(500)
+      .json({ message: "Server error toggling favorite inventory log" });
   }
 };

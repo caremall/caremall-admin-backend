@@ -7,6 +7,7 @@ import variantRouter from "./variants.router.mjs";
 import productTypeRouter from "./productType.router.mjs";
 import ordersRouter from "./orders.router.mjs";
 import { verifyToken } from "../../middlewares/verifyToken.mjs";
+import inventoryRouter from "./inventory.routes.mjs";
 const warehouseRouter = Router()
 
 warehouseRouter.use("/auth", authRouter);
@@ -17,5 +18,6 @@ warehouseRouter.use("/products", verifyToken, productsRouter);
 warehouseRouter.use("/variants", verifyToken, variantRouter);
 warehouseRouter.use("/product-types", verifyToken, productTypeRouter);
 warehouseRouter.use("/orders", verifyToken, ordersRouter);
+warehouseRouter.use("/inventory", verifyToken, inventoryRouter);
 
 export default warehouseRouter;
