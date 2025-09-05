@@ -76,7 +76,7 @@ export const deleteProductType = async (req, res) => {
     const product = await Product.findOne({ productType: req.params.id });
     if (product)
       return res
-        .status(200)
+        .status(401)
         .json({ message: "Product type is already used for several products" });
 
     const deleted = await ProductType.findByIdAndDelete(req.params.id);
