@@ -142,7 +142,7 @@ export const deleteBrand = async (req, res) => {
   try {
     const product = await Product.findOne({ brand: req.params.id });
     if (product)
-      return res.status(200).json({
+      return res.status(400).json({
         message: "Brand already used in products",
       });
 
