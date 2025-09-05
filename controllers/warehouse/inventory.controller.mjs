@@ -1,5 +1,7 @@
+import damagedInventory from "../../models/damagedInventory.mjs";
 import Inventory from "../../models/inventory.mjs";
 import inventoryLog from "../../models/inventoryLog.mjs";
+import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 // Update inventory quantity (add or remove stock)
 export const updateInventory = async (req, res) => {
   try {
@@ -268,5 +270,108 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
     res
       .status(500)
       .json({ message: "Server error toggling favorite inventory log" });
+  }
+};
+
+export const createDamagedInventoryReport = async (req, res) => {
+  try {
+    const inventoryId  = req.params.id; // from route params
+
+    const {
+      currentQuantity,
+      quantityToReport,
+      damageType,
+      note,
+      evidenceImages,
+    } = req.body;
+
+    if (!inventoryId) {
+      return res.status(400).json({ message: "Inventory ID is required" });
+    }
+    if (typeof currentQuantity !== "number" || currentQuantity < 0)
+      return res
+        .status(400)
+        .json({ message: "Current quantity must be non-negative number" });
+    if (typeof quantityToReport !== "number" || quantityToReport <= 0)
+      return res
+        .status(400)
+        .json({ message: "Quantity to report must be positive number" });
+    if (!damageType)
+      return res.status(400).json({ message: "Damage type is required" });
+
+    // Find inventory document
+    const inventoryDoc = await Inventory.findById(inventoryId);
+    if (!inventoryDoc) {
+      return res.status(404).json({ message: "Inventory record not found" });
+    }
+
+    // Upload images
+    const uploadedImageUrls = await uploadBase64Images(
+      evidenceImages,
+      "damaged-inventory/"
+    );
+
+    // Create damaged report linking inventory
+    const damagedReport = await damagedInventory.create({
+      inventory: inventoryDoc._id,
+      warehouse: inventoryDoc.warehouse,
+      product: inventoryDoc.product,
+      variant: inventoryDoc.variant,
+      currentQuantity,
+      quantityToReport,
+      damageType,
+      note,
+      evidenceImages: uploadedImageUrls,
+      uploadedBy: req.user._id,
+    });
+
+    res.status(201).json({
+      message: "Damaged inventory report created successfully",
+      damagedReport,
+    });
+  } catch (error) {
+    console.error("Create Damaged Inventory Report Error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getDamagedInventoryReports = async (req, res) => {
+  try {
+    const {
+      warehouseId,
+      productId,
+      variantId,
+      page = 1,
+      limit = 20,
+    } = req.query;
+
+    const query = {};
+    if (warehouseId) query.warehouse = warehouseId;
+    if (productId) query.product = productId;
+    if (variantId) query.variant = variantId;
+
+    const reports = await damagedInventory.find(query)
+      .populate("warehouse product variant uploadedBy", "name email")
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const total = await damagedInventory.countDocuments(query);
+
+    res.status(200).json({
+      data: reports,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching damaged inventory reports:", error);
+    res
+      .status(500)
+      .json({ message: "Server error fetching damaged inventory reports" });
   }
 };

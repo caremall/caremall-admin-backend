@@ -1,6 +1,8 @@
 import { Router } from "express";
 import {
+    createDamagedInventoryReport,
   getAllInventories,
+  getDamagedInventoryReports,
   getInventoryById,
   getInventoryLogs,
   toggleFavoriteInventoryLog,
@@ -14,5 +16,9 @@ inventoryRouter.get("/", getAllInventories);
 inventoryRouter.get("/:id", getInventoryById);
 inventoryRouter.get("/log", getInventoryLogs);
 inventoryRouter.put("/:id/favourite", toggleFavoriteInventoryLog);
+
+//damaged inventory report
+inventoryRouter.post("/:id/damaged", createDamagedInventoryReport);
+inventoryRouter.get("/damaged", getDamagedInventoryReports);
 
 export default inventoryRouter;
