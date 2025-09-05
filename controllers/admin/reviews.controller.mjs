@@ -4,40 +4,41 @@ import User from "../../models/User.mjs";
 
 export const getAllReviewsAdmin = async (req, res) => {
   try {
-    const { status, search } = req.query;
-    const filter = {};
-
-    if (status) filter.status = status;
+    const { search, status, categoryId, brandId } = req.query;
+    const query = {};
 
     if (search) {
-      const users = await User.find({
-        name: { $regex: search, $options: "i" },
-      }).select("_id");
-      const products = await Product.find({
-        productName: { $regex: search, $options: "i" },
-      }).select("_id");
-
-      filter.$or = [
-        { userId: { $in: users.map((u) => u._id) } },
-        { productId: { $in: products.map((p) => p._id) } },
-      ];
+      query.productName = { $regex: search, $options: "i" };
     }
 
-    const total = await Review.countDocuments(filter);
-    const reviews = await Review.find(filter)
-      .populate("userId", "name email")
-      .populate("productId", "productName")
-      .sort({ createdAt: -1 })
+    if (status) {
+      query.productStatus = status;
+    }
 
-    res.status(200).json({
-      data: reviews,
-      met: {
-        total,
-      },
-    });
+    if (categoryId) {
+      query.category = categoryId;
+    }
+
+    if (brandId) {
+      query.brand = brandId;
+    }
+
+    const products = await Product.find(query)
+      .sort({ createdAt: -1 })
+      .select("productName urlSlug brand category reviews")
+      .populate({ path: "brand", select: "brandName" })
+      .populate({ path: "category", select: "name" })
+      .populate({
+        path: "reviews",
+        select: "userId rating comment status createdAt",
+        populate: { path: "userId", select: "name" },
+      })
+      .lean();
+
+    res.status(200).json(products);
   } catch (error) {
-    console.error("Admin Get All Reviews Error:", error);
-    res.status(500).json({ message: "Failed to fetch reviews" });
+    console.error("Error fetching products with reviews:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 

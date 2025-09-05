@@ -147,6 +147,13 @@ productSchema.virtual("variants", {
   foreignField: "productId"
 });
 
+productSchema.virtual("reviews", {
+  ref: "Review", // Review model name
+  localField: "_id", // Product _id matches...
+  foreignField: "productId", // ...Review.productId field
+});
+
+
 productSchema.pre("save", async function (next) {
   if (!this.productId) {
     const prefix = "PROD";

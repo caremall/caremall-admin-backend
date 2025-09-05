@@ -159,3 +159,32 @@ export const deleteBrand = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+
+export const changeBrandStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ["active", "inactive"];
+
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    const brand = await Brand.findById(req.params.id);
+    if (!brand) {
+      return res.status(404).json({ message: "Brand not found" });
+    }
+
+    brand.status = status;
+    await brand.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Brand status changed to ${status}`,
+      brand,
+    });
+  } catch (err) {
+    console.error("Change Brand Status error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
