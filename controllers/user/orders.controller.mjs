@@ -58,57 +58,52 @@ export const createOrder = async (req, res) => {
 
     // Apply coupon via Offer model
     if (couponCode?.trim()) {
-      const offer = await Offer.findOne({
+      const coupon = await Coupon.findOne({
         code: couponCode.trim(),
-        offerStatus: "published",
+        active: true,
       });
 
-      if (!offer) {
+      if (!coupon) {
         return res
           .status(400)
           .json({ message: "Invalid or inactive coupon code" });
       }
 
-      // if (offer.usageLimit !== null && offer.usageCount >= offer.usageLimit) {
-      //   return res.status(400).json({ message: "Coupon usage limit exceeded" });
-      // }
+      // Check expiry
+      if (coupon.expiryDate && new Date() > coupon.expiryDate) {
+        return res.status(400).json({ message: "Coupon has expired" });
+      }
 
+      // Check usage limit
       if (
-        offer.offerRedeemTimePeriod &&
-        offer.offerRedeemTimePeriod.length === 2 &&
-        (new Date() < offer.offerRedeemTimePeriod[0] ||
-          new Date() > offer.offerRedeemTimePeriod[1])
+        coupon.usageLimit !== null &&
+        coupon.usageCount >= coupon.usageLimit
       ) {
-        return res
-          .status(400)
-          .json({ message: "Coupon not redeemable at this time" });
+        return res.status(400).json({ message: "Coupon usage limit exceeded" });
       }
 
       // Calculate discount
       let discount = 0;
-      if (offer.offerDiscountUnit === "percentage") {
-        discount = (finalAmount * offer.offerDiscountValue) / 100;
-        if (
-          offer.maxDiscountAmount !== undefined &&
-          offer.maxDiscountAmount !== null
-        ) {
-          discount = Math.min(discount, offer.maxDiscountAmount);
+      if (coupon.discountType === "percentage") {
+        discount = (finalAmount * coupon.discountValue) / 100;
+        if (coupon.maxDiscountAmount !== null) {
+          discount = Math.min(discount, coupon.maxDiscountAmount);
         }
-      } else if (offer.offerDiscountUnit === "fixed") {
-        discount = offer.offerDiscountValue;
+      } else if (coupon.discountType === "fixed") {
+        discount = coupon.discountValue;
       }
 
       discount = Math.min(discount, finalAmount);
       finalAmount = finalAmount - discount;
 
       appliedCoupon = {
-        couponId: offer._id,
-        couponCode: offer.code,
+        couponId: coupon._id,
+        couponCode: coupon.code,
         discountValue: discount,
       };
 
-      // Increment offer usage count
-      await Offer.findByIdAndUpdate(offer._id, { $inc: { usageCount: 1 } });
+      // Increment usage count
+      await Coupon.findByIdAndUpdate(coupon._id, { $inc: { usageCount: 1 } });
     }
 
     // Create Razorpay order
@@ -143,7 +138,6 @@ export const createOrder = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 export const verifyOrder = async (req, res) => {
   try {

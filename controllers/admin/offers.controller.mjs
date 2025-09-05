@@ -7,7 +7,6 @@ export const createOffer = async (req, res) => {
     offerType,
     discountUnit,
     discountValue,
-    code,
     minimumOrderValue,
     imageUrl,
     bookingDates,
@@ -19,7 +18,6 @@ export const createOffer = async (req, res) => {
 
   // Trim strings
   title = title?.trim();
-  code = code?.trim();
 
   // Sanitize enums for drafts
   if (status === "draft") {
@@ -57,7 +55,6 @@ export const createOffer = async (req, res) => {
     offerTitle: title,
     offerDescription: description,
     offerType,
-    code,
     offerDiscountUnit: discountUnit,
     offerDiscountValue:
       discountValue !== undefined ? parseFloat(discountValue) : undefined,
@@ -124,7 +121,6 @@ export const updateOffer = async (req, res) => {
       description,
       offerType,
       discountUnit,
-      code,
       discountValue,
       minimumOrderValue,
       imageUrl,
@@ -181,7 +177,6 @@ export const updateOffer = async (req, res) => {
       minimumOrderValue !== undefined
         ? parseFloat(minimumOrderValue)
         : offer.offerMinimumOrderValue;
-    offer.code = code?.trim() || offer.code;
     offer.offerImageUrl = imageUrl || offer.offerImageUrl;
     offer.offerRedeemTimePeriod =
       bookingDates.length === 2 ? bookingDates : offer.offerRedeemTimePeriod;

@@ -85,16 +85,6 @@ const offerSchema = new Schema(
       default: "Admin",
       trim: true,
     },
-    code: {
-      type: String,
-      unique: true,
-      sparse: true,
-      trim: true,
-      default: null,
-      required: function () {
-        return this.offerStatus !== "draft";
-      },
-    },
   },
   {
     timestamps: true,
