@@ -113,7 +113,7 @@ export const getReviewByIdAdmin = async (req, res) => {
   try {
     const review = await Review.findById(req.params.id)
       .populate("userId", "name email")
-      .populate("productId", "productName");
+      .populate("productId", "productName productImages urlSlug SKU");
 
     if (!review) return res.status(404).json({ message: "Review not found" });
 
