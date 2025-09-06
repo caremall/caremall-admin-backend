@@ -51,6 +51,19 @@ export const createOrder = async (req, res) => {
       totalPrice: item.totalPrice,
     }));
 
+    if (paymentMethod !== "razorpay") {
+      const bulkOps = formattedItems.map((item) => ({
+        updateOne: {
+          filter: { _id: item.product },
+          update: { $inc: { orderCount: item.quantity } },
+        },
+      }));
+
+      if (bulkOps.length) {
+        await Product.bulkWrite(bulkOps);
+      }
+    }
+
     let finalAmount = Number(totalAmount);
     if (isNaN(finalAmount) || finalAmount <= 0) {
       return res.status(400).json({ message: "Invalid total amount" });
@@ -165,19 +178,19 @@ export const verifyOrder = async (req, res) => {
       },
       { new: true }
     );
-     if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!order) return res.status(404).json({ message: "Order not found" });
 
-     // Increment orderCount for each product
-     const bulkOps = order.items.map((item) => ({
-       updateOne: {
-         filter: { _id: item.product },
-         update: { $inc: { orderCount: item.quantity } },
-       },
-     }));
+    // Increment orderCount for each product
+    const bulkOps = order.items.map((item) => ({
+      updateOne: {
+        filter: { _id: item.product },
+        update: { $inc: { orderCount: item.quantity } },
+      },
+    }));
 
-     if (bulkOps.length) {
-       await Product.bulkWrite(bulkOps);
-     }
+    if (bulkOps.length) {
+      await Product.bulkWrite(bulkOps);
+    }
 
     res.status(200).json({ success: true, order });
   } catch (err) {
