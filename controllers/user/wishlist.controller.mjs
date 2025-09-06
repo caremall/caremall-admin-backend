@@ -9,9 +9,17 @@ export const getWishlist = async (req, res) => {
     try {
         const userId = req.user._id;
 
-        const wishlist = await Wishlist.findOne({ user: userId })
-            .populate('items.product', 'productName productImages sellingPrice urlSlug mrpPrice defaultVariant hasVariant')
-            .populate('items.variant');
+      const wishlist = await Wishlist.findOne({ user: userId })
+        .populate({
+          path: "items.product",
+          select:
+            "productName productImages sellingPrice urlSlug mrpPrice defaultVariant hasVariant",
+          populate: {
+            path: "reviews",
+            model: "Review",
+          },
+        })
+        .populate("items.variant");
 
         if (!wishlist) return res.status(200).json({ items: [] });
 
