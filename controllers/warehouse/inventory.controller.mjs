@@ -1,7 +1,201 @@
 import damagedInventory from "../../models/damagedInventory.mjs";
 import Inventory from "../../models/inventory.mjs";
 import inventoryLog from "../../models/inventoryLog.mjs";
+import TransferRequest from "../../models/TransferRequest.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
+
+
+export const createTransferRequest = async (req, res) => {
+  try {
+    const toWarehouse = req.user.assignedWarehouses._id;
+    const { fromWarehouse, product, variant, quantityRequested } = req.body;
+
+    if (!fromWarehouse || !quantityRequested || quantityRequested <= 0) {
+      return res
+        .status(400)
+        .json({ message: "Required fields missing or invalid" });
+    }
+
+    if (!product && !variant) {
+      return res
+        .status(400)
+        .json({ message: "Either product or variant must be specified" });
+    }
+
+    if (fromWarehouse.toString() === toWarehouse.toString()) {
+      return res
+        .status(400)
+        .json({
+          message: "Source and destination warehouses cannot be the same",
+        });
+    }
+
+    // Optionally verify source warehouse inventory here...
+
+    const transferRequest = await TransferRequest.create({
+      fromWarehouse,
+      toWarehouse,
+      product,
+      variant,
+      quantityRequested,
+    });
+
+    res
+      .status(201)
+      .json({ message: "Transfer request created", transferRequest });
+  } catch (err) {
+    console.error("Create transfer request error:", err);
+    res.status(500).json({ message: "Server error creating transfer request" });
+  }
+};
+
+export const getTransferRequests = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const query = {};
+    const warehouseId = req.user.assignedWarehouses._id;
+    if (warehouseId) {
+      query.$or = [
+        { fromWarehouse: warehouseId },
+        { toWarehouse: warehouseId },
+      ];
+    }
+    if (status) query.status = status;
+
+    const transferRequests = await TransferRequest.find(query)
+      .populate("fromWarehouse toWarehouse product variant driver")
+      .sort({ requestedAt: -1 })
+      .lean();
+
+    res.status(200).json({
+      data: transferRequests,
+    });
+  } catch (err) {
+    console.error("Get transfer requests error:", err);
+    res
+      .status(500)
+      .json({ message: "Server error fetching transfer requests" });
+  }
+};
+
+export const updateTransferRequestStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const transferRequest = await TransferRequest.findById(id);
+    if (!transferRequest) return res.status(404).json({ message: "Not found" });
+
+    // Update allowed statuses and fields
+    if (updates.pickStatus) transferRequest.pickStatus = updates.pickStatus;
+    if (updates.packStatus) transferRequest.packStatus = updates.packStatus;
+    if (updates.driver) transferRequest.driver = updates.driver;
+    if (updates.deliveryStatus)
+      transferRequest.deliveryStatus = updates.deliveryStatus;
+    if (updates.shippedAt) transferRequest.shippedAt = updates.shippedAt;
+    if (updates.receivedAt) transferRequest.receivedAt = updates.receivedAt;
+
+    await transferRequest.save();
+
+    // If delivery just completed, update inventories
+    if (updates.deliveryStatus === "delivered") {
+      const qty = transferRequest.quantityRequested;
+
+      // Deduct quantity from source warehouse inventory
+      const fromInventoryQuery = transferRequest.variant
+        ? {
+            warehouse: transferRequest.fromWarehouse,
+            variant: transferRequest.variant,
+          }
+        : {
+            warehouse: transferRequest.fromWarehouse,
+            product: transferRequest.product,
+          };
+
+      const fromInventory = await Inventory.findOne(fromInventoryQuery);
+      if (!fromInventory || fromInventory.availableQuantity < qty) {
+        return res
+          .status(400)
+          .json({
+            message:
+              "Insufficient stock in source warehouse to finalize transfer",
+          });
+      }
+      fromInventory.availableQuantity -= qty;
+      await fromInventory.save();
+
+      // Add quantity to destination warehouse inventory
+      const toInventoryQuery = transferRequest.variant
+        ? {
+            warehouse: transferRequest.toWarehouse,
+            variant: transferRequest.variant,
+          }
+        : {
+            warehouse: transferRequest.toWarehouse,
+            product: transferRequest.product,
+          };
+
+      let toInventory = await Inventory.findOne(toInventoryQuery);
+      if (!toInventory) {
+        toInventory = new Inventory({
+          warehouse: transferRequest.toWarehouse,
+          variant: transferRequest.variant || undefined,
+          product: transferRequest.product || undefined,
+          availableQuantity: 0,
+        });
+      }
+      toInventory.availableQuantity += qty;
+      await toInventory.save();
+
+      // Optionally update transferRequest status to 'transferred' or completed
+      transferRequest.status = "transferred";
+      transferRequest.quantityTransferred = qty;
+      transferRequest.transferredAt = new Date();
+      await transferRequest.save();
+    }
+
+    res
+      .status(200)
+      .json({ message: "Transfer request updated", transferRequest });
+  } catch (err) {
+    console.error("Update transfer request error:", err);
+    res.status(500).json({ message: "Server error updating transfer request" });
+  }
+};
+
+
+export const assignDriverToTransferRequest = async (req, res) => {
+  try {
+    const transferRequestId = req.params.id;
+    const { driverId } = req.body;
+
+    if (!driverId) {
+      return res.status(400).json({ message: "Driver ID is required" });
+    }
+
+    const transferRequest = await TransferRequest.findById(transferRequestId);
+    if (!transferRequest) {
+      return res.status(404).json({ message: "Transfer request not found" });
+    }
+
+    transferRequest.driver = driverId;
+
+    // Optional: set shippedAt if starting transit now
+    transferRequest.shippedAt = new Date();
+
+    await transferRequest.save();
+
+    res.status(200).json({
+      message: "Driver assigned to transfer request successfully",
+      transferRequest,
+    });
+  } catch (error) {
+    console.error("Error assigning driver:", error);
+    res.status(500).json({ message: "Server error assigning driver" });
+  }
+};
+
+
 // Update inventory quantity (add or remove stock)
 export const updateInventory = async (req, res) => {
   try {
