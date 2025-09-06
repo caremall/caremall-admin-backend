@@ -1,13 +1,5 @@
 import { Router } from "express";
-import {
-    createDamagedInventoryReport,
-  getAllInventories,
-  getDamagedInventoryReports,
-  getInventoryById,
-  getInventoryLogs,
-  toggleFavoriteInventoryLog,
-  updateInventory,
-} from "../../controllers/warehouse/inventory.controller.mjs";
+import { createDamagedInventoryReport, getAllInventories, getDamagedInventoryReports, getInventoryById, getInventoryLogs, toggleFavoriteInventoryLog, updateInventory } from "../../controllers/admin/inventory.controller.mjs";
 
 const router = Router();
 
