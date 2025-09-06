@@ -128,11 +128,18 @@ export const deleteOrder = async (req, res) => {
 export const getAllocatedOrders = async (req, res) => {
   try {
     const warehouseId = req.user.assignedWarehouses._id;
+
+    if (!warehouseId) {
+      return res
+        .status(400)
+        .json({ message: "No warehouse assigned to this user" });
+    }
     const orders = await Order.find({ allocatedWarehouse: warehouseId })
       .populate("user")
       .populate("items.product")
       .populate("items.variant")
       .sort({ createdAt: -1 });
+      
     res.status(200).json({ data: orders });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch warehouse orders" });

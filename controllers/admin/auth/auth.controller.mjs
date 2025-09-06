@@ -20,6 +20,19 @@ export const login = async (req, res) => {
     const admin = await Admin.findOne({ email }).populate("role");
 
     if (!admin) return res.status(404).json({ message: "Admin not found" });
+
+    if (admin.role?.name !== "admin") {
+      return res
+        .status(403)
+        .json({ message: "Access denied: only admins allowed" });
+    }
+
+      if (admin.status !== "active") {
+      return res
+        .status(403)
+        .json({ message: "Access denied: only active admins allowed" });
+    }
+
     const isMatch = await bcrypt.compare(password, admin.password);
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
