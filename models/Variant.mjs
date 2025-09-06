@@ -59,7 +59,7 @@ const variantSchema = new Schema(
   { timestamps: true }
 );
 
-variantSchema.pre("save", async function (next) {
+variantSchema.pre("validate", function () {
   if (!this.variantId) {
     const prefix = "VAR";
     const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -70,7 +70,6 @@ variantSchema.pre("save", async function (next) {
     }
     this.variantId = prefix + randomPart;
   }
-  next();
 });
 
 export default model('Variant', variantSchema);

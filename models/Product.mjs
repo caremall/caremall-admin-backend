@@ -154,7 +154,7 @@ productSchema.virtual("reviews", {
 });
 
 
-productSchema.pre("save", async function (next) {
+productSchema.pre("validate", function () {
   if (!this.productId) {
     const prefix = "PROD";
     const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -165,7 +165,6 @@ productSchema.pre("save", async function (next) {
     }
     this.productId = prefix + randomPart;
   }
-  next();
 });
 
 
