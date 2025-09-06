@@ -4,6 +4,7 @@ import crypto from "crypto";
 import Offer from "../../models/offerManagement.mjs";
 import Address from "../../models/Address.mjs";
 import Coupon from "../../models/coupon.mjs";
+import Product from "../../models/Product.mjs";
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -164,6 +165,19 @@ export const verifyOrder = async (req, res) => {
       },
       { new: true }
     );
+     if (!order) return res.status(404).json({ message: "Order not found" });
+
+     // Increment orderCount for each product
+     const bulkOps = order.items.map((item) => ({
+       updateOne: {
+         filter: { _id: item.product },
+         update: { $inc: { orderCount: item.quantity } },
+       },
+     }));
+
+     if (bulkOps.length) {
+       await Product.bulkWrite(bulkOps);
+     }
 
     res.status(200).json({ success: true, order });
   } catch (err) {
