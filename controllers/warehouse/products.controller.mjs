@@ -1,152 +1,230 @@
 import Product from "../../models/Product.mjs";
 import Variant from "../../models/Variant.mjs";
 import Category from "../../models/Category.mjs";
+import Warehouse from "../../models/Warehouse.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
-import Inventory from "../../models/inventory.mjs";
-
 export const createProduct = async (req, res) => {
   try {
-    const body = { ...req.body };
+    // Grab all product fields from req.body
+    const {
+      productName,
+      shortDescription,
+      productDescription,
+      warrantyPolicy,
+      brand,
+      category,
+      hasVariant,
+      SKU,
+      barcode,
+      defaultVariant,
+      productType,
+      productImages,
+      tags,
+      costPrice,
+      sellingPrice,
+      mrpPrice,
+      discountPercent,
+      taxRate,
+      productStatus,
+      visibility,
+      isFeatured,
+      isPreOrder,
+      availableQuantity,
+      minimumQuantity,
+      reorderQuantity,
+      maximumQuantity,
+      weight,
+      dimensions,
+      isFragile,
+      shippingClass,
+      packageType,
+      quantityPerBox,
+      supplierId,
+      affiliateId,
+      externalLinks,
+      metaTitle,
+      metaDescription,
+      urlSlug,
+      viewsCount,
+      addedToCartCount,
+      wishlistCount,
+      orderCount,
+      variants = [],
+    } = req.body;
+    const warehouse = req.user.assignedWarehouses._id;
 
-    // Basic validation for some required fields
+    // Validate required fields (all cases)
     const missingFields = [];
-    const requiredFields = [
-      "productName",
-      "shortDescription",
-      "productDescription",
-      "brand",
-      "category",
-      "urlSlug",
-      "warehouse",
-    ];
+    if (!productName || productName.trim() === "")
+      missingFields.push("productName");
+    if (!shortDescription || shortDescription.trim() === "")
+      missingFields.push("shortDescription");
+    if (!productDescription || productDescription.trim() === "")
+      missingFields.push("productDescription");
+    if (!brand) missingFields.push("brand");
+    if (!category) missingFields.push("category");
+    if (!urlSlug || urlSlug.trim() === "") missingFields.push("urlSlug");
+    if (typeof hasVariant !== "boolean") missingFields.push("hasVariant");
 
-    requiredFields.forEach((field) => {
-      if (
-        !body[field] ||
-        (typeof body[field] === "string" && body[field].trim() === "")
-      ) {
-        missingFields.push(field);
-      }
-    });
+    // Required only if non-variant
+    if (hasVariant === false) {
+      if (!SKU) missingFields.push("SKU");
+      if (!productImages || productImages.length === 0)
+        missingFields.push("productImages");
+      if (costPrice === undefined) missingFields.push("costPrice");
+      if (sellingPrice === undefined) missingFields.push("sellingPrice");
+      if (mrpPrice === undefined) missingFields.push("mrpPrice");
+    }
+
+    // Required only if variant
+    if (hasVariant === true) {
+      if (!productType) missingFields.push("productType");
+    }
 
     if (missingFields.length > 0) {
-      return res
-        .status(400)
-        .json({
-          message: `Missing required fields: ${missingFields.join(", ")}`,
-        });
+      return res.status(400).json({
+        message: `Missing required fields: ${missingFields.join(", ")}`,
+      });
     }
 
-    // Check duplicate constraints
-    if (await Product.findOne({ productName: body.productName.trim() })) {
+    // Uniqueness checks
+    if (await Product.findOne({ productName: productName.trim() })) {
       return res.status(400).json({ message: "Product name is already taken" });
     }
-    if (await Product.findOne({ urlSlug: body.urlSlug.trim() })) {
+    if (await Product.findOne({ urlSlug: urlSlug.trim() })) {
       return res.status(400).json({ message: "Slug is already taken" });
     }
 
-    // Handle SKU/barcode uniqueness for non-variant product
-    if (body.hasVariant === false) {
-      if (body.SKU && (await Product.findOne({ SKU: body.SKU.trim() }))) {
-        return res.status(400).json({ message: "This SKU is already in use" });
+    // Check non-variant product's SKU/barcode
+    if (!hasVariant) {
+      if (SKU && SKU.trim() !== "") {
+        if (await Product.findOne({ SKU: SKU.trim() })) {
+          return res
+            .status(400)
+            .json({ message: "This SKU is already in use" });
+        }
       }
-      if (
-        body.barcode &&
-        (await Product.findOne({ barcode: body.barcode.trim() }))
-      ) {
-        return res
-          .status(400)
-          .json({ message: "This Barcode is already in use" });
+      if (barcode && barcode.trim() !== "") {
+        if (await Product.findOne({ barcode: barcode.trim() })) {
+          return res
+            .status(400)
+            .json({ message: "This Barcode is already in use" });
+        }
       }
     }
 
-    // Handle variant SKU/barcode uniqueness
-    if (body.hasVariant && Array.isArray(body.variants)) {
-      for (const variant of body.variants) {
+    // Check variants SKUs/barcodes
+    if (hasVariant && Array.isArray(variants)) {
+      for (let variant of variants) {
         if (
           variant.SKU &&
           (await Variant.findOne({ SKU: variant.SKU.trim() }))
         ) {
-          return res
-            .status(400)
-            .json({
-              message: `Variant SKU '${variant.SKU}' is already in use`,
-            });
+          return res.status(400).json({
+            message: `Variant SKU '${variant.SKU}' is already in use`,
+          });
         }
         if (
           variant.barcode &&
           (await Variant.findOne({ barcode: variant.barcode.trim() }))
         ) {
-          return res
-            .status(400)
-            .json({
-              message: `Variant Barcode '${variant.barcode}' is already in use`,
-            });
+          return res.status(400).json({
+            message: `Variant Barcode '${variant.barcode}' is already in use`,
+          });
         }
       }
     }
 
-    // Upload product images if present
-    if (body.productImages) {
-      body.productImages = await uploadBase64Images(
-        body.productImages,
-        "product-images/"
-      );
+    // Upload images if any
+    let uploadedImageUrls = [];
+    if (productImages) {
+      uploadedImageUrls = Array.isArray(productImages)
+        ? await uploadBase64Images(productImages, "products/")
+        : await uploadBase64Images([productImages], "products/");
     }
 
-    // Remove SKU, barcode, pricing if hasVariant true
-    if (body.hasVariant) {
-      delete body.SKU;
-      delete body.barcode;
-      delete body.costPrice;
-      delete body.sellingPrice;
-      delete body.mrpPrice;
-      if (!body.productType) delete body.productType;
-    } else {
-      delete body.productType;
-    }
+    // Prepare productData (all fields)
+    const productData = {
+      productName: productName.trim(),
+      shortDescription: shortDescription.trim(),
+      productDescription: productDescription.trim(),
+      warrantyPolicy,
+      brand,
+      category,
+      hasVariant,
+      SKU: hasVariant ? undefined : SKU ? SKU.trim() : undefined,
+      barcode: hasVariant ? undefined : barcode ? barcode.trim() : undefined,
+      defaultVariant: defaultVariant || undefined,
+      productType: hasVariant ? productType : undefined,
+      productImages: hasVariant ? undefined : uploadedImageUrls,
+      tags: Array.isArray(tags) ? tags : [],
+      costPrice: hasVariant ? undefined : costPrice,
+      sellingPrice: hasVariant ? undefined : sellingPrice,
+      mrpPrice: hasVariant ? undefined : mrpPrice,
+      discountPercent,
+      taxRate,
+      productStatus: productStatus || "draft",
+      visibility: visibility || "visible",
+      isFeatured: !!isFeatured,
+      isPreOrder: !!isPreOrder,
+      availableQuantity,
+      minimumQuantity,
+      reorderQuantity,
+      maximumQuantity,
+      weight,
+      dimensions,
+      isFragile,
+      shippingClass,
+      packageType,
+      quantityPerBox,
+      supplierId,
+      affiliateId,
+      externalLinks: Array.isArray(externalLinks) ? externalLinks : [],
+      metaTitle,
+      metaDescription,
+      urlSlug: urlSlug.trim(),
+      viewsCount,
+      addedToCartCount,
+      wishlistCount,
+      orderCount,
+      warehouse: warehouse || undefined,
+    };
 
     // Create product
-    const newProduct = await Product.create(body);
+    const newProduct = await Product.create(productData);
 
-    // Create variants if present
-    let newVariants = [];
-    if (
-      body.hasVariant &&
-      Array.isArray(body.variants) &&
-      body.variants.length > 0
-    ) {
-      const variantDocs = body.variants.map((variant) => ({
-        ...variant,
-        productId: newProduct._id,
-      }));
+    // Create variants if any
+    // Inside createProduct after newProduct is created
 
-      newVariants = await Variant.insertMany(variantDocs);
+    if (hasVariant && Array.isArray(variants) && variants.length > 0) {
+      // Upload variant images if provided and map variants with uploaded images
+      const variantDocs = await Promise.all(
+        variants.map(async (variant) => {
+          let uploadedVariantImages = [];
+          if (variant.images && variant.images.length > 0) {
+            uploadedVariantImages = await uploadBase64Images(
+              variant.images,
+              "variant-images/"
+            );
+          }
 
-      const defaultVar = newVariants.find((v) => v.isDefault);
-      if (defaultVar) {
-        newProduct.defaultVariant = defaultVar._id;
+          return {
+            ...variant,
+            SKU: variant.SKU?.trim(),
+            barcode: variant.barcode?.trim(),
+            images: uploadedVariantImages,
+            productId: newProduct._id,
+          };
+        })
+      );
+
+      const createdVariants = await Variant.insertMany(variantDocs);
+
+      const defaultVariantDoc = createdVariants.find((v) => v.isDefault);
+      if (defaultVariantDoc) {
+        newProduct.defaultVariant = defaultVariantDoc._id;
         await newProduct.save();
       }
-    }
-
-    // Create inventory records if present
-    if (Array.isArray(body.inventories) && body.inventories.length > 0) {
-      const inventoriesToCreate = body.inventories.map((inv) => {
-        const doc = {
-          warehouse: inv.warehouse,
-          availableQuantity: inv.availableQuantity || 0,
-          minimumQuantity: inv.minimumQuantity || 0,
-          reorderQuantity: inv.reorderQuantity || 0,
-          maximumQuantity: inv.maximumQuantity || 0,
-          product: newProduct._id,
-          updatedAt: inv.updatedAt || Date.now(),
-        };
-        if (inv.variant) doc.variant = inv.variant;
-        return doc;
-      });
-
-      await Inventory.insertMany(inventoriesToCreate);
     }
 
     res.status(201).json({
@@ -154,19 +232,13 @@ export const createProduct = async (req, res) => {
       message: "Product created successfully",
       product: newProduct,
     });
-  } catch (error) {
-    console.error("Create Product error:", error);
+  } catch (err) {
+    console.error("Create product error:", err);
     res
       .status(500)
-      .json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
+      .json({ message: "Failed to create product", error: err.message });
   }
 };
-
-
 
 export const getAllProducts = async (req, res) => {
   try {
@@ -180,8 +252,9 @@ export const getAllProducts = async (req, res) => {
       maxPrice,
       sort,
     } = req.query;
+    const warehouseId = req.user.assignedWarehouses._id;
 
-    const query = {};
+    const query = { warehouse: warehouseId };
 
     if (search) {
       query.$or = [
@@ -211,6 +284,10 @@ export const getAllProducts = async (req, res) => {
 
     const products = await Product.find(query)
       .populate("brand category defaultVariant")
+      .populate({
+        path: "variants",
+        select: "SKU images urlSlug",
+      })
       .sort(sortBy)
       .lean();
 
@@ -221,14 +298,11 @@ export const getAllProducts = async (req, res) => {
   }
 };
 
-
-
-
 export const getProductBySlug = async (req, res) => {
   try {
     const product = await Product.findOne({
       urlSlug: req.params.slug,
-    }).populate("brand category");
+    }).populate("brand category variants");
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
@@ -252,56 +326,263 @@ export const getProductBySlug = async (req, res) => {
 
 export const updateProduct = async (req, res) => {
   try {
-    const productId = req.params.id;
-    const updates = req.body;
+    const {
+      productName,
+      shortDescription,
+      productDescription,
+      warrantyPolicy,
+      brand,
+      category,
+      hasVariant,
+      SKU,
+      barcode,
+      defaultVariant,
+      productType,
+      productImages,
+      tags,
+      costPrice,
+      sellingPrice,
+      mrpPrice,
+      discountPercent,
+      taxRate,
+      productStatus,
+      visibility,
+      isFeatured,
+      isPreOrder,
+      availableQuantity,
+      minimumQuantity,
+      reorderQuantity,
+      maximumQuantity,
+      weight,
+      dimensions,
+      isFragile,
+      shippingClass,
+      packageType,
+      quantityPerBox,
+      supplierId,
+      affiliateId,
+      externalLinks,
+      metaTitle,
+      metaDescription,
+      urlSlug,
+      viewsCount,
+      addedToCartCount,
+      wishlistCount,
+      orderCount,
+      variants = [],
+    } = req.body;
 
+    const warehouse = req.user.assignedWarehouses._id;
+    const productId = req.params.id;
+
+    // Find product; return error if not found
     const existingProduct = await Product.findById(productId);
     if (!existingProduct) {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    const {
-      hasVariant,
-      SKU,
-      barcode,
-      productImages,
-      costPrice,
-      sellingPrice,
-      mrpPrice,
-    } = updates;
-
-    if (hasVariant === false || hasVariant === "false") {
-      const missingFields = [];
-
-      if (SKU === undefined || SKU === "") missingFields.push("SKU");
-      if (barcode === undefined || barcode === "")
-        missingFields.push("barcode");
-      if (!productImages || productImages.length === 0)
-        missingFields.push("productImages");
-      if (costPrice === undefined) missingFields.push("costPrice");
-      if (sellingPrice === undefined) missingFields.push("sellingPrice");
-      if (mrpPrice === undefined) missingFields.push("mrpPrice");
-
-      if (missingFields.length) {
+    // Uniqueness checks for productName, urlSlug, SKU, barcode (avoid current product)
+    if (productName && productName.trim() !== existingProduct.productName) {
+      if (
+        await Product.findOne({
+          productName: productName.trim(),
+          _id: { $ne: productId },
+        })
+      ) {
         return res
           .status(400)
-          .json({
-            message: `Missing fields for non-variant product: ${missingFields.join(
-              ", "
-            )}`,
-          });
+          .json({ message: "Product name is already taken" });
+      }
+    }
+    if (urlSlug && urlSlug.trim() !== existingProduct.urlSlug) {
+      if (
+        await Product.findOne({
+          urlSlug: urlSlug.trim(),
+          _id: { $ne: productId },
+        })
+      ) {
+        return res.status(400).json({ message: "Slug is already taken" });
+      }
+    }
+    if (!hasVariant && SKU && SKU.trim() !== existingProduct.SKU) {
+      if (await Product.findOne({ SKU: SKU.trim(), _id: { $ne: productId } })) {
+        return res.status(400).json({ message: "SKU is already in use" });
+      }
+    }
+    if (!hasVariant && barcode && barcode.trim() !== existingProduct.barcode) {
+      if (
+        await Product.findOne({
+          barcode: barcode.trim(),
+          _id: { $ne: productId },
+        })
+      ) {
+        return res.status(400).json({ message: "Barcode is already in use" });
       }
     }
 
-    await Product.findByIdAndUpdate(productId, updates, {
-      new: true,
-      runValidators: true,
-    });
+    // Uniqueness check for variant SKUs/barcodes (avoid current variant id)
+    if (hasVariant && Array.isArray(variants)) {
+      for (let variant of variants) {
+        if (variant.SKU) {
+          const exists = await Variant.findOne({
+            SKU: variant.SKU.trim(),
+            _id: { $ne: variant._id },
+          });
+          if (exists) {
+            return res.status(400).json({
+              message: `Variant SKU '${variant.SKU}' is already in use`,
+            });
+          }
+        }
+        if (variant.barcode) {
+          const exists = await Variant.findOne({
+            barcode: variant.barcode.trim(),
+            _id: { $ne: variant._id },
+          });
+          if (exists) {
+            return res.status(400).json({
+              message: `Variant Barcode '${variant.barcode}' is already in use`,
+            });
+          }
+        }
+      }
+    }
 
-    res.status(200).json({ success: true, message: "Product updated" });
+    // Handle productImages: upload only base64 images and preserve existing URLs
+    let finalProductImages = [];
+    if (productImages && productImages.length > 0) {
+      finalProductImages = await Promise.all(
+        productImages.map(async (img) => {
+          if (
+            typeof img === "string" &&
+            /^data:image\/[a-zA-Z]+;base64,/.test(img)
+          ) {
+            const uploadedUrls = await uploadBase64Images([img], "products/");
+            return uploadedUrls[0];
+          }
+          return img; // already a URL
+        })
+      );
+    }
+
+    // Update the product with provided fields (omit undefined)
+    const updateFields = {
+      ...(productName !== undefined && { productName: productName.trim() }),
+      ...(shortDescription !== undefined && {
+        shortDescription: shortDescription.trim(),
+      }),
+      ...(productDescription !== undefined && {
+        productDescription: productDescription.trim(),
+      }),
+      ...(warrantyPolicy !== undefined && { warrantyPolicy }),
+      ...(brand !== undefined && { brand }),
+      ...(category !== undefined && { category }),
+      ...(hasVariant !== undefined && { hasVariant }),
+      ...(SKU !== undefined &&
+        !hasVariant && { SKU: SKU ? SKU.trim() : undefined }),
+      ...(barcode !== undefined &&
+        !hasVariant && { barcode: barcode ? barcode.trim() : undefined }),
+      ...(defaultVariant !== undefined && { defaultVariant }),
+      ...(productType !== undefined && hasVariant && { productType }),
+      ...(finalProductImages.length > 0 &&
+        !hasVariant && { productImages: finalProductImages }),
+      ...(tags !== undefined && { tags: Array.isArray(tags) ? tags : [] }),
+      ...(costPrice !== undefined && !hasVariant && { costPrice }),
+      ...(sellingPrice !== undefined && !hasVariant && { sellingPrice }),
+      ...(mrpPrice !== undefined && !hasVariant && { mrpPrice }),
+      ...(discountPercent !== undefined && { discountPercent }),
+      ...(taxRate !== undefined && { taxRate }),
+      ...(productStatus !== undefined && { productStatus }),
+      ...(visibility !== undefined && { visibility }),
+      ...(isFeatured !== undefined && { isFeatured }),
+      ...(isPreOrder !== undefined && { isPreOrder }),
+      ...(availableQuantity !== undefined && { availableQuantity }),
+      ...(minimumQuantity !== undefined && { minimumQuantity }),
+      ...(reorderQuantity !== undefined && { reorderQuantity }),
+      ...(maximumQuantity !== undefined && { maximumQuantity }),
+      ...(weight !== undefined && { weight }),
+      ...(dimensions !== undefined && { dimensions }),
+      ...(isFragile !== undefined && { isFragile }),
+      ...(shippingClass !== undefined && { shippingClass }),
+      ...(packageType !== undefined && { packageType }),
+      ...(quantityPerBox !== undefined && { quantityPerBox }),
+      ...(supplierId !== undefined && { supplierId }),
+      ...(affiliateId !== undefined && { affiliateId }),
+      ...(externalLinks !== undefined && {
+        externalLinks: Array.isArray(externalLinks) ? externalLinks : [],
+      }),
+      ...(metaTitle !== undefined && { metaTitle }),
+      ...(metaDescription !== undefined && { metaDescription }),
+      ...(urlSlug !== undefined && { urlSlug: urlSlug.trim() }),
+      ...(viewsCount !== undefined && { viewsCount }),
+      ...(addedToCartCount !== undefined && { addedToCartCount }),
+      ...(wishlistCount !== undefined && { wishlistCount }),
+      ...(orderCount !== undefined && { orderCount }),
+      ...(warehouse !== undefined && { warehouse }),
+    };
+
+    // Update the product
+    Object.assign(existingProduct, updateFields);
+    await existingProduct.save();
+
+    // Handle variants update if provided (create/update) including variant images upload
+    if (hasVariant && Array.isArray(variants)) {
+      for (let variant of variants) {
+        let processedImages = [];
+
+        if (variant.images && variant.images.length > 0) {
+          processedImages = await Promise.all(
+            variant.images.map(async (img) => {
+              if (
+                typeof img === "string" &&
+                /^data:image\/[a-zA-Z]+;base64,/.test(img)
+              ) {
+                const uploadedUrls = await uploadBase64Images(
+                  [img],
+                  "variant-images/"
+                );
+                return uploadedUrls[0];
+              }
+              return img; // Already a URL
+            })
+          );
+        }
+
+        const variantData = {
+          ...variant,
+          SKU: variant.SKU?.trim(),
+          barcode: variant.barcode?.trim(),
+          images:
+            processedImages.length > 0 ? processedImages : variant.images || [],
+          productId: productId,
+        };
+
+        if (variant._id) {
+          await Variant.findByIdAndUpdate(variant._id, variantData, {
+            new: true,
+          });
+        } else {
+          await Variant.create(variantData);
+        }
+      }
+    }
+
+    // Update defaultVariant if provided
+    if (defaultVariant) {
+      existingProduct.defaultVariant = defaultVariant;
+      await existingProduct.save();
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Product updated successfully",
+      product: existingProduct,
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Update product error:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to update product", error: err.message });
   }
 };
 
@@ -315,8 +596,6 @@ export const deleteProduct = async (req, res) => {
   }
 };
 
-
-
 export const getSearchSuggestions = async (req, res) => {
   try {
     const search = (req.query.q || "").trim();
@@ -328,43 +607,34 @@ export const getSearchSuggestions = async (req, res) => {
 
     const [products, categories] = await Promise.all([
       Product.find({
-        $or: [
-          { productName: regex },
-          { SKU: regex },
-          { barcode: regex }
-        ],
+        $or: [{ productName: regex }, { SKU: regex }, { barcode: regex }],
         productStatus: "published",
-        visibility: "visible"
+        visibility: "visible",
       })
         .limit(10)
         .select("productName sellingPrice category productImages")
         .lean(),
-      
-     
 
-      Category.find({ name: regex }) 
-        .limit(10)
-        .select("name slug")
-        .lean()
+      Category.find({ name: regex }).limit(10).select("name slug").lean(),
     ]);
 
-        console.log("\n--- Product Suggestions ---");
-    products.forEach(product => {
+    console.log("\n--- Product Suggestions ---");
+    products.forEach((product) => {
       console.log({
         thumbnail: product.productImages?.[0] || "No Image",
         name: product.productName,
         price: product.sellingPrice,
-        category: product.category?.name || "No Category"
+        category: product.category?.name || "No Category",
       });
     });
 
     // Log category suggestions
     console.log("\n--- Category Suggestions ---");
-    categories.forEach(category => {
+    categories.forEach((category) => {
       console.log({
         name: category.name,
         price: null, // Categories don't have prices
-        category: "Category"
+        category: "Category",
       });
     });
 
