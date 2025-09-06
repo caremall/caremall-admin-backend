@@ -17,9 +17,17 @@ export const login = async (req, res) => {
         .status(400)
         .json({ message: "Email and Password are required" });
 
-    const admin = await Admin.findOne({ email }).populate("role");
+    const admin = await Admin.findOne({ email })
+      .populate("role")
+      .populate("assignedWarehouses");
 
     if (!admin) return res.status(404).json({ message: "Admin not found" });
+
+  if (!admin.assignedWarehouses) {
+    return res
+      .status(403)
+      .json({ message: "Access denied: no warehouse assigned" });
+  }
 
     const role = await Role.findById(admin.role);
 
