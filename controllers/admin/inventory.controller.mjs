@@ -8,6 +8,7 @@ export const updateInventory = async (req, res) => {
     const {
       productId, // optional if variantId given
       variantId, // optional if productId given
+      warehouseId,
       quantityChange, // positive to add, negative to remove
       reasonForUpdate,
       note,
@@ -16,7 +17,6 @@ export const updateInventory = async (req, res) => {
       maximumQuantity,
       minimumQuantity,
     } = req.body;
-    const warehouseId = req.user.assignedWarehouses._id;
 
     if (!warehouseId) {
       return res.status(400).json({ message: "Warehouse is required" });
@@ -120,12 +120,12 @@ export const updateInventory = async (req, res) => {
 export const getAllInventories = async (req, res) => {
   try {
     const {
+      warehouseId,
       productId,
       variantId,
       page = 1,
       limit = 50,
     } = req.query;
-    const warehouseId = req.user.assignedWarehouses._id;
 
     const query = {};
     if (warehouseId) query.warehouse = warehouseId;
@@ -197,12 +197,12 @@ export const getInventoryById = async (req, res) => {
 export const getInventoryLogs = async (req, res) => {
   try {
     const {
+      warehouseId,
       productId,
       variantId,
       page = 1,
       limit = 50,
     } = req.query;
-    const warehouseId = req.user.assignedWarehouses._id;
 
     const query = {};
     if (warehouseId) query.warehouse = warehouseId;
@@ -241,7 +241,6 @@ export const getInventoryLogs = async (req, res) => {
   }
 };
 
-
 export const toggleFavoriteInventoryLog = async (req, res) => {
   try {
     const { id } = req.params; // inventory log ID
@@ -275,7 +274,7 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
 
 export const createDamagedInventoryReport = async (req, res) => {
   try {
-    const inventoryId  = req.params.id; // from route params
+    const inventoryId = req.params.id; // from route params
 
     const {
       currentQuantity,
@@ -350,7 +349,8 @@ export const getDamagedInventoryReports = async (req, res) => {
     if (productId) query.product = productId;
     if (variantId) query.variant = variantId;
 
-    const reports = await damagedInventory.find(query)
+    const reports = await damagedInventory
+      .find(query)
       .populate("warehouse product variant uploadedBy", "name email")
       .skip((page - 1) * limit)
       .limit(parseInt(limit))

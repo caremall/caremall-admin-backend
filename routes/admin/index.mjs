@@ -23,6 +23,7 @@ import photoGalleryRouter from "./photo.gallery.router.mjs";
 import couponRouter from "./coupon.router.mjs";
 import newsletterRouter from "./newsletter.router.mjs";
 import testimonialRouter from "./testimonials.router.mjs";
+import inventoryRouter from "./inventory.routes.mjs";
 
 const adminRouter = Router()
 
@@ -50,6 +51,7 @@ adminRouter.use('/photo-gallery', photoGalleryRouter)
 adminRouter.use('/coupon', couponRouter)   
 adminRouter.use('/newsletter', newsletterRouter)
 adminRouter.use('/testimonials', testimonialRouter)
+adminRouter.use('/inventory', inventoryRouter)
 //!admin parent routes
 //get all admins
 adminRouter.get("/", getAllAdmins);
