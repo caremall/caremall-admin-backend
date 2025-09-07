@@ -280,7 +280,7 @@ export const getMyReviewForProduct = async (req, res) => {
       return res.status(400).json({ message: "Product ID is required" });
     }
 
-    const myReview = await Review.findOne({ productId, userId ,status:"approved"})
+    const myReview = await Review.findOne({ productId, userId})
       .populate("productId", "productName")
       .populate("userId", "name email");
 
