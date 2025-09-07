@@ -366,7 +366,8 @@ export const getInventoryById = async (req, res) => {
     }
 
     const inventory = await Inventory.findById(id)
-      .populate("warehouse").populate("warehouseLocation")
+      .populate("warehouse")
+      .populate("warehouseLocation")
       .populate({
         path: "variant",
         populate: {
@@ -390,9 +391,8 @@ export const getInventoryById = async (req, res) => {
 
 export const getInventoryLogs = async (req, res) => {
   try {
-    const { productId, variantId, page = 1, limit = 50 } = req.query;
+    const { productId, variantId } = req.query;
     const warehouseId = req.user.assignedWarehouses._id;
-
     const query = {};
     if (warehouseId) query.warehouse = warehouseId;
     if (productId) query.product = productId;
@@ -400,29 +400,45 @@ export const getInventoryLogs = async (req, res) => {
 
     const logs = await inventoryLog
       .find(query)
-      .populate("inventory warehouse warehouseLocation product variant updatedBy", "name email")
-      .populate({
-        path: "variant",
-        populate: {
-          path: "productId",
-          select: "productName SKU urlSlug",
-        },
-      })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
+      .populate("product", "productName SKU")
+      .populate("variant", "SKU")
+      .populate("warehouseLocation", "code name")
+      .populate("updatedBy", "fullName")
       .sort({ createdAt: -1 })
       .lean();
+    console.log(logs);
+    // Generate descriptive message for each log
+    const logsWithMessages = logs.map((log) => {
+      const qtyChange = log.quantityChange || 0;
+      const qtyAbs = Math.abs(qtyChange);
+      const action = qtyChange > 0 ? "added to" : "removed from";
 
-    const total = await inventoryLog.countDocuments(query);
+      let itemName = "Unknown item";
+      if (log.product) {
+        itemName = `${log.product.productName} (SKU ${log.product.SKU})`;
+      } else if (log.variant) {
+        itemName = `Variant SKU ${log.variant.SKU}`;
+      }
+
+      const locationName = log.warehouseLocation
+        ? log.warehouseLocation.code ||
+          log.warehouseLocation.name ||
+          "Unknown Location"
+        : "Unknown Location";
+
+      const userName = log.updatedBy ? log.updatedBy.fullName : "Unknown User";
+
+      const message = `${
+        qtyChange > 0 ? "+" : "-"
+      }${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
+
+      return {
+        message,
+      };
+    });
 
     res.status(200).json({
-      data: logs,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      data: logsWithMessages,
     });
   } catch (error) {
     console.error("Error fetching inventory logs:", error);
@@ -529,14 +545,8 @@ export const createDamagedInventoryReport = async (req, res) => {
 
 export const getDamagedInventoryReports = async (req, res) => {
   try {
-    const {
-      warehouseId,
-      productId,
-      variantId,
-      page = 1,
-      limit = 20,
-    } = req.query;
-
+    const { productId, variantId } = req.query;
+    const warehouseId = req.user.assignedWarehouses._id;
     const query = {};
     if (warehouseId) query.warehouse = warehouseId;
     if (productId) query.product = productId;
@@ -545,21 +555,11 @@ export const getDamagedInventoryReports = async (req, res) => {
     const reports = await damagedInventory
       .find(query)
       .populate("warehouse product variant uploadedBy", "name email")
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
       .sort({ createdAt: -1 })
       .lean();
 
-    const total = await damagedInventory.countDocuments(query);
-
     res.status(200).json({
       data: reports,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
     });
   } catch (error) {
     console.error("Error fetching damaged inventory reports:", error);

@@ -20,15 +20,16 @@ inventoryRouter.put("/transfer/:id",updateTransferRequestStatus)
 inventoryRouter.get("/transfer",getTransferRequests)
 inventoryRouter.post("/transfer/assign-driver/:id",assignDriverToTransferRequest)
 
+//damaged inventory report
+inventoryRouter.post("/damaged", createDamagedInventoryReport);
+inventoryRouter.get("/damaged", getDamagedInventoryReports);
+
 inventoryRouter.put("/", updateInventory);
 inventoryRouter.get("/", getAllInventories);
 inventoryRouter.get("/log", getInventoryLogs);
 inventoryRouter.get("/:id", getInventoryById);
 inventoryRouter.put("/:id/favourite", toggleFavoriteInventoryLog);
 
-//damaged inventory report
-inventoryRouter.post("/damaged", createDamagedInventoryReport);
-inventoryRouter.get("/damaged", getDamagedInventoryReports);
 
 
 

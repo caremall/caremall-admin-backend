@@ -41,8 +41,10 @@ const inventoryLogSchema = new Schema(
     note: {
       type: String,
     },
-    warehouseLocation:{
-        type: String,
+    warehouseLocation: {
+      type: Schema.Types.ObjectId,
+      ref: "WarehouseLocation",
+      default: null,
     },
     updatedBy: {
       type: Schema.Types.ObjectId,
