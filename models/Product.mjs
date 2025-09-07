@@ -153,6 +153,12 @@ productSchema.virtual("reviews", {
   foreignField: "productId", // ...Review.productId field
 });
 
+productSchema.virtual("inventory", {
+  ref: "Inventory",
+  localField: "_id",
+  foreignField: "product",
+  justOne: true,
+});
 
 productSchema.pre("validate", function () {
   if (!this.productId) {

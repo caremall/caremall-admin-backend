@@ -22,8 +22,8 @@ inventoryRouter.post("/transfer/assign-driver/:id",assignDriverToTransferRequest
 
 inventoryRouter.put("/", updateInventory);
 inventoryRouter.get("/", getAllInventories);
-inventoryRouter.get("/:id", getInventoryById);
 inventoryRouter.get("/log", getInventoryLogs);
+inventoryRouter.get("/:id", getInventoryById);
 inventoryRouter.put("/:id/favourite", toggleFavoriteInventoryLog);
 
 //damaged inventory report

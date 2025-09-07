@@ -56,7 +56,6 @@ export const createProduct = async (req, res) => {
 
     const warehouse = req.user.assignedWarehouses._id;
 
-    // Validate required fields
     const missingFields = [];
     if (!productName || productName.trim() === "")
       missingFields.push("productName");
@@ -77,20 +76,14 @@ export const createProduct = async (req, res) => {
       if (sellingPrice === undefined) missingFields.push("sellingPrice");
       if (mrpPrice === undefined) missingFields.push("mrpPrice");
     }
-
-    if (hasVariant === true && !productType) {
-      missingFields.push("productType");
-    }
+    if (hasVariant === true && !productType) missingFields.push("productType");
 
     if (missingFields.length > 0) {
-      return res
-        .status(400)
-        .json({
-          message: `Missing required fields: ${missingFields.join(", ")}`,
-        });
+      return res.status(400).json({
+        message: `Missing required fields: ${missingFields.join(", ")}`,
+      });
     }
 
-    // Check uniqueness
     if (await Product.findOne({ productName: productName.trim() })) {
       return res.status(400).json({ message: "Product name is already taken" });
     }
@@ -99,24 +92,26 @@ export const createProduct = async (req, res) => {
     }
 
     if (!hasVariant) {
-      if (SKU && SKU.trim() !== "") {
-        if (await Product.findOne({ SKU: SKU.trim() })) {
-          return res
-            .status(400)
-            .json({ message: "This SKU is already in use" });
-        }
+      if (
+        SKU &&
+        SKU.trim() !== "" &&
+        (await Product.findOne({ SKU: SKU.trim() }))
+      ) {
+        return res.status(400).json({ message: "This SKU is already in use" });
       }
-      if (barcode && barcode.trim() !== "") {
-        if (await Product.findOne({ barcode: barcode.trim() })) {
-          return res
-            .status(400)
-            .json({ message: "This Barcode is already in use" });
-        }
+      if (
+        barcode &&
+        barcode.trim() !== "" &&
+        (await Product.findOne({ barcode: barcode.trim() }))
+      ) {
+        return res
+          .status(400)
+          .json({ message: "This Barcode is already in use" });
       }
     }
 
     if (hasVariant && Array.isArray(variants)) {
-      for (let variant of variants) {
+      for (const variant of variants) {
         if (
           variant.SKU &&
           (await Variant.findOne({ SKU: variant.SKU.trim() }))
@@ -140,7 +135,6 @@ export const createProduct = async (req, res) => {
       }
     }
 
-    // Upload images for non-variant product
     let uploadedImageUrls = [];
     if (productImages) {
       uploadedImageUrls = Array.isArray(productImages)
@@ -148,7 +142,6 @@ export const createProduct = async (req, res) => {
         : await uploadBase64Images([productImages], "products/");
     }
 
-    // Prepare product data
     const productData = {
       productName: productName.trim(),
       shortDescription: shortDescription.trim(),
@@ -176,7 +169,6 @@ export const createProduct = async (req, res) => {
       minimumQuantity,
       reorderQuantity,
       maximumQuantity,
-      warehouseLocation,
       weight,
       dimensions,
       isFragile,
@@ -196,10 +188,10 @@ export const createProduct = async (req, res) => {
       warehouse: warehouse || undefined,
     };
 
-    // Create the product
     const newProduct = await Product.create(productData);
 
-    // Create variants if any
+    let createdVariants = [];
+
     if (hasVariant && Array.isArray(variants) && variants.length > 0) {
       const variantDocs = await Promise.all(
         variants.map(async (variant) => {
@@ -220,7 +212,7 @@ export const createProduct = async (req, res) => {
         })
       );
 
-      const createdVariants = await Variant.insertMany(variantDocs);
+      createdVariants = await Variant.insertMany(variantDocs);
 
       const defaultVariantDoc = createdVariants.find((v) => v.isDefault);
       if (defaultVariantDoc) {
@@ -229,11 +221,9 @@ export const createProduct = async (req, res) => {
       }
     }
 
-    // Create inventory record(s)
     if (!hasVariant) {
-      // Non-variant product inventory
       await Inventory.create({
-        warehouse: warehouse,
+        warehouse,
         product: newProduct._id,
         availableQuantity: availableQuantity || 0,
         minimumQuantity: minimumQuantity || 0,
@@ -241,25 +231,28 @@ export const createProduct = async (req, res) => {
         maximumQuantity: maximumQuantity || 0,
         warehouseLocation: warehouseLocation || null,
       });
-    } 
-    // Optionally, create inventory for all variants if you have stock info per variant
-    else if (hasVariant && Array.isArray(variants) && variants.length > 0) {
-      for (const variant of variants) {
+    } else if (hasVariant && createdVariants.length > 0) {
+      for (const createdVariant of createdVariants) {
+        const inputVariant = variants.find(
+          (v) =>
+            v.SKU?.trim() === createdVariant.SKU &&
+            v.barcode?.trim() === createdVariant.barcode
+        );
         await Inventory.create({
-          warehouse: warehouse,
-          variant: variant._id,
-          availableQuantity: variant.availableQuantity || 0,
-          minimumQuantity: variant.minimumQuantity || 0,
-          reorderQuantity: variant.reorderQuantity || 0,
-          maximumQuantity: variant.maximumQuantity || 0,
-          warehouseLocation: variant.warehouseLocation || null,
+          warehouse,
+          variant: createdVariant._id,
+          availableQuantity: inputVariant?.availableQuantity || 0,
+          minimumQuantity: inputVariant?.minimumQuantity || 0,
+          reorderQuantity: inputVariant?.reorderQuantity || 0,
+          maximumQuantity: inputVariant?.maximumQuantity || 0,
+          warehouseLocation: inputVariant?.warehouseLocation || null,
         });
       }
     }
 
     res.status(201).json({
       success: true,
-      message: "Product and inventory created successfully",
+      message: "Product created successfully",
       product: newProduct,
     });
   } catch (err) {

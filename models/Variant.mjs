@@ -56,8 +56,16 @@ const variantSchema = new Schema(
       default: false,
     },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
+
+variantSchema.virtual("inventory", {
+  ref: "Inventory",
+  localField: "_id",
+  foreignField: "variant",
+  justOne: true,
+});
+
 
 variantSchema.pre("validate", function () {
   if (!this.variantId) {
