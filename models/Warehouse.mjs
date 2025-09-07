@@ -9,7 +9,7 @@ const warehouseSchema = new Schema(
       required: true,
       trim: true,
     },
-    description:{
+    description: {
       type: String,
       trim: true,
     },
@@ -51,6 +51,10 @@ const warehouseSchema = new Schema(
       type: String,
       enum: ["Active", "Inactive", "Under Maintenance"],
       default: "Active",
+    },
+    warehouseLocation: {
+      type: Schema.Types.ObjectId,
+      ref: "WarehouseLocation",
     },
   },
   {

@@ -4,11 +4,18 @@ import inventoryLog from "../../models/inventoryLog.mjs";
 import TransferRequest from "../../models/TransferRequest.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 
-
 export const createTransferRequest = async (req, res) => {
   try {
     const toWarehouse = req.user.assignedWarehouses._id;
-    const { fromWarehouse, product, variant,carrier,dispatchTime,totalWeight, quantityRequested } = req.body;
+    const {
+      fromWarehouse,
+      product,
+      variant,
+      carrier,
+      dispatchTime,
+      totalWeight,
+      quantityRequested,
+    } = req.body;
 
     if (!fromWarehouse || !quantityRequested || quantityRequested <= 0) {
       return res
@@ -23,11 +30,9 @@ export const createTransferRequest = async (req, res) => {
     }
 
     if (fromWarehouse.toString() === toWarehouse.toString()) {
-      return res
-        .status(400)
-        .json({
-          message: "Source and destination warehouses cannot be the same",
-        });
+      return res.status(400).json({
+        message: "Source and destination warehouses cannot be the same",
+      });
     }
 
     // Optionally verify source warehouse inventory here...
@@ -117,12 +122,10 @@ export const updateTransferRequestStatus = async (req, res) => {
 
       const fromInventory = await Inventory.findOne(fromInventoryQuery);
       if (!fromInventory || fromInventory.availableQuantity < qty) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "Insufficient stock in source warehouse to finalize transfer",
-          });
+        return res.status(400).json({
+          message:
+            "Insufficient stock in source warehouse to finalize transfer",
+        });
       }
       fromInventory.availableQuantity -= qty;
       await fromInventory.save();
@@ -166,7 +169,6 @@ export const updateTransferRequestStatus = async (req, res) => {
   }
 };
 
-
 export const assignDriverToTransferRequest = async (req, res) => {
   try {
     const transferRequestId = req.params.id;
@@ -197,7 +199,6 @@ export const assignDriverToTransferRequest = async (req, res) => {
     res.status(500).json({ message: "Server error assigning driver" });
   }
 };
-
 
 // Update inventory quantity (add or remove stock)
 export const updateInventory = async (req, res) => {
@@ -316,12 +317,7 @@ export const updateInventory = async (req, res) => {
 
 export const getAllInventories = async (req, res) => {
   try {
-    const {
-      productId,
-      variantId,
-      page = 1,
-      limit = 50,
-    } = req.query;
+    const { productId, variantId, page = 1, limit = 50 } = req.query;
     const warehouseId = req.user.assignedWarehouses._id;
 
     const query = {};
@@ -331,6 +327,7 @@ export const getAllInventories = async (req, res) => {
 
     const inventories = await Inventory.find(query)
       .populate("warehouse")
+      .populate("warehouseLocation")
       .populate({
         path: "variant",
         populate: {
@@ -369,7 +366,7 @@ export const getInventoryById = async (req, res) => {
     }
 
     const inventory = await Inventory.findById(id)
-      .populate("warehouse")
+      .populate("warehouse").populate("warehouseLocation")
       .populate({
         path: "variant",
         populate: {
@@ -393,12 +390,7 @@ export const getInventoryById = async (req, res) => {
 
 export const getInventoryLogs = async (req, res) => {
   try {
-    const {
-      productId,
-      variantId,
-      page = 1,
-      limit = 50,
-    } = req.query;
+    const { productId, variantId, page = 1, limit = 50 } = req.query;
     const warehouseId = req.user.assignedWarehouses._id;
 
     const query = {};
@@ -408,7 +400,7 @@ export const getInventoryLogs = async (req, res) => {
 
     const logs = await inventoryLog
       .find(query)
-      .populate("inventory warehouse product variant updatedBy", "name email")
+      .populate("inventory warehouse warehouseLocation product variant updatedBy", "name email")
       .populate({
         path: "variant",
         populate: {
@@ -437,7 +429,6 @@ export const getInventoryLogs = async (req, res) => {
     res.status(500).json({ message: "Server error fetching inventory logs" });
   }
 };
-
 
 export const toggleFavoriteInventoryLog = async (req, res) => {
   try {
@@ -472,7 +463,7 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
 
 export const createDamagedInventoryReport = async (req, res) => {
   try {
-    const inventoryId  = req.params.id; // from route params
+    const inventoryId = req.params.id; // from route params
 
     const {
       currentQuantity,
@@ -547,7 +538,8 @@ export const getDamagedInventoryReports = async (req, res) => {
     if (productId) query.product = productId;
     if (variantId) query.variant = variantId;
 
-    const reports = await damagedInventory.find(query)
+    const reports = await damagedInventory
+      .find(query)
       .populate("warehouse product variant uploadedBy", "name email")
       .skip((page - 1) * limit)
       .limit(parseInt(limit))

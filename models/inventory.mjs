@@ -15,7 +15,11 @@ const inventorySchema = new Schema(
     minimumQuantity: { type: Number, required: true, default: 0 },
     reorderQuantity: { type: Number, required: true, default: 0 },
     maximumQuantity: { type: Number, required: true, default: 0 },
-    warehouseLocation: { type: String, trim: true, default: "" },
+    warehouseLocation: {
+      type: Schema.Types.ObjectId,
+      ref: "WarehouseLocation",
+      default: null,
+    },
     updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
