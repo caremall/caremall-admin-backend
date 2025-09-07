@@ -3,9 +3,10 @@ import Variant from "../../models/Variant.mjs";
 import Category from "../../models/Category.mjs";
 import Warehouse from "../../models/Warehouse.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
+import Inventory from "../../models/inventory.mjs";
+
 export const createProduct = async (req, res) => {
   try {
-    // Grab all product fields from req.body
     const {
       productName,
       shortDescription,
@@ -33,6 +34,7 @@ export const createProduct = async (req, res) => {
       minimumQuantity,
       reorderQuantity,
       maximumQuantity,
+      warehouseLocation,
       weight,
       dimensions,
       isFragile,
@@ -51,9 +53,10 @@ export const createProduct = async (req, res) => {
       orderCount,
       variants = [],
     } = req.body;
+
     const warehouse = req.user.assignedWarehouses._id;
 
-    // Validate required fields (all cases)
+    // Validate required fields
     const missingFields = [];
     if (!productName || productName.trim() === "")
       missingFields.push("productName");
@@ -66,7 +69,6 @@ export const createProduct = async (req, res) => {
     if (!urlSlug || urlSlug.trim() === "") missingFields.push("urlSlug");
     if (typeof hasVariant !== "boolean") missingFields.push("hasVariant");
 
-    // Required only if non-variant
     if (hasVariant === false) {
       if (!SKU) missingFields.push("SKU");
       if (!productImages || productImages.length === 0)
@@ -76,18 +78,19 @@ export const createProduct = async (req, res) => {
       if (mrpPrice === undefined) missingFields.push("mrpPrice");
     }
 
-    // Required only if variant
-    if (hasVariant === true) {
-      if (!productType) missingFields.push("productType");
+    if (hasVariant === true && !productType) {
+      missingFields.push("productType");
     }
 
     if (missingFields.length > 0) {
-      return res.status(400).json({
-        message: `Missing required fields: ${missingFields.join(", ")}`,
-      });
+      return res
+        .status(400)
+        .json({
+          message: `Missing required fields: ${missingFields.join(", ")}`,
+        });
     }
 
-    // Uniqueness checks
+    // Check uniqueness
     if (await Product.findOne({ productName: productName.trim() })) {
       return res.status(400).json({ message: "Product name is already taken" });
     }
@@ -95,7 +98,6 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Slug is already taken" });
     }
 
-    // Check non-variant product's SKU/barcode
     if (!hasVariant) {
       if (SKU && SKU.trim() !== "") {
         if (await Product.findOne({ SKU: SKU.trim() })) {
@@ -113,29 +115,32 @@ export const createProduct = async (req, res) => {
       }
     }
 
-    // Check variants SKUs/barcodes
     if (hasVariant && Array.isArray(variants)) {
       for (let variant of variants) {
         if (
           variant.SKU &&
           (await Variant.findOne({ SKU: variant.SKU.trim() }))
         ) {
-          return res.status(400).json({
-            message: `Variant SKU '${variant.SKU}' is already in use`,
-          });
+          return res
+            .status(400)
+            .json({
+              message: `Variant SKU '${variant.SKU}' is already in use`,
+            });
         }
         if (
           variant.barcode &&
           (await Variant.findOne({ barcode: variant.barcode.trim() }))
         ) {
-          return res.status(400).json({
-            message: `Variant Barcode '${variant.barcode}' is already in use`,
-          });
+          return res
+            .status(400)
+            .json({
+              message: `Variant Barcode '${variant.barcode}' is already in use`,
+            });
         }
       }
     }
 
-    // Upload images if any
+    // Upload images for non-variant product
     let uploadedImageUrls = [];
     if (productImages) {
       uploadedImageUrls = Array.isArray(productImages)
@@ -143,7 +148,7 @@ export const createProduct = async (req, res) => {
         : await uploadBase64Images([productImages], "products/");
     }
 
-    // Prepare productData (all fields)
+    // Prepare product data
     const productData = {
       productName: productName.trim(),
       shortDescription: shortDescription.trim(),
@@ -171,6 +176,7 @@ export const createProduct = async (req, res) => {
       minimumQuantity,
       reorderQuantity,
       maximumQuantity,
+      warehouseLocation,
       weight,
       dimensions,
       isFragile,
@@ -190,14 +196,11 @@ export const createProduct = async (req, res) => {
       warehouse: warehouse || undefined,
     };
 
-    // Create product
+    // Create the product
     const newProduct = await Product.create(productData);
 
     // Create variants if any
-    // Inside createProduct after newProduct is created
-
     if (hasVariant && Array.isArray(variants) && variants.length > 0) {
-      // Upload variant images if provided and map variants with uploaded images
       const variantDocs = await Promise.all(
         variants.map(async (variant) => {
           let uploadedVariantImages = [];
@@ -207,7 +210,6 @@ export const createProduct = async (req, res) => {
               "variant-images/"
             );
           }
-
           return {
             ...variant,
             SKU: variant.SKU?.trim(),
@@ -227,9 +229,37 @@ export const createProduct = async (req, res) => {
       }
     }
 
+    // Create inventory record(s)
+    if (!hasVariant) {
+      // Non-variant product inventory
+      await Inventory.create({
+        warehouse: warehouse,
+        product: newProduct._id,
+        availableQuantity: availableQuantity || 0,
+        minimumQuantity: minimumQuantity || 0,
+        reorderQuantity: reorderQuantity || 0,
+        maximumQuantity: maximumQuantity || 0,
+        warehouseLocation: warehouseLocation || null,
+      });
+    } 
+    // Optionally, create inventory for all variants if you have stock info per variant
+    else if (hasVariant && Array.isArray(variants) && variants.length > 0) {
+      for (const variant of variants) {
+        await Inventory.create({
+          warehouse: warehouse,
+          variant: variant._id,
+          availableQuantity: variant.availableQuantity || 0,
+          minimumQuantity: variant.minimumQuantity || 0,
+          reorderQuantity: variant.reorderQuantity || 0,
+          maximumQuantity: variant.maximumQuantity || 0,
+          warehouseLocation: variant.warehouseLocation || null,
+        });
+      }
+    }
+
     res.status(201).json({
       success: true,
-      message: "Product created successfully",
+      message: "Product and inventory created successfully",
       product: newProduct,
     });
   } catch (err) {

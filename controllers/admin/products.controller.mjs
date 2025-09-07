@@ -3,6 +3,7 @@ import Variant from "../../models/Variant.mjs";
 import Category from "../../models/Category.mjs";
 import Warehouse from "../../models/Warehouse.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
+import Inventory from "../../models/inventory.mjs";
   export const createProduct = async (req, res) => {
     try {
       // Grab all product fields from req.body
@@ -33,6 +34,7 @@ import { uploadBase64Images } from "../../utils/uploadImage.mjs";
         minimumQuantity,
         reorderQuantity,
         maximumQuantity,
+        warehouseLocation,
         weight,
         dimensions,
         isFragile,
@@ -226,6 +228,33 @@ import { uploadBase64Images } from "../../utils/uploadImage.mjs";
           await newProduct.save();
         }
       }
+
+          if (!hasVariant) {
+            // Non-variant product inventory
+            await Inventory.create({
+              warehouse: warehouse,
+              product: newProduct._id,
+              availableQuantity: availableQuantity || 0,
+              minimumQuantity: minimumQuantity || 0,
+              reorderQuantity: reorderQuantity || 0,
+              maximumQuantity: maximumQuantity || 0,
+              warehouseLocation: warehouseLocation || null,
+            });
+          } 
+          // Optionally, create inventory for all variants if you have stock info per variant
+          else if (hasVariant && Array.isArray(variants) && variants.length > 0) {
+            for (const variant of variants) {
+              await Inventory.create({
+                warehouse: warehouse,
+                variant: variant._id,
+                availableQuantity: variant.availableQuantity || 0,
+                minimumQuantity: variant.minimumQuantity || 0,
+                reorderQuantity: variant.reorderQuantity || 0,
+                maximumQuantity: variant.maximumQuantity || 0,
+                warehouseLocation: variant.warehouseLocation || null,
+              });
+            }
+          }
 
       res.status(201).json({
         success: true,
