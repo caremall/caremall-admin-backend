@@ -463,9 +463,10 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
 
 export const createDamagedInventoryReport = async (req, res) => {
   try {
-    const inventoryId = req.params.id; // from route params
-
     const {
+      product, // product ID (optional but preferred)
+      variant, // variant ID (optional)
+      warehouse,
       currentQuantity,
       quantityToReport,
       damageType,
@@ -473,38 +474,40 @@ export const createDamagedInventoryReport = async (req, res) => {
       evidenceImages,
     } = req.body;
 
-    if (!inventoryId) {
-      return res.status(400).json({ message: "Inventory ID is required" });
+    // Validate required fields
+    if (!warehouse) {
+      return res.status(400).json({ message: "Warehouse ID is required" });
     }
-    if (typeof currentQuantity !== "number" || currentQuantity < 0)
+    if (!product && !variant) {
       return res
         .status(400)
-        .json({ message: "Current quantity must be non-negative number" });
-    if (typeof quantityToReport !== "number" || quantityToReport <= 0)
+        .json({ message: "Either product or variant must be specified" });
+    }
+    if (typeof currentQuantity !== "number" || currentQuantity < 0) {
       return res
         .status(400)
-        .json({ message: "Quantity to report must be positive number" });
-    if (!damageType)
+        .json({ message: "Current quantity must be a non-negative number" });
+    }
+    if (typeof quantityToReport !== "number" || quantityToReport <= 0) {
+      return res
+        .status(400)
+        .json({ message: "Quantity to report must be a positive number" });
+    }
+    if (!damageType) {
       return res.status(400).json({ message: "Damage type is required" });
-
-    // Find inventory document
-    const inventoryDoc = await Inventory.findById(inventoryId);
-    if (!inventoryDoc) {
-      return res.status(404).json({ message: "Inventory record not found" });
     }
 
-    // Upload images
-    const uploadedImageUrls = await uploadBase64Images(
-      evidenceImages,
-      "damaged-inventory/"
-    );
+    // Upload images (optional)
+    const uploadedImageUrls =
+      evidenceImages && evidenceImages.length > 0
+        ? await uploadBase64Images(evidenceImages, "damaged-inventory/")
+        : [];
 
-    // Create damaged report linking inventory
+    // Create damaged report *without linking inventory*
     const damagedReport = await damagedInventory.create({
-      inventory: inventoryDoc._id,
-      warehouse: inventoryDoc.warehouse,
-      product: inventoryDoc.product,
-      variant: inventoryDoc.variant,
+      warehouse,
+      product: product || undefined,
+      variant: variant || undefined,
       currentQuantity,
       quantityToReport,
       damageType,

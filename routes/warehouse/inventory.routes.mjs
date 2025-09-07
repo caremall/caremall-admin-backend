@@ -27,7 +27,7 @@ inventoryRouter.get("/:id", getInventoryById);
 inventoryRouter.put("/:id/favourite", toggleFavoriteInventoryLog);
 
 //damaged inventory report
-inventoryRouter.post("/:id/damaged", createDamagedInventoryReport);
+inventoryRouter.post("/damaged", createDamagedInventoryReport);
 inventoryRouter.get("/damaged", getDamagedInventoryReports);
 
 
