@@ -275,9 +275,8 @@ export const getAllProducts = async (req, res) => {
       maxPrice,
       sort,
     } = req.query;
-    const warehouseId = req.user.assignedWarehouses._id;
-
-    const query = { warehouse: warehouseId };
+    const warehouse = req.user.assignedWarehouses._id;
+    const query = { warehouse };
 
     if (search) {
       query.$or = [
@@ -305,16 +304,40 @@ export const getAllProducts = async (req, res) => {
       sortBy = { [field]: order === "asc" ? 1 : -1 };
     }
 
-    const products = await Product.find(query)
-      .populate("brand category defaultVariant")
-      .populate({
-        path: "variants",
-        select: "SKU images urlSlug",
-      })
-      .sort(sortBy)
-      .lean();
+const products = await Product.find(query)
+  .populate("brand category defaultVariant")
+  .populate({
+    path: "variants",
+    select: "SKU images urlSlug",
+    populate: {
+      path: "inventory",
+      select:
+        "availableQuantity minimumQuantity reorderQuantity maximumQuantity warehouse warehouseLocation",
+      populate: [
+        {
+          path: "warehouse",
+          select: "name address city state country postalCode",
+        },
+        { path: "warehouseLocation", select: "code name capacity status" },
+      ],
+    },
+  })
+  .populate({
+    path: "inventory",
+    select:
+      "availableQuantity minimumQuantity reorderQuantity maximumQuantity warehouse warehouseLocation",
+    populate: [
+      {
+        path: "warehouse",
+        select: "name address city state country postalCode",
+      },
+      { path: "warehouseLocation", select: "code name capacity status" },
+    ],
+  })
+  .sort(sortBy)
+  .lean();
 
-    res.status(200).json(products);
+  res.status(200).json(products);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
