@@ -175,7 +175,7 @@ export const getReviewsByProductId = async (req, res) => {
       return res.status(400).json({ message: "Product ID is required" });
     }
 
-    const reviews = await Review.find({ productId }).lean();
+    const reviews = await Review.find({ productId,status:"approved" }).lean();
 
     const totalReviews = reviews.length;
     const satisfiedReviews = reviews.filter((r) => r.rating >= 4).length;

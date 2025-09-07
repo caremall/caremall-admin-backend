@@ -8,7 +8,7 @@ import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 export const createTransferRequest = async (req, res) => {
   try {
     const toWarehouse = req.user.assignedWarehouses._id;
-    const { fromWarehouse, product, variant, quantityRequested } = req.body;
+    const { fromWarehouse, product, variant,carrier,dispatchTime,totalWeight, quantityRequested } = req.body;
 
     if (!fromWarehouse || !quantityRequested || quantityRequested <= 0) {
       return res
@@ -37,6 +37,9 @@ export const createTransferRequest = async (req, res) => {
       toWarehouse,
       product,
       variant,
+      carrier,
+      dispatchTime,
+      totalWeight,
       quantityRequested,
     });
 
@@ -90,15 +93,15 @@ export const updateTransferRequestStatus = async (req, res) => {
     if (updates.pickStatus) transferRequest.pickStatus = updates.pickStatus;
     if (updates.packStatus) transferRequest.packStatus = updates.packStatus;
     if (updates.driver) transferRequest.driver = updates.driver;
-    if (updates.deliveryStatus)
-      transferRequest.deliveryStatus = updates.deliveryStatus;
+    if (updates.manifestStatus)
+      transferRequest.manifestStatus = updates.manifestStatus;
     if (updates.shippedAt) transferRequest.shippedAt = updates.shippedAt;
     if (updates.receivedAt) transferRequest.receivedAt = updates.receivedAt;
 
     await transferRequest.save();
 
     // If delivery just completed, update inventories
-    if (updates.deliveryStatus === "delivered") {
+    if (updates.manifestStatus === "delivered") {
       const qty = transferRequest.quantityRequested;
 
       // Deduct quantity from source warehouse inventory

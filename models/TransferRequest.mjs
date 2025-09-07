@@ -13,7 +13,15 @@ const transferRequestSchema = new Schema({
     ref: "Warehouse",
     required: true,
   },
-
+  carrier:{
+    type:String
+  },
+  dispatchTime:{
+    type:Date
+  },
+  totalWeight:{
+    type:Number
+  },
   product: {
     type: Schema.Types.ObjectId,
     ref: "Product",
@@ -48,9 +56,9 @@ const transferRequestSchema = new Schema({
   },
   shippedAt: Date,
   receivedAt: Date,
-  deliveryStatus: {
+  manifestStatus: {
     type: String,
-    enum: ["pending", "delivered"],
+    enum: ["pending","in-transit","delivered"],
     default: "pending",
   },
   requestedAt: {
