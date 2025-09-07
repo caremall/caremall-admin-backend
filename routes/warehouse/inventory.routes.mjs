@@ -3,11 +3,13 @@ import {
   assignDriverToTransferRequest,
     createDamagedInventoryReport,
   createTransferRequest,
+  decrementInventory,
   getAllInventories,
   getDamagedInventoryReports,
   getInventoryById,
   getInventoryLogs,
   getTransferRequests,
+  incrementInventory,
   toggleFavoriteInventoryLog,
   updateInventory,
   updateTransferRequestStatus,
@@ -24,6 +26,8 @@ inventoryRouter.post("/transfer/assign-driver/:id",assignDriverToTransferRequest
 inventoryRouter.post("/damaged", createDamagedInventoryReport);
 inventoryRouter.get("/damaged", getDamagedInventoryReports);
 
+inventoryRouter.put("/increment/:id",incrementInventory)
+inventoryRouter.put("/decrement/:id",decrementInventory)
 inventoryRouter.put("/", updateInventory);
 inventoryRouter.get("/", getAllInventories);
 inventoryRouter.get("/log", getInventoryLogs);

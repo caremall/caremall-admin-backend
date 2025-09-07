@@ -315,6 +315,66 @@ export const updateInventory = async (req, res) => {
   }
 };
 
+// Increment inventory quantity by 1
+export const incrementInventory = async (req, res) => {
+  try {
+    const inventoryId = req.params.id;
+
+    if (!inventoryId) {
+      return res.status(400).json({ message: "Inventory ID is required" });
+    }
+
+    const inventory = await Inventory.findById(inventoryId);
+    if (!inventory) {
+      return res.status(404).json({ message: "Inventory not found" });
+    }
+
+    inventory.availableQuantity += 1;
+    inventory.updatedAt = new Date();
+    await inventory.save();
+
+    res.status(200).json({
+      message: "Inventory incremented successfully",
+      availableQuantity: inventory.availableQuantity,
+    });
+  } catch (error) {
+    console.error("Error incrementing inventory:", error);
+    res.status(500).json({ message: "Server error incrementing inventory" });
+  }
+};
+
+// Decrement inventory quantity by 1
+export const decrementInventory = async (req, res) => {
+  try {
+    const inventoryId  = req.params.id;
+
+    if (!inventoryId) {
+      return res.status(400).json({ message: "Inventory ID is required" });
+    }
+
+    const inventory = await Inventory.findById(inventoryId);
+    if (!inventory) {
+      return res.status(404).json({ message: "Inventory not found" });
+    }
+
+    if (inventory.availableQuantity <= 0) {
+      return res.status(400).json({ message: "Inventory cannot go below zero" });
+    }
+
+    inventory.availableQuantity -= 1;
+    inventory.updatedAt = new Date();
+    await inventory.save();
+
+    res.status(200).json({
+      message: "Inventory decremented successfully",
+      availableQuantity: inventory.availableQuantity,
+    });
+  } catch (error) {
+    console.error("Error decrementing inventory:", error);
+    res.status(500).json({ message: "Server error decrementing inventory" });
+  }
+};
+
 export const getAllInventories = async (req, res) => {
   try {
     const { productId, variantId, page = 1, limit = 50 } = req.query;
