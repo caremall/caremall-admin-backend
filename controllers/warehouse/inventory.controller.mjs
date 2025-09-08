@@ -466,39 +466,42 @@ export const getInventoryLogs = async (req, res) => {
       .populate("updatedBy", "fullName")
       .sort({ createdAt: -1 })
       .lean();
-    console.log(logs);
-    // Generate descriptive message for each log
+
+    // Generate message and include time (createdAt) and favorite flag
     const logsWithMessages = logs.map((log) => {
       const qtyChange = log.quantityChange || 0;
       const qtyAbs = Math.abs(qtyChange);
       const action = qtyChange > 0 ? "added to" : "removed from";
-
       let itemName = "Unknown item";
       if (log.product) {
         itemName = `${log.product.productName} (SKU ${log.product.SKU})`;
       } else if (log.variant) {
         itemName = `Variant SKU ${log.variant.SKU}`;
       }
-
       const locationName = log.warehouseLocation
         ? log.warehouseLocation.code ||
           log.warehouseLocation.name ||
           "Unknown Location"
         : "Unknown Location";
-
       const userName = log.updatedBy ? log.updatedBy.fullName : "Unknown User";
-
       const message = `${
         qtyChange > 0 ? "+" : "-"
       }${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
 
       return {
         message,
+        createdAt: log.createdAt, // Time of log
+        isFavorite: log.isFavorite, // Whether log is marked favorite
+        _id: log._id, // Useful for frontend toggling favorite, etc
       };
     });
 
+    // Filter for favorites
+    const favoriteLogs = logsWithMessages.filter((log) => log.isFavorite);
+
     res.status(200).json({
-      data: logsWithMessages,
+      data: logsWithMessages, // all logs with message, time, and favorite
+      favorites: favoriteLogs, // only favorite logs
     });
   } catch (error) {
     console.error("Error fetching inventory logs:", error);
@@ -614,7 +617,7 @@ export const getDamagedInventoryReports = async (req, res) => {
 
     const reports = await damagedInventory
       .find(query)
-      .populate("warehouse product variant uploadedBy", "name email")
+      .populate("warehouse product variant uploadedBy")
       .sort({ createdAt: -1 })
       .lean();
 
