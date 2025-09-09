@@ -1,5 +1,17 @@
 import Offer from "../../models/offerManagement.mjs";
 
+// Helper to validate and convert booking dates array
+function parseBookingDates(bookingDates, fallback = []) {
+  if (
+    Array.isArray(bookingDates) &&
+    bookingDates.length === 2 &&
+    !bookingDates.some((d) => isNaN(new Date(d).getTime()))
+  ) {
+    return bookingDates.map((d) => new Date(d));
+  }
+  return fallback;
+}
+
 export const createOffer = async (req, res) => {
   let {
     title,
@@ -129,62 +141,45 @@ export const updateOffer = async (req, res) => {
       isFeatured,
       status,
       author,
-    } = req.body.data;
+    } = req.body;
 
     const offer = await Offer.findById(req.params.id);
     if (!offer) return res.status(404).json({ message: "Offer not found" });
 
-    // Sanitize enums & dates for drafts
-    if (status === "draft") {
-      if (!["product", "category", "brand", "cart"].includes(offerType)) {
-        offerType = undefined;
-      }
-      if (!["percentage", "fixed"].includes(discountUnit)) {
-        discountUnit = undefined;
-      }
-      if (
-        !Array.isArray(bookingDates) ||
-        bookingDates.length !== 2 ||
-        bookingDates.some((d) => isNaN(new Date(d).getTime()))
-      ) {
-        bookingDates = offer.offerRedeemTimePeriod || [];
+    // Sanitize enums & bookingDates
+    // Only validate bookingDates if it is provided in req.body
+    if ("bookingDates" in req.body) {
+      if (status === "draft") {
+        bookingDates = parseBookingDates(
+          bookingDates,
+          offer.offerRedeemTimePeriod
+        );
       } else {
-        bookingDates = bookingDates.map((d) => new Date(d));
+        bookingDates = parseBookingDates(bookingDates);
+        if (bookingDates.length !== 2) {
+          return res.status(400).json({ message: "Invalid bookingDates" });
+        }
       }
     } else {
-      if (
-        Array.isArray(bookingDates) &&
-        bookingDates.length === 2 &&
-        !bookingDates.some((d) => isNaN(new Date(d).getTime()))
-      ) {
-        bookingDates = bookingDates.map((d) => new Date(d));
-      } else {
-        return res.status(400).json({ message: "Invalid bookingDates" });
-      }
+      // bookingDates not in request, keep existing
+      bookingDates = offer.offerRedeemTimePeriod;
     }
 
-    // Update fields conditionally
-    offer.offerTitle = title?.trim() || offer.offerTitle;
-    offer.offerDescription = description || offer.offerDescription;
-    offer.offerType = offerType !== undefined ? offerType : offer.offerType;
-    offer.offerDiscountUnit =
-      discountUnit !== undefined ? discountUnit : offer.offerDiscountUnit;
-    offer.offerDiscountValue =
-      discountValue !== undefined
-        ? parseFloat(discountValue)
-        : offer.offerDiscountValue;
-    offer.offerMinimumOrderValue =
-      minimumOrderValue !== undefined
-        ? parseFloat(minimumOrderValue)
-        : offer.offerMinimumOrderValue;
-    offer.offerImageUrl = imageUrl || offer.offerImageUrl;
-    offer.offerRedeemTimePeriod =
-      bookingDates.length === 2 ? bookingDates : offer.offerRedeemTimePeriod;
-    offer.offerEligibleItems = eligibleItems || offer.offerEligibleItems;
-    offer.isOfferFeatured =
-      typeof isFeatured === "boolean" ? isFeatured : offer.isOfferFeatured;
-    offer.offerStatus = status || offer.offerStatus;
-    offer.offerAuthor = author?.trim() || offer.offerAuthor;
+    // Update fields only if provided (cleaner check vs falsy values)
+    if (typeof title === "string") offer.offerTitle = title.trim();
+    if (typeof description === "string") offer.offerDescription = description;
+    if (offerType !== undefined) offer.offerType = offerType;
+    if (discountUnit !== undefined) offer.offerDiscountUnit = discountUnit;
+    if (discountValue !== undefined)
+      offer.offerDiscountValue = parseFloat(discountValue);
+    if (minimumOrderValue !== undefined)
+      offer.offerMinimumOrderValue = parseFloat(minimumOrderValue);
+    if (typeof imageUrl === "string") offer.offerImageUrl = imageUrl;
+    if (bookingDates.length === 2) offer.offerRedeemTimePeriod = bookingDates;
+    if (Array.isArray(eligibleItems)) offer.offerEligibleItems = eligibleItems;
+    if (typeof isFeatured === "boolean") offer.isOfferFeatured = isFeatured;
+    if (typeof status === "string") offer.offerStatus = status;
+    if (typeof author === "string") offer.offerAuthor = author.trim();
 
     await offer.save();
 
@@ -198,6 +193,7 @@ export const updateOffer = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 export const deleteOffer = async (req, res) => {
   try {
