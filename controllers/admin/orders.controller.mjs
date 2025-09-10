@@ -43,8 +43,8 @@ export const getAllOrders = async (req, res) => {
 
     const orders = await Order.find(query)
       .populate("user", "name email")
-      .populate("items.product", "productName")
-      .populate("items.variant", "variantAttributes")
+      .populate("items.product", "productName productImages urlSlug SKU")
+      .populate("items.variant", "variantAttributes SKU images")
       .populate("allocatedWarehouse", "name location")
       .populate("allocatedBy", "fullName email")
       .sort({ createdAt: -1 });
