@@ -1,14 +1,23 @@
 import { Router } from "express";
 import {
+  addPackingDetails,
   deleteOrder,
   getAllocatedOrders,
   getAllOrders,
   getOrderById,
   markOrderDelivered,
+  markOrderDispatched,
   updateOrderStatus,
+  updatePickedQuantities,
 } from "../../controllers/warehouse/orders.controller.mjs";
 
 const router = Router();
+
+//pick and pack
+
+router.post("/:id/pick", updatePickedQuantities)
+router.post("/:id/pack", addPackingDetails)
+router.post("/:id/dispatch", markOrderDispatched)
 
 router.get("/allocated",getAllocatedOrders)
 // GET all orders with filter, search, pagination

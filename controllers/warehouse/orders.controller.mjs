@@ -179,3 +179,122 @@ export const getAllocatedOrders = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch warehouse orders" });
   }
 };
+
+export const updatePickedQuantities = async (req, res) => {
+  try {
+    const orderId  = req.params.id;
+    const { pickedItems } = req.body; // [{ pickItemId, pickedQuantity }]
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    pickedItems.forEach(({ pickItemId, pickedQuantity }) => {
+      const pickItem = order.pickItems.id(pickItemId);
+      if (pickItem) {
+        pickItem.pickedQuantity = pickedQuantity;
+        if (pickedQuantity === 0) pickItem.pickStatus = "pending";
+        else if (pickedQuantity < pickItem.requiredQuantity)
+          pickItem.pickStatus = "partial";
+        else pickItem.pickStatus = "picked";
+      }
+    });
+
+    // If all picked, update orderStatus
+    const allPicked = order.pickItems.every((pi) => pi.pickStatus === "picked");
+    if (allPicked) order.orderStatus = "picked";
+
+    await order.save();
+    res
+      .status(200)
+      .json({ success: true, message: "Picking updated", data: order });
+  } catch (error) {
+    console.error("Update Picked Quantities Error:", error);
+    res.status(500).json({ message: "Failed to update picked quantities" });
+  }
+};
+
+
+export const addPackingDetails = async (req, res) => {
+  try {
+    const orderId  = req.params.id;
+    const {
+      packerName,
+      packageWeight,
+      packageLength,
+      packageWidth,
+      packageHeight,
+      packingDate,
+      trackingNumber,
+      packagingMaterial,
+    } = req.body;
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.packings.push({
+      packerName,
+      packageWeight,
+      packageLength,
+      packageWidth,
+      packageHeight,
+      packingDate: packingDate ? new Date(packingDate) : new Date(),
+      trackingNumber,
+      packagingMaterial,
+    });
+
+    order.orderStatus = "packed";
+
+    await order.save();
+    res
+      .status(200)
+      .json({ success: true, message: "Packing details added", data: order });
+  } catch (error) {
+    console.error("Add Packing Details Error:", error);
+    res.status(500).json({ message: "Failed to add packing details" });
+  }
+};
+
+
+export const markOrderDispatched = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const {
+      carrier,
+      driver,
+      vehicleNumber,
+      dispatchDate,
+      dispatchTime,
+      totalPackages,
+      totalWeight,
+      destinationHub,
+      manifestStatus,
+    } = req.body;
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    const newDispatch = {
+      carrier,
+      driver,
+      vehicleNumber,
+      dispatchDate: dispatchDate ? new Date(dispatchDate) : new Date(),
+      dispatchTime,
+      totalPackages,
+      totalWeight,
+      destinationHub,
+      manifestStatus: manifestStatus || "Pending",
+    };
+
+    order.dispatches.push(newDispatch); // push into dispatches array
+    order.orderStatus = "dispatched";
+
+    await order.save();
+
+    res
+      .status(200)
+      .json({ success: true, message: "Order marked dispatched", data: order });
+  } catch (error) {
+    console.error("Mark Order Dispatched Error:", error);
+    res.status(500).json({ message: "Failed to mark order as dispatched" });
+  }
+};

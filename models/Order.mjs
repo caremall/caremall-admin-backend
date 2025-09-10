@@ -1,6 +1,71 @@
 import mongoose from 'mongoose';
 
 const { Schema, model } = mongoose;
+const pickItemSchema = new Schema(
+  {
+    product: {
+      type: Schema.Types.ObjectId,
+      ref: "Product",
+      required: true,
+    },
+    variant: {
+      type: Schema.Types.ObjectId,
+      ref: "Variant",
+      default: null,
+    },
+    requiredQuantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+    pickedQuantity: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
+    },
+    pickStatus: {
+      type: String,
+      enum: ["pending", "partial", "picked"],
+      default: "pending",
+    },
+  },
+  { _id: false }
+);
+
+const packSchema = new Schema(
+  {
+    packerName: { type: String, required: true },
+    packageWeight: { type: Number }, // in kg
+    packageLength: { type: Number }, // in cm
+    packageWidth: { type: Number }, // in cm
+    packageHeight: { type: Number }, // in cm
+    packingDate: { type: Date, default: Date.now },
+    trackingNumber: { type: String },
+    packagingMaterial: { type: String }, // box, polybag, etc.
+  },
+  { _id: false }
+);
+
+const dispatchSchema = new Schema(
+  {
+    carrier: { type: String },
+    driver: { type: Schema.Types.ObjectId, ref: "Driver" },
+    vehicleNumber: { type: String },
+    dispatchDate: { type: Date, default: Date.now },
+    dispatchTime: { type: String },
+    totalPackages: { type: Number },
+    totalWeight: { type: Number },
+    destinationHub: { type: String },
+    manifestStatus: {
+      type: String,
+      enum: ["Pending", "In Transit", "Delivered"],
+      default: "Pending",
+    },
+  },
+  { _id: false }
+);
+
 
 const orderSchema = new Schema(
   {
@@ -146,6 +211,9 @@ const orderSchema = new Schema(
       type: Date,
       default: null,
     },
+    pickings: [pickItemSchema],
+    packings: [packSchema],
+    dispatches: [dispatchSchema],
   },
   { timestamps: true }
 );
