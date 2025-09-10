@@ -72,7 +72,7 @@ export const createOrder = async (req, res) => {
 
     // Apply coupon via Offer model
     if (couponCode?.trim()) {
-      const coupon = await Coupon.findOne({
+      const coupon = await Offer.findOne({
         code: couponCode.trim(),
         active: true,
       });

@@ -179,7 +179,7 @@ const orderSchema = new Schema(
       default: false,
     },
     appliedCoupon: {
-      couponId: { type: Schema.Types.ObjectId, ref: "Coupon" },
+      couponId: { type: Schema.Types.ObjectId, ref: "Offer" },
       couponCode: { type: String },
       discountValue: { type: Number },
     },
