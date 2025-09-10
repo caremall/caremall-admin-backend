@@ -7,38 +7,44 @@ import Variant from '../models/Variant.mjs'
  * @returns {Array} enrichedProducts - Products with merged variant data
  */
 export const enrichProductsWithDefaultVariants = async (products) => {
-    const productIdsWithVariants = products
-        .filter(p => p.hasVariant && p.defaultVariant)
-        .map(p => p.defaultVariant);
+  const productIds = products.map((p) => p._id);
 
-    if (productIdsWithVariants.length === 0) return products;
+  // Fetch variants for all products
+  const allVariants = await Variant.find({
+    productId: { $in: productIds },
+  }).lean();
 
-    const defaultVariants = await Variant.find({ _id: { $in: productIdsWithVariants } }).lean();
+  // Group variants by productId
+  const variantsByProduct = allVariants.reduce((acc, variant) => {
+    const pid = variant.productId.toString();
+    if (!acc[pid]) acc[pid] = [];
+    acc[pid].push(variant);
+    return acc;
+  }, {});
 
-    const defaultVariantMap = {};
-    for (const variant of defaultVariants) {
-        defaultVariantMap[variant._id.toString()] = variant;
+  // Enrich products by merging default variant data (isDefault: true)
+  return products.map((product) => {
+    const variants = variantsByProduct[product._id.toString()] || [];
+    const defaultVariant = variants.find((v) => v.isDefault) || null;
+    if (defaultVariant) {
+      return {
+        ...product,
+        SKU: defaultVariant.SKU ?? product.SKU,
+        barcode: defaultVariant.barcode ?? product.barcode,
+        productImages:
+          defaultVariant.images && defaultVariant.images.length
+            ? defaultVariant.images
+            : product.productImages,
+        costPrice: defaultVariant.costPrice ?? product.costPrice,
+        sellingPrice: defaultVariant.sellingPrice ?? product.sellingPrice,
+        mrpPrice: defaultVariant.mrpPrice ?? product.mrpPrice,
+        discountPercent:
+          defaultVariant.discountPercent ?? product.discountPercent,
+        taxRate: defaultVariant.taxRate ?? product.taxRate,
+        variants, // optionally attach all variants
+      };
     }
-
-    const enrichedProducts = products.map(product => {
-        if (product.hasVariant && product.defaultVariant) {
-            const variant = defaultVariantMap[product.defaultVariant.toString()];
-            if (variant) {
-                return {
-                    ...product,
-                    SKU: variant.SKU,
-                    barcode: variant.barcode,
-                    productImages: variant.images,
-                    costPrice: variant.costPrice,
-                    sellingPrice: variant.sellingPrice,
-                    mrpPrice: variant.mrpPrice,
-                    discountPercent: variant.discountPercent ?? product.discountPercent,
-                    taxRate: variant.taxRate ?? product.taxRate,
-                };
-            }
-        }
-        return product;
-    });
-
-    return enrichedProducts;
+    // No default variant found, return product as-is
+    return { ...product, variants };
+  });
 };
