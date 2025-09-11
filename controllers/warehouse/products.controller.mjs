@@ -427,49 +427,95 @@ export const updateProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // Uniqueness checks for productName, urlSlug, SKU, barcode (avoid current product)
-    if (productName && productName.trim() !== existingProduct.productName) {
-      if (
-        await Product.findOne({
-          productName: productName.trim(),
-          _id: { $ne: productId },
-        })
-      ) {
+  // --- Uniqueness Checks ---
+    // PRODUCT NAME
+    if (
+      productName &&
+      productName.trim() &&
+      existingProduct.productName &&
+      productName.trim().toLowerCase() !==
+        existingProduct.productName.trim().toLowerCase()
+    ) {
+      const exists = await Product.findOne({
+        productName: productName.trim(),
+        _id: { $ne: productId },
+      });
+      if (exists) {
         return res
           .status(400)
           .json({ message: "Product name is already taken" });
       }
     }
-    if (urlSlug && urlSlug.trim() !== existingProduct.urlSlug) {
-      if (
-        await Product.findOne({
-          urlSlug: urlSlug.trim(),
-          _id: { $ne: productId },
-        })
-      ) {
+
+    // URL SLUG
+    if (
+      urlSlug &&
+      urlSlug.trim() &&
+      existingProduct.urlSlug &&
+      urlSlug.trim().toLowerCase() !==
+        existingProduct.urlSlug.trim().toLowerCase()
+    ) {
+      const exists = await Product.findOne({
+        urlSlug: urlSlug.trim(),
+        _id: { $ne: productId },
+      });
+      if (exists) {
         return res.status(400).json({ message: "Slug is already taken" });
       }
     }
-    if (!hasVariant && SKU && SKU.trim() !== existingProduct.SKU) {
-      if (await Product.findOne({ SKU: SKU.trim(), _id: { $ne: productId } })) {
+
+    // SKU (if no variants)
+    if (
+      !hasVariant &&
+      SKU &&
+      SKU.trim() &&
+      existingProduct.SKU &&
+      SKU.trim().toLowerCase() !== existingProduct.SKU.trim().toLowerCase()
+    ) {
+      const exists = await Product.findOne({
+        SKU: SKU.trim(),
+        _id: { $ne: productId },
+      });
+      if (exists) {
         return res.status(400).json({ message: "SKU is already in use" });
       }
     }
-    if (!hasVariant && barcode && barcode.trim() !== existingProduct.barcode) {
-      if (
-        await Product.findOne({
-          barcode: barcode.trim(),
-          _id: { $ne: productId },
-        })
-      ) {
+
+    // BARCODE (if no variants)
+    if (
+      !hasVariant &&
+      barcode &&
+      barcode.trim() &&
+      existingProduct.barcode &&
+      barcode.trim().toLowerCase() !==
+        existingProduct.barcode.trim().toLowerCase()
+    ) {
+      const exists = await Product.findOne({
+        barcode: barcode.trim(),
+        _id: { $ne: productId },
+      });
+      if (exists) {
         return res.status(400).json({ message: "Barcode is already in use" });
       }
     }
 
-    // Uniqueness check for variant SKUs/barcodes (avoid current variant id)
+    // VARIANT SKU/BARCODE uniqueness IF HASVARIANT
     if (hasVariant && Array.isArray(variants)) {
       for (let variant of variants) {
-        if (variant.SKU) {
+        // If this is an update (has _id), fetch existing variant for comparison
+        let existingVariant = null;
+        if (variant._id) {
+          existingVariant = await Variant.findById(variant._id);
+        }
+
+        // VARIANT SKU
+        if (
+          variant.SKU &&
+          (!existingVariant ||
+            (existingVariant.SKU &&
+              variant.SKU.trim().toLowerCase() !==
+                existingVariant.SKU.trim().toLowerCase()))
+        ) {
           const exists = await Variant.findOne({
             SKU: variant.SKU.trim(),
             _id: { $ne: variant._id },
@@ -480,7 +526,15 @@ export const updateProduct = async (req, res) => {
             });
           }
         }
-        if (variant.barcode) {
+
+        // VARIANT BARCODE
+        if (
+          variant.barcode &&
+          (!existingVariant ||
+            (existingVariant.barcode &&
+              variant.barcode.trim().toLowerCase() !==
+                existingVariant.barcode.trim().toLowerCase()))
+        ) {
           const exists = await Variant.findOne({
             barcode: variant.barcode.trim(),
             _id: { $ne: variant._id },
@@ -493,7 +547,7 @@ export const updateProduct = async (req, res) => {
         }
       }
     }
-
+    
     // Handle productImages: upload only base64 images and preserve existing URLs
     let finalProductImages = [];
     if (productImages && productImages.length > 0) {
