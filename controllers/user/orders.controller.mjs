@@ -266,8 +266,8 @@ export const getOrderById = async (req, res) => {
       _id: req.params.id,
       user: req.user._id,
     })
-      .populate("items.product", "productName productImages")
-      .populate("items.variant", "variantAttributes");
+      .populate("items.product", "productName productImages urlSlug SKU")
+      .populate("items.variant", "variantAttributes SKU images");
 
     if (!order) return res.status(404).json({ message: "Order not found" });
 
