@@ -245,7 +245,11 @@ export const getFilteredProducts = async (req, res) => {
         "_id productName brand category urlSlug productStatus hasVariant sellingPrice defaultVariant productImages"
       )
       .populate("brand", "_id brandName imageUrl")
-      .sort({ sellingPrice: 1 });
+      .sort({ sellingPrice: 1 }).lean();
+      const enrichedProducts = await enrichProductsWithDefaultVariants(
+        products
+      );
+
 
     // 7. Aggregate variant attributes for filter options (all variants in filtered products)
     const variantAttributesAggregation = await Variant.aggregate([
@@ -355,7 +359,7 @@ export const getFilteredProducts = async (req, res) => {
 
     // 10. Return filtered products and filter options
     res.status(200).json({
-      products,
+      products: enrichedProducts,
       filterOptions: {
         variantAttributes: variantFilters,
         brands: availableBrands,

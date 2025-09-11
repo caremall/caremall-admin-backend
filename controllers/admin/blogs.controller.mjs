@@ -1,4 +1,5 @@
 import Blog from "../../models/Blog.mjs";
+import { uploadBase64Image } from "../../utils/uploadImage.mjs";
 
 export const createBlog = async (req, res) => {
     const {
@@ -22,9 +23,14 @@ export const createBlog = async (req, res) => {
         .json({ message: "Blog with this title already exists" });
     }
 
+    let uploadedImageUrl=null;
+    if(imageUrl){
+      uploadedImageUrl=await uploadBase64Image(imageUrl,"blog-images/");
+    }
+
     const newBlog = await Blog.create({
       title,
-      imageUrl,
+      imageUrl: uploadedImageUrl || imageUrl,
       category,
       description,
       author,
@@ -108,8 +114,14 @@ export const updateBlog = async (req, res) => {
       return res.status(404).json({ message: "Blog not found" });
     }
 
+    if(imageUrl&& typeof imageUrl === "string" && imageUrl.startsWith("data:")){
+      const uploadedImageUrl=await uploadBase64Image(imageUrl,"blog-images/");
+      blog.imageUrl=uploadedImageUrl;
+    } else if(imageUrl){
+      blog.imageUrl=imageUrl;
+    }
+
     blog.title = title || blog.title;
-    blog.imageUrl = imageUrl || blog.imageUrl;
     blog.category = category || blog.category;
     blog.description = description || blog.description;
     blog.author = author || blog.author;
