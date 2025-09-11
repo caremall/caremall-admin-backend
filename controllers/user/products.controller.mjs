@@ -601,7 +601,7 @@ export const getProductSearchSuggestions = async (reg, res) => {
         { productDescription: regex },
       ],
     })
-      .select("productName sellingPrice thumbnail category urlSlug")
+      .select("productName sellingPrice thumbnail category urlSlug SKU productImages")
       .limit(10)
       .lean();
 
@@ -634,7 +634,7 @@ export const getSearchSuggestions = async (req, res) => {
         { productDescription: regex },
       ],
     })
-      .select("productName sellingPrice thumbnail category urlSlug")
+      .select("productName sellingPrice thumbnail category urlSlug SKU productImages")
       .limit(10)
       .lean();
 
@@ -662,9 +662,11 @@ export const getSearchSuggestions = async (req, res) => {
       categoriesPromise,
       brandsPromise,
     ]);
+    const enrichedProducts = await enrichProductsWithDefaultVariants(products);
+
 
     // Return combined results categorized by entity type
-    res.status(200).json({ products, categories, brands });
+    res.status(200).json({ enrichedProducts, categories, brands });
   } catch (error) {
     console.error("Error fetching search suggestions: ", error);
     res
