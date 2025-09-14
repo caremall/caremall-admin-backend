@@ -51,28 +51,19 @@ export const createBlog = async (req, res) => {
 
 export const getAllBlogs = async (req, res) => {
   try {
-    const { search = "", status, page = 1, limit = 10 } = req.query;
+    const { search = "", status } = req.query;
 
     const query = {
       ...(search && { title: { $regex: search, $options: "i" } }),
       ...(status && { status }),
     };
 
-    const skip = (Number(page) - 1) * Number(limit);
 
-    const [blogs, total] = await Promise.all([
-      Blog.find(query).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
-      Blog.countDocuments(query),
-    ]);
+   const blogs= await Blog.find(query).sort({ createdAt: -1 })
 
     res.status(200).json({
       success: true,
       data: blogs,
-      meta: {
-        page: Number(page),
-        totalPages: Math.ceil(total / limit),
-        total,
-      },
     });
   } catch (error) {
     console.error(error);

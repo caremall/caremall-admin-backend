@@ -85,12 +85,6 @@ const offerSchema = new Schema(
       default: "Admin",
       trim: true,
     },
-    code: {
-      type: String,
-      unique: true,
-      required: true,
-      trim: true,
-    },
   },
   {
     timestamps: true,

@@ -384,7 +384,7 @@ export const getFilteredProducts = async (req, res) => {
 
 export const getMostWantedProducts = async (req, res) => {
   try {
-    const products = await Product.find().lean();
+    const products = await Product.find({productStatus: "published", visibility: "visible"}).lean();
 
     // Enrich products with default variant data
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
@@ -454,7 +454,7 @@ export const getMostWantedProducts = async (req, res) => {
 
 export const getNewArrivalProducts = async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 }).lean();
+    const products = await Product.find({productStatus: "published", visibility: "visible"}).sort({ createdAt: -1 }).lean();
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
     // Aggregate review stats for all products
@@ -502,7 +502,7 @@ export const getNewArrivalProducts = async (req, res) => {
 
 export const getBestSellingProducts = async (req, res) => {
   try {
-    const bestSellers = await Product.find().sort({ orderCount: -1 }).lean();
+    const bestSellers = await Product.find({productStatus: "published", visibility: "visible"}).sort({ orderCount: -1 }).lean();
     const enrichedProducts = await enrichProductsWithDefaultVariants(
       bestSellers
     );
