@@ -8,39 +8,39 @@ import Variant from '../../models/Variant.mjs';
 export const getWishlist = async (req, res) => {
     try {
         const userId = req.user._id;
-const wishlist = await Wishlist.findOne({ user: userId })
-  .populate({
-    path: "items.product",
-    select:
-      "productName productImages sellingPrice urlSlug mrpPrice defaultVariant hasVariant",
-    populate: {
-      path: "reviews",
-      model: "Review",
-    },
-  })
-  .populate("items.variant");
+        const wishlist = await Wishlist.findOne({ user: userId })
+            .populate({
+                path: "items.product",
+                select:
+                    "productName productImages sellingPrice urlSlug mrpPrice defaultVariant hasVariant",
+                populate: {
+                    path: "reviews",
+                    model: "Review",
+                },
+            })
+            .populate("items.variant");
 
-if (!wishlist) return res.status(200).json({ items: [] });
+        if (!wishlist) return res.status(200).json({ items: [] });
 
-// Calculate average rating for each product in wishlist
-const itemsWithAvgRating = wishlist.items.map((item) => {
-  const reviews = item.product.reviews;
-  const avgRating =
-    reviews && reviews.length > 0
-      ? (
-          reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-        ).toFixed(2)
-      : 0;
-  return {
-    ...item.toObject(),
-    product: {
-      ...item.product.toObject(),
-      avgRating, // Add average rating field
-    },
-  };
-});
+        // Calculate average rating for each product in wishlist
+        const itemsWithAvgRating = wishlist.items.map((item) => {
+            const reviews = item.product?.reviews;
+            const avgRating =
+                reviews && reviews.length > 0
+                    ? (
+                        reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+                    ).toFixed(2)
+                    : 0;
+            return {
+                ...item.toObject(),
+                product: {
+                    ...(item?.product ? item?.product?.toObject() : {}),
+                    avgRating, // Add average rating field
+                },
+            };
+        });
 
-res.status(200).json({ ...wishlist.toObject(), items: itemsWithAvgRating });
+        res.status(200).json({ ...wishlist.toObject(), items: itemsWithAvgRating });
 
     } catch (error) {
         console.error('Get wishlist error:', error);
