@@ -112,13 +112,13 @@ export const updateTransferRequestStatus = async (req, res) => {
       // Deduct quantity from source warehouse inventory
       const fromInventoryQuery = transferRequest.variant
         ? {
-            warehouse: transferRequest.fromWarehouse,
-            variant: transferRequest.variant,
-          }
+          warehouse: transferRequest.fromWarehouse,
+          variant: transferRequest.variant,
+        }
         : {
-            warehouse: transferRequest.fromWarehouse,
-            product: transferRequest.product,
-          };
+          warehouse: transferRequest.fromWarehouse,
+          product: transferRequest.product,
+        };
 
       const fromInventory = await Inventory.findOne(fromInventoryQuery);
       if (!fromInventory || fromInventory.availableQuantity < qty) {
@@ -133,13 +133,13 @@ export const updateTransferRequestStatus = async (req, res) => {
       // Add quantity to destination warehouse inventory
       const toInventoryQuery = transferRequest.variant
         ? {
-            warehouse: transferRequest.toWarehouse,
-            variant: transferRequest.variant,
-          }
+          warehouse: transferRequest.toWarehouse,
+          variant: transferRequest.variant,
+        }
         : {
-            warehouse: transferRequest.toWarehouse,
-            product: transferRequest.product,
-          };
+          warehouse: transferRequest.toWarehouse,
+          product: transferRequest.product,
+        };
 
       let toInventory = await Inventory.findOne(toInventoryQuery);
       if (!toInventory) {
@@ -346,7 +346,7 @@ export const incrementInventory = async (req, res) => {
 // Decrement inventory quantity by 1
 export const decrementInventory = async (req, res) => {
   try {
-    const inventoryId  = req.params.id;
+    const inventoryId = req.params.id;
 
     if (!inventoryId) {
       return res.status(400).json({ message: "Inventory ID is required" });
@@ -480,13 +480,12 @@ export const getInventoryLogs = async (req, res) => {
       }
       const locationName = log.warehouseLocation
         ? log.warehouseLocation.code ||
-          log.warehouseLocation.name ||
-          "Unknown Location"
+        log.warehouseLocation.name ||
+        "Unknown Location"
         : "Unknown Location";
       const userName = log.updatedBy ? log.updatedBy.fullName : "Unknown User";
-      const message = `${
-        qtyChange > 0 ? "+" : "-"
-      }${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
+      const message = `${qtyChange > 0 ? "+" : "-"
+        }${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
 
       return {
         message,
@@ -526,9 +525,8 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
     await inventoryLog.save();
 
     res.status(200).json({
-      message: `Inventory log ${
-        inventoryLog.isFavourite ? "favorited" : "unfavorited"
-      } successfully`,
+      message: `Inventory log ${inventoryLog.isFavourite ? "favorited" : "unfavorited"
+        } successfully`,
       isFavourite: inventoryLog.isFavourite,
       inventoryLog,
     });
@@ -606,6 +604,99 @@ export const createDamagedInventoryReport = async (req, res) => {
   }
 };
 
+export const updateDamagedInventoryReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: "Inventory ID is required" });
+    }
+
+    const {
+      currentQuantity,
+      quantityToReport,
+      damageType,
+      note,
+      evidenceImages,
+    } = req.body;
+
+    const warehouseId = req.user.assignedWarehouses?._id;
+
+    if (!warehouseId) {
+      return res.status(400).json({ message: "Warehouse ID is required" });
+    }
+
+    // Find the report by ID and warehouse
+    const report = await damagedInventory.findOne({ _id: id, warehouse: warehouseId });
+    if (!report) {
+      return res.status(404).json({ message: "Report not found or unauthorized" });
+    }
+
+    // Validate and update fields if provided
+    if (currentQuantity !== undefined) {
+      if (typeof currentQuantity !== "number" || currentQuantity < 0) {
+        return res.status(400).json({ message: "Current quantity must be a non-negative number" });
+      }
+      report.currentQuantity = currentQuantity;
+    }
+
+    if (quantityToReport !== undefined) {
+      if (typeof quantityToReport !== "number" || quantityToReport <= 0) {
+        return res.status(400).json({ message: "Quantity to report must be a positive number" });
+      }
+      report.quantityToReport = quantityToReport;
+    }
+
+    if (damageType !== undefined) {
+      if (typeof damageType !== "string" || damageType.trim() === "") {
+        return res.status(400).json({ message: "Damage type must be a valid string" });
+      }
+      report.damageType = damageType;
+    }
+
+    if (note !== undefined) {
+      report.note = note;
+    }
+
+    if (evidenceImages && Array.isArray(evidenceImages) && evidenceImages.length > 0) {
+      try {
+        const uploadedImageUrls = await Promise.all(
+          evidenceImages.map(async (image) => {
+            if (typeof image === "string" && image.startsWith("data:image/")) {
+              // It's a base64 image, upload it
+              return await uploadBase64Images([image], "damaged-inventory/");
+            } else if (typeof image === "string" && (image.startsWith("http://") || image.startsWith("https://"))) {
+              // It's a URL, use it as-is
+              return image;
+            } else {
+              // Invalid format, skip or handle as needed
+              console.warn("Invalid image format skipped:", image);
+              return null;
+            }
+          })
+        );
+
+        // Filter out any null or undefined results
+        report.evidenceImages = uploadedImageUrls.filter(url => url !== null);
+      } catch (uploadError) {
+        console.error("Image upload failed:", uploadError);
+        return res.status(500).json({ message: "Failed to process images" });
+      }
+    }
+
+
+    // Save the updated report
+    await report.save();
+
+    res.status(200).json({
+      message: "Damaged inventory report updated successfully",
+      damagedReport: report,
+    });
+  } catch (error) {
+    console.error("Update Damaged Inventory Report Error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const getDamagedInventoryReports = async (req, res) => {
   try {
     const { productId, variantId } = req.query;
@@ -629,5 +720,61 @@ export const getDamagedInventoryReports = async (req, res) => {
     res
       .status(500)
       .json({ message: "Server error fetching damaged inventory reports" });
+  }
+};
+
+export const getDamagedInventoryReportsById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: "Inventory ID is required" });
+    }
+    const { productId, variantId } = req.query;
+    const warehouseId = req.user.assignedWarehouses._id;
+    const query = {};
+    if (warehouseId) query.warehouse = warehouseId;
+    if (productId) query.product = productId;
+    if (variantId) query.variant = variantId;
+
+    const reports = await damagedInventory.findById(id)
+      .find(query)
+      .populate("warehouse product variant uploadedBy")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({
+      data: reports,
+    });
+  } catch (error) {
+    console.error("Error fetching damaged inventory reports:", error);
+    res
+      .status(500)
+      .json({ message: "Server error fetching damaged inventory reports" });
+  }
+};
+
+export const deleteDamagedInventoryReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: "Inventory ID is required" });
+    }
+
+    const warehouseId = req.user.assignedWarehouses?._id;
+
+    const query = { _id: id };
+    if (warehouseId) query.warehouse = warehouseId;
+
+    // Find and delete the document
+    const report = await damagedInventory.findOneAndDelete(query);
+
+    if (!report) {
+      return res.status(404).json({ message: "Report not found or unauthorized" });
+    }
+
+    res.status(200).json({ message: "Report deleted successfully", data: report });
+  } catch (error) {
+    console.error("Error deleting damaged inventory report:", error);
+    res.status(500).json({ message: "Server error deleting damaged inventory report" });
   }
 };

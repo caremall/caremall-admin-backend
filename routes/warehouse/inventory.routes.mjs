@@ -4,13 +4,16 @@ import {
     createDamagedInventoryReport,
   createTransferRequest,
   decrementInventory,
+  deleteDamagedInventoryReport,
   getAllInventories,
   getDamagedInventoryReports,
+  getDamagedInventoryReportsById,
   getInventoryById,
   getInventoryLogs,
   getTransferRequests,
   incrementInventory,
   toggleFavoriteInventoryLog,
+  updateDamagedInventoryReport,
   updateInventory,
   updateTransferRequestStatus,
 } from "../../controllers/warehouse/inventory.controller.mjs";
@@ -24,7 +27,10 @@ inventoryRouter.post("/transfer/assign-driver/:id",assignDriverToTransferRequest
 
 //damaged inventory report
 inventoryRouter.post("/damaged", createDamagedInventoryReport);
+inventoryRouter.put("/damaged/:id", updateDamagedInventoryReport);
 inventoryRouter.get("/damaged", getDamagedInventoryReports);
+inventoryRouter.get("/damaged/:id", getDamagedInventoryReportsById);
+inventoryRouter.delete("/damaged/:id", deleteDamagedInventoryReport);
 
 inventoryRouter.put("/increment/:id",incrementInventory)
 inventoryRouter.put("/decrement/:id",decrementInventory)
