@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Warehouse from "../../models/Warehouse.mjs";
+import Orders from "../../models/Order.mjs"
 
 // Create a new warehouse
 export const createWarehouse = async (req, res) => {
@@ -151,3 +152,33 @@ export const deleteWarehouses = async (req, res) => {
   }
 };
 
+
+
+export const getOrdersByWarehouseId = async (req, res) => {
+  try {
+    const { warehouseId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(warehouseId)) {
+      return res.status(400).json({ message: "Invalid warehouse ID" });
+    }
+
+    
+    const orders = await Orders.find({ allocatedWarehouse: warehouseId })
+      .populate("user", "fullName email") 
+      .populate({
+        path: "items.product",
+        select: "productName SKU price",
+      })
+      .populate("allocatedBy", "fullName email")
+      .sort({ createdAt: -1 });
+
+    if (!orders || orders.length === 0) {
+      return res.status(404).json({ message: "No orders found for this warehouse" });
+    }
+
+    res.status(200).json({ warehouseId, totalOrders: orders.length, orders });
+  } catch (err) {
+    console.error("Get Orders by Warehouse error:", err);
+    res.status(500).json({ message: "Failed to fetch orders", error: err.message });
+  }
+};
