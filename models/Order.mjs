@@ -30,7 +30,6 @@ const pickItemSchema = new Schema(
       default: "pending",
     },
   },
-  { _id: false }
 );
 
 const packSchema = new Schema(
@@ -44,7 +43,6 @@ const packSchema = new Schema(
     trackingNumber: { type: String },
     packagingMaterial: { type: String }, // box, polybag, etc.
   },
-  { _id: false }
 );
 
 const dispatchSchema = new Schema(
