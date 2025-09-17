@@ -1,4 +1,5 @@
 import Order from "../../models/Order.mjs";
+import mongoose from "mongoose";
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -183,24 +184,76 @@ export const getAllocatedOrders = async (req, res) => {
 export const updatePickedQuantities = async (req, res) => {
   try {
     const orderId = req.params.id;
-    const { pickedItems } = req.body; // [{ pickItemId, pickedQuantity }]
+
+    const { pickedItems } = req.body; // [{ pickItemId (productId), pickedQuantity }]
+
+    if (!Array.isArray(pickedItems) || pickedItems.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "pickedItems must be a non-empty array" });
+    }
 
     const order = await Order.findById(orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    pickedItems.forEach(({ pickItemId, pickedQuantity }) => {
-      const pickItem = order?.pickItems?.id(pickItemId);
-      if (pickItem) {
-        pickItem.pickedQuantity = pickedQuantity;
-        if (pickedQuantity === 0) pickItem.pickStatus = "pending";
-        else if (pickedQuantity < pickItem.requiredQuantity)
-          pickItem.pickStatus = "partial";
-        else pickItem.pickStatus = "picked";
-      }
-    });
 
-    // If all picked, update orderStatus
-    const allPicked = order.pickings.every((pi) => pi.pickStatus === "picked");
+    if (!Array.isArray(order.pickings) || order.pickings.length === 0) {
+      order.pickings = order.items.map((item) => ({
+        product: item.product,
+        variant: item.variant || null,
+        requiredQuantity: item.quantity,
+        pickedQuantity: 0,
+        pickStatus: "pending",
+      }));
+      order.markModified("pickings");
+    }
+
+    for (const { pickItemId, pickedQuantity } of pickedItems) {
+      if (!pickItemId || !mongoose.Types.ObjectId.isValid(pickItemId)) {
+        return res
+          .status(400)
+          .json({ message: `Invalid product ID: ${pickItemId}` });
+      }
+      if (
+        pickedQuantity === undefined ||
+        typeof pickedQuantity !== "number" ||
+        !Number.isInteger(pickedQuantity) ||
+        pickedQuantity < 0
+      ) {
+        return res.status(400).json({
+          message: `Invalid pickedQuantity for product ${pickItemId}: must be non-negative integer`,
+        });
+      }
+
+      const pickItem = order.pickings.find(
+        (pi) => pi.product.toString() === pickItemId
+      );
+
+      if (!pickItem) {
+        return res
+          .status(400)
+          .json({
+            message: `Pick item with product id ${pickItemId} not found`,
+          });
+      }
+
+      if (pickedQuantity > pickItem.requiredQuantity) {
+        return res.status(400).json({
+          message: `Picked quantity ${pickedQuantity} exceeds required quantity ${pickItem.requiredQuantity} for product ${pickItemId}`,
+        });
+      }
+
+      pickItem.pickedQuantity = pickedQuantity;
+      if (pickedQuantity === 0) pickItem.pickStatus = "pending";
+      else if (pickedQuantity < pickItem.requiredQuantity)
+        pickItem.pickStatus = "partial";
+      else pickItem.pickStatus = "picked";
+    }
+
+
+    const allPicked =
+      order.pickings.length > 0 &&
+      order.pickings.every((pi) => pi.pickStatus === "picked");
     if (allPicked) order.orderStatus = "picked";
 
     await order.save();
