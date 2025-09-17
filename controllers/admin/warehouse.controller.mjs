@@ -162,7 +162,6 @@ export const getOrdersByWarehouseId = async (req, res) => {
       return res.status(400).json({ message: "Invalid warehouse ID" });
     }
 
-    
     const orders = await Orders.find({ allocatedWarehouse: warehouseId })
       .populate("user", "fullName email") 
       .populate({
