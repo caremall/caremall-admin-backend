@@ -44,7 +44,7 @@ export const getAllOrders = async (req, res) => {
 
     const orders = await Order.find(query)
       .populate("user", "name email")
-      .populate("items.product", "productName")
+      .populate("items.product", "productName productImages SKU")
       .populate("items.variant", "variantAttributes")
       .populate("allocatedWarehouse", "name location")
       .populate("allocatedBy", "fullName email")
@@ -65,7 +65,7 @@ export const getOrderById = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
       .populate("user", "name email")
-      .populate("items.product", "productName")
+      .populate("items.product", "productName SKU productImages")
       .populate("allocatedWarehouse")
       .populate("allocatedBy")
       .populate("items.variant", "variantName");
@@ -184,6 +184,7 @@ export const getAllocatedOrders = async (req, res) => {
 export const updatePickedQuantities = async (req, res) => {
   try {
     const orderId = req.params.id;
+
     const { pickedItems } = req.body; // [{ pickItemId (productId), pickedQuantity }]
 
     if (!Array.isArray(pickedItems) || pickedItems.length === 0) {
@@ -194,6 +195,7 @@ export const updatePickedQuantities = async (req, res) => {
 
     const order = await Order.findById(orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
+
 
     if (!Array.isArray(order.pickings) || order.pickings.length === 0) {
       order.pickings = order.items.map((item) => ({
@@ -248,6 +250,7 @@ export const updatePickedQuantities = async (req, res) => {
       else pickItem.pickStatus = "picked";
     }
 
+
     const allPicked =
       order.pickings.length > 0 &&
       order.pickings.every((pi) => pi.pickStatus === "picked");
@@ -263,10 +266,42 @@ export const updatePickedQuantities = async (req, res) => {
   }
 };
 
+export const updatePackedQuantities = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { packedItems } = req.body; // [{ packItemId, pickedQuantity }]
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    packedItems.forEach(({ packItemId, packedQuantity }) => {
+      const packItem = order?.packItems?.id(packItemId);
+      if (packItem) {
+        packItem.packedQuantity = packedQuantity;
+        if (packedQuantity === 0) packItem.packStatus = "pending";
+        else if (packedQuantity < packItem.packedQuantity)
+          packItem.packStatus = "partial";
+        else packItem.packStatus = "packed";
+      }
+    });
+
+    // If all picked, update orderStatus
+    const allPacked = order.packings.every((pa) => pa.packStatus === "packed");
+    if (allPacked) order.orderStatus = "packed";
+
+    await order.save();
+    res
+      .status(200)
+      .json({ success: true, message: "Packing updated", data: order });
+  } catch (error) {
+    console.error("Update Packed Quantities Error:", error);
+    res.status(500).json({ message: "Failed to update packed quantities" });
+  }
+};
 
 export const addPackingDetails = async (req, res) => {
   try {
-    const orderId  = req.params.id;
+    const orderId = req.params.id;
     const {
       packerName,
       packageWeight,

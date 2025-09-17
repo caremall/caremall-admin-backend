@@ -11,11 +11,11 @@ export const signup = async (req, res) => {
   const { name, email, password, avatar, phone } = req.body;
   const userExists = await User.findOne({ email });
   if (userExists)
-    return res.status(200).json({ message: "User already exists" });
+    return res.status(409).json({ message: "User already exists" });
 
   const mobileNumberExists = await User.findOne({ phone: phone });
   if (mobileNumberExists)
-    res.status(200).json({ message: "Mobile number is already taken" });
+    res.status(409).json({ message: "Mobile number is already taken" });
   let imageUrl = null;
   if (avatar) {
     imageUrl = await uploadBase64Image(avatar, "user-avatar/");

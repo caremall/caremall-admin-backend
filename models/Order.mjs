@@ -42,6 +42,34 @@ const packSchema = new Schema(
     packingDate: { type: Date, default: Date.now },
     trackingNumber: { type: String },
     packagingMaterial: { type: String }, // box, polybag, etc.
+
+    product: {
+      type: Schema.Types.ObjectId,
+      ref: "Product",
+      required: true,
+    },
+    variant: {
+      type: Schema.Types.ObjectId,
+      ref: "Variant",
+      default: null,
+    },
+
+    pickedQuantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+    packedQuantity: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
+    },
+    packStatus: {
+      type: String,
+      enum: ["pending", "partial", "packed"],
+      default: "pending",
+    },
   },
 );
 
