@@ -13,6 +13,7 @@ const pickItemSchema = new Schema(
       ref: "Variant",
       default: null,
     },
+    pickerName: { type: String, required: true },
     requiredQuantity: {
       type: Number,
       required: true,
@@ -46,7 +47,7 @@ const packSchema = new Schema(
     product: {
       type: Schema.Types.ObjectId,
       ref: "Product",
-      required: true,
+      required: false,
     },
     variant: {
       type: Schema.Types.ObjectId,
@@ -56,7 +57,7 @@ const packSchema = new Schema(
 
     pickedQuantity: {
       type: Number,
-      required: true,
+      required: false,
       min: 1,
     },
     packedQuantity: {
