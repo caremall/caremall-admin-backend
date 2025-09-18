@@ -1,78 +1,52 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const { Schema, model } = mongoose;
-const pickItemSchema = new Schema(
-  {
-    product: {
-      type: Schema.Types.ObjectId,
-      ref: "Product",
-      required: true,
-    },
-    variant: {
-      type: Schema.Types.ObjectId,
-      ref: "Variant",
-      default: null,
-    },
-    pickerName: { type: String, required: true },
-    requiredQuantity: {
-      type: Number,
-      required: true,
-      min: 1,
-    },
-    pickedQuantity: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
-    pickStatus: {
-      type: String,
-      enum: ["pending", "partial", "picked"],
-      default: "pending",
-    },
+const pickItemSchema = new Schema({
+  product: {
+    type: Schema.Types.ObjectId,
+    ref: "Product",
+    required: true,
   },
-);
-
-const packSchema = new Schema(
-  {
-    packerName: { type: String, required: true },
-    packageWeight: { type: Number }, // in kg
-    packageLength: { type: Number }, // in cm
-    packageWidth: { type: Number }, // in cm
-    packageHeight: { type: Number }, // in cm
-    packingDate: { type: Date, default: Date.now },
-    trackingNumber: { type: String },
-    packagingMaterial: { type: String }, // box, polybag, etc.
-
-    product: {
-      type: Schema.Types.ObjectId,
-      ref: "Product",
-      required: false,
-    },
-    variant: {
-      type: Schema.Types.ObjectId,
-      ref: "Variant",
-      default: null,
-    },
-
-    pickedQuantity: {
-      type: Number,
-      required: false,
-      min: 1,
-    },
-    packedQuantity: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
-    packStatus: {
-      type: String,
-      enum: ["pending", "partial", "packed"],
-      default: "pending",
-    },
+  variant: {
+    type: Schema.Types.ObjectId,
+    ref: "Variant",
+    default: null,
   },
-);
+  pickerName: { type: String, required: true },
+  requiredQuantity: {
+    type: Number,
+    required: true,
+    min: 1,
+  },
+  pickedQuantity: {
+    type: Number,
+    required: true,
+    default: 0,
+    min: 0,
+  },
+  pickStatus: {
+    type: String,
+    enum: ["pending", "partial", "picked"],
+    default: "pending",
+  },
+});
+
+const packSchema = new Schema({
+  packerName: { type: String, required: true },
+  packageWeight: { type: Number }, // kg
+  packageLength: { type: Number }, // cm
+  packageWidth: { type: Number }, // cm
+  packageHeight: { type: Number }, // cm
+  trackingNumber: { type: String },
+  packagingMaterial: { type: String }, // box, polybag, etc.
+  packStatus: {
+    type: String,
+    enum: ["pending", "packed"],
+    default: "pending",
+  },
+  packingDate: { type: Date, default: Date.now },
+  packingTime: { type: String }, // add this field explicitly
+});
 
 const dispatchSchema = new Schema(
   {
@@ -92,7 +66,6 @@ const dispatchSchema = new Schema(
   },
   { _id: false }
 );
-
 
 const orderSchema = new Schema(
   {
@@ -239,12 +212,11 @@ const orderSchema = new Schema(
       default: null,
     },
     pickings: [pickItemSchema],
-    packings: [packSchema],
+    packings: packSchema,
     dispatches: [dispatchSchema],
   },
   { timestamps: true }
 );
-
 
 orderSchema.pre("save", async function (next) {
   if (!this.orderId) {
@@ -262,5 +234,4 @@ orderSchema.pre("save", async function (next) {
   next();
 });
 
-
-export default model('Order', orderSchema);
+export default model("Order", orderSchema);

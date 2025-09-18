@@ -8,7 +8,7 @@ import {
   markOrderDelivered,
   markOrderDispatched,
   updateOrderStatus,
-  updatePackedQuantities,
+  updatePackingDetails,
   updatePickedQuantities,
 } from "../../controllers/warehouse/orders.controller.mjs";
 
@@ -17,7 +17,7 @@ const router = Router();
 //pick and pack
 
 router.post("/:id/pick", updatePickedQuantities)
-router.post("/:id/pack/quantity",updatePackedQuantities)
+// router.put("/:orderId/pack/:packingId",updatePackingDetails)
 router.post("/:id/pack", addPackingDetails)
 router.post("/:id/dispatch", markOrderDispatched)
 
