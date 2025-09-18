@@ -185,7 +185,8 @@ export const updatePickedQuantities = async (req, res) => {
   try {
     const orderId = req.params.id;
 
-    const { pickedItems } = req.body; // [{ pickItemId (productId), pickedQuantity }]
+    // pickedItems: [{ pickItemId (productId), pickedQuantity, pickerName }]
+    const { pickedItems, pickerName } = req.body;
 
     if (!Array.isArray(pickedItems) || pickedItems.length === 0) {
       return res
@@ -196,7 +197,6 @@ export const updatePickedQuantities = async (req, res) => {
     const order = await Order.findById(orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-
     if (!Array.isArray(order.pickings) || order.pickings.length === 0) {
       order.pickings = order.items.map((item) => ({
         product: item.product,
@@ -204,16 +204,18 @@ export const updatePickedQuantities = async (req, res) => {
         requiredQuantity: item.quantity,
         pickedQuantity: 0,
         pickStatus: "pending",
+        pickerName: pickerName || null, // default from request if provided
       }));
       order.markModified("pickings");
     }
 
-    for (const { pickItemId, pickedQuantity } of pickedItems) {
+    for (const { pickItemId, pickedQuantity, pickerName: itemPicker } of pickedItems) {
       if (!pickItemId || !mongoose.Types.ObjectId.isValid(pickItemId)) {
         return res
           .status(400)
           .json({ message: `Invalid product ID: ${pickItemId}` });
       }
+
       if (
         pickedQuantity === undefined ||
         typeof pickedQuantity !== "number" ||
@@ -232,9 +234,7 @@ export const updatePickedQuantities = async (req, res) => {
       if (!pickItem) {
         return res
           .status(400)
-          .json({
-            message: `Pick item with product id ${pickItemId} not found`,
-          });
+          .json({ message: `Pick item with product id ${pickItemId} not found` });
       }
 
       if (pickedQuantity > pickItem.requiredQuantity) {
@@ -243,13 +243,15 @@ export const updatePickedQuantities = async (req, res) => {
         });
       }
 
+      // ✅ Update fields
       pickItem.pickedQuantity = pickedQuantity;
+      pickItem.pickerName = itemPicker || pickerName || pickItem.pickerName; // from item or global
+
       if (pickedQuantity === 0) pickItem.pickStatus = "pending";
       else if (pickedQuantity < pickItem.requiredQuantity)
         pickItem.pickStatus = "partial";
       else pickItem.pickStatus = "picked";
     }
-
 
     const allPicked =
       order.pickings.length > 0 &&
@@ -266,27 +268,87 @@ export const updatePickedQuantities = async (req, res) => {
   }
 };
 
+
 export const updatePackedQuantities = async (req, res) => {
   try {
     const orderId = req.params.id;
-    const { packedItems } = req.body; // [{ packItemId, pickedQuantity }]
+    const { packedItems, packerName } = req.body;
+    // packedItems: [{ packItemId (productId), packedQuantity, packerName? }]
+
+    if (!Array.isArray(packedItems) || packedItems.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "packedItems must be a non-empty array" });
+    }
 
     const order = await Order.findById(orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    packedItems.forEach(({ packItemId, packedQuantity }) => {
-      const packItem = order?.packItems?.id(packItemId);
-      if (packItem) {
-        packItem.packedQuantity = packedQuantity;
-        if (packedQuantity === 0) packItem.packStatus = "pending";
-        else if (packedQuantity < packItem.packedQuantity)
-          packItem.packStatus = "partial";
-        else packItem.packStatus = "packed";
+    if (!Array.isArray(order.packings) || order.packings.length === 0) {
+      // initialize packings from pickings
+      if (!order.pickings || order.pickings.length === 0) {
+        return res.status(400).json({ message: "No picking data found" });
       }
-    });
 
-    // If all picked, update orderStatus
-    const allPacked = order.packings.every((pa) => pa.packStatus === "packed");
+      order.packings = order.pickings.map((pick) => ({
+        product: pick.product,
+        variant: pick.variant || null,
+        pickedQuantity: pick.pickedQuantity, // ✅ base packing on picked quantity
+        packedQuantity: 0,
+        packStatus: "pending",
+        packerName: packerName || null, // global default
+      }));
+      order.markModified("packings");
+    }
+
+    for (const { packItemId, packedQuantity, packerName: itemPacker } of packedItems) {
+      if (!packItemId || !mongoose.Types.ObjectId.isValid(packItemId)) {
+        return res
+          .status(400)
+          .json({ message: `Invalid product ID: ${packItemId}` });
+      }
+
+      if (
+        packedQuantity === undefined ||
+        typeof packedQuantity !== "number" ||
+        !Number.isInteger(packedQuantity) ||
+        packedQuantity < 0
+      ) {
+        return res.status(400).json({
+          message: `Invalid packedQuantity for product ${packItemId}: must be non-negative integer`,
+        });
+      }
+
+      const packItem = order.packings.find(
+        (pa) => pa?.product && pa.product.toString() === String(packItemId)
+      );
+
+      if (!packItem) {
+        return res
+          .status(400)
+          .json({ message: `Pack item with product id ${packItemId} not found` });
+      }
+
+      // ✅ validation against pickedQuantity
+      if (packedQuantity > packItem.pickedQuantity) {
+        return res.status(400).json({
+          message: `Packed quantity ${packedQuantity} exceeds picked quantity ${packItem.pickedQuantity} for product ${packItemId}`,
+        });
+      }
+
+      // ✅ update
+      packItem.packedQuantity = packedQuantity;
+      packItem.packerName = itemPacker || packerName || packItem.packerName; // item-level > global > existing
+
+      if (packedQuantity === 0) packItem.packStatus = "pending";
+      else if (packedQuantity < packItem.pickedQuantity)
+        packItem.packStatus = "partial";
+      else packItem.packStatus = "packed";
+    }
+
+    const allPacked =
+      order.packings.length > 0 &&
+      order.packings.every((pa) => pa.packStatus === "packed");
     if (allPacked) order.orderStatus = "packed";
 
     await order.save();
@@ -325,7 +387,12 @@ export const addPackingDetails = async (req, res) => {
       packingDate: packingDate ? new Date(packingDate) : new Date(),
       trackingNumber,
       packagingMaterial,
+      product: req.body.productId,       // required
+      variant: req.body.variantId || null,
+      pickedQuantity: req.body.pickedQuantity, // required
+      packedQuantity: req.body.packedQuantity || 0,
     });
+
 
     order.orderStatus = "packed";
 
