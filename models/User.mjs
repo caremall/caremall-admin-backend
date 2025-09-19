@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
+import { Schema } from 'mongoose';
 
 const userSchema = new mongoose.Schema(
   {
@@ -15,6 +16,10 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    orders: [{
+      type: Schema.Types.ObjectId,
+      ref: "Order",
+    }],
     phone: {
       type: Number,
       unique: true,
@@ -49,13 +54,13 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.pre('save', async function (next) {
-    if (!this.isModified('password')) return next();
-    this.password = await bcrypt.hash(this.password, 10);
-    next();
+  if (!this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
 });
 
 userSchema.methods.comparePassword = function (plainPassword) {
-    return bcrypt.compare(plainPassword, this.password);
+  return bcrypt.compare(plainPassword, this.password);
 };
 
 export default mongoose.model('User', userSchema);

@@ -27,6 +27,7 @@ const adminSchema = new Schema(
       ref: "Role",
       required: true,
     },
+    orders: [{ type: Schema.Types.ObjectId, ref: "Order" }],
     password: {
       type: String,
       required: true,

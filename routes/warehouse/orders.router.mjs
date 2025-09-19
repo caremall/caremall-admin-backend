@@ -8,7 +8,7 @@ import {
   markOrderDelivered,
   markOrderDispatched,
   updateOrderStatus,
-  updatePackingDetails,
+  // updatePackingDetails,
   updatePickedQuantities,
 } from "../../controllers/warehouse/orders.controller.mjs";
 

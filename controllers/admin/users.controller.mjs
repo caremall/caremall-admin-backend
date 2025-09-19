@@ -28,7 +28,9 @@ export const createUser = async (req, res) => {
 export const getAllUsers = async (req, res) => {
   console.log("this function will work");
   try {
-    const users = await Users.find({});
+    const users = await Users.find({})
+    .populate("orders")
+    .exec();
     res.status(200).json({ data: users, meta: {} });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch users", error });

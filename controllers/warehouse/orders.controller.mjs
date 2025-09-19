@@ -181,7 +181,7 @@ export const updatePickedQuantities = async (req, res) => {
     const orderId = req.params.id;
 
     // pickedItems: [{ pickItemId (productId), pickedQuantity, pickerName }]
-    const { pickedItems, pickerName } = req.body;
+    const { pickedItems } = req.body;
 
     if (!Array.isArray(pickedItems) || pickedItems.length === 0) {
       return res
@@ -196,19 +196,16 @@ export const updatePickedQuantities = async (req, res) => {
       order.pickings = order.items.map((item) => ({
         product: item.product,
         variant: item.variant || null,
+        pickerName: null,
         requiredQuantity: item.quantity,
         pickedQuantity: 0,
         pickStatus: "pending",
-        pickerName: pickerName || null, // default from request if provided
+        pickerStatus: "un-assigned",
       }));
       order.markModified("pickings");
     }
 
-    for (const {
-      pickItemId,
-      pickedQuantity,
-      pickerName: itemPicker,
-    } of pickedItems) {
+    for (const { pickItemId, pickedQuantity, pickerName } of pickedItems) {
       if (!pickItemId || !mongoose.Types.ObjectId.isValid(pickItemId)) {
         return res
           .status(400)
@@ -226,27 +223,26 @@ export const updatePickedQuantities = async (req, res) => {
         });
       }
 
+      if (!pickerName || typeof pickerName !== "string" || pickerName.trim() === "") {
+        return res
+          .status(400)
+          .json({ message: `pickerName is required for product ${pickItemId}` });
+      }
+
       const pickItem = order.pickings.find(
         (pi) => pi.product.toString() === pickItemId
       );
 
       if (!pickItem) {
-        return res
-          .status(400)
-          .json({
-            message: `Pick item with product id ${pickItemId} not found`,
-          });
-      }
-
-      if (pickedQuantity > pickItem.requiredQuantity) {
         return res.status(400).json({
-          message: `Picked quantity ${pickedQuantity} exceeds required quantity ${pickItem.requiredQuantity} for product ${pickItemId}`,
+          message: `Pick item with product id ${pickItemId} not found`,
         });
       }
 
       // ✅ Update fields
       pickItem.pickedQuantity = pickedQuantity;
-      pickItem.pickerName = itemPicker || pickerName || pickItem.pickerName; // from item or global
+      pickItem.pickerName = pickerName;
+      pickItem.pickerStatus = "assigned";
 
       if (pickedQuantity === 0) pickItem.pickStatus = "pending";
       else if (pickedQuantity < pickItem.requiredQuantity)
@@ -269,58 +265,59 @@ export const updatePickedQuantities = async (req, res) => {
   }
 };
 
-export const updatePackingDetails = async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const packingId = req.params.packingId; // Assumes packingId passed as a URL param
-    const { status } = req.query;
-    // Destructure fields that can be updated from request body
-    const {
-      packerName,
-      packageWeight,
-      packageLength,
-      packageWidth,
-      packageHeight,
-      packingDate,
-      packingTime,
-      trackingNumber,
-      packagingMaterial,
-    } = req.body;
 
-    // Find the order by ID
-    const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ message: "Order not found" });
+// export const updatePackingDetails = async (req, res) => {
+//   try {
+//     const orderId = req.params.orderId;
+//     const packingId = req.params.packingId; // Assumes packingId passed as a URL param
+//     const { status } = req.query;
+//     // Destructure fields that can be updated from request body
+//     const {
+//       packerName,
+//       packageWeight,
+//       packageLength,
+//       packageWidth,
+//       packageHeight,
+//       packingDate,
+//       packingTime,
+//       trackingNumber,
+//       packagingMaterial,
+//     } = req.body;
 
-    // Find the packing detail by packingId
-    const packing = order.packings.id(packingId);
-    if (!packing)
-      return res.status(404).json({ message: "Packing detail not found" });
+//     // Find the order by ID
+//     const order = await Order.findById(orderId);
+//     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    // Update fields if provided in request body
-    if (packerName !== undefined) packing.packerName = packerName;
-    if (packageWeight !== undefined) packing.packageWeight = packageWeight;
-    if (packageLength !== undefined) packing.packageLength = packageLength;
-    if (packageWidth !== undefined) packing.packageWidth = packageWidth;
-    if (packageHeight !== undefined) packing.packageHeight = packageHeight;
-    if (packingDate !== undefined)
-      packing.packingDate = packingDate ? new Date(packingDate) : new Date();
-    if (packingTime !== undefined) packing.packingTime = packingTime;
-    if (trackingNumber !== undefined) packing.trackingNumber = trackingNumber;
-    if (packagingMaterial !== undefined)
-      packing.packagingMaterial = packagingMaterial;
+//     // Find the packing detail by packingId
+//     const packing = order.packings.id(packingId);
+//     if (!packing)
+//       return res.status(404).json({ message: "Packing detail not found" });
 
-    order.orderStatus = status || "packed";
+//     // Update fields if provided in request body
+//     if (packerName !== undefined) packing.packerName = packerName;
+//     if (packageWeight !== undefined) packing.packageWeight = packageWeight;
+//     if (packageLength !== undefined) packing.packageLength = packageLength;
+//     if (packageWidth !== undefined) packing.packageWidth = packageWidth;
+//     if (packageHeight !== undefined) packing.packageHeight = packageHeight;
+//     if (packingDate !== undefined)
+//       packing.packingDate = packingDate ? new Date(packingDate) : new Date();
+//     if (packingTime !== undefined) packing.packingTime = packingTime;
+//     if (trackingNumber !== undefined) packing.trackingNumber = trackingNumber;
+//     if (packagingMaterial !== undefined)
+//       packing.packagingMaterial = packagingMaterial;
 
-    await order.save();
+//     order.orderStatus = status || "packed";
 
-    res
-      .status(200)
-      .json({ success: true, message: "Packing details updated", data: order });
-  } catch (error) {
-    console.error("Update Packing Details Error:", error);
-    res.status(500).json({ message: "Failed to update packing details" });
-  }
-};
+//     await order.save();
+
+//     res
+//       .status(200)
+//       .json({ success: true, message: "Packing details updated", data: order });
+//   } catch (error) {
+//     console.error("Update Packing Details Error:", error);
+//     res.status(500).json({ message: "Failed to update packing details" });
+//   }
+// };
 
 export const addPackingDetails = async (req, res) => {
   try {
@@ -341,7 +338,7 @@ export const addPackingDetails = async (req, res) => {
     if (!order) return res.status(404).json({ message: "Order not found" });
 
     // Replace or set the single packing detail object
-    order.packing = {
+    order.packings = {
       packerName,
       packageWeight,
       packageLength,
@@ -351,6 +348,7 @@ export const addPackingDetails = async (req, res) => {
       trackingNumber,
       packagingMaterial,
       packingTime,
+      packStatus: "packed",
     };
 
     order.orderStatus = "packed";
