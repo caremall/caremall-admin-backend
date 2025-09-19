@@ -4,8 +4,7 @@ import { uploadBase64Image } from "../../utils/uploadImage.mjs";
 
 export const createCategory = async (req, res) => {
   try {
-    let { type, name, image,isPopular, description, parentId, categoryCode, status } =
-      req.body;
+    let { type, name, image, isPopular, description, parentId, categoryCode, status } = req.body;
 
     parentId = parentId?.trim() || undefined;
 
@@ -13,10 +12,11 @@ export const createCategory = async (req, res) => {
       parentId = undefined;
     }
 
-    // Check name conflict
+    
     const nameConflict = await Category.findOne({ name, parentId });
     if (nameConflict) {
-      return res.status(200).json({
+      return res.status(409).json({
+        success: false,
         message:
           type === "Main"
             ? "A category with the same name already exists."
@@ -24,21 +24,22 @@ export const createCategory = async (req, res) => {
       });
     }
 
-    // Check code conflict
+    
     const codeConflict = await Category.findOne({ categoryCode });
     if (codeConflict) {
-      return res
-        .status(200)
-        .json({ message: "Category code is already in use." });
+      return res.status(409).json({
+        success: false,
+        message: "Category code is already in use.",
+      });
     }
 
-    // Upload image if provided as base64 string
+    
     let uploadedImageUrl = null;
     if (image) {
       uploadedImageUrl = await uploadBase64Image(image, "category-images/");
     }
 
-    // Create category with uploaded image URL
+    
     await Category.create({
       type,
       image: uploadedImageUrl,
@@ -50,18 +51,21 @@ export const createCategory = async (req, res) => {
       status,
     });
 
-    res.status(201).json({ message: "Category created", success: true });
+    return res.status(201).json({
+      success: true,
+      message: "Category created successfully",
+    });
+
   } catch (error) {
     console.error("Create Category error:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 };
+
 
 export const getAllCategories = async (req, res) => {
   try {
@@ -111,20 +115,32 @@ export const getCategoryById = async (req, res) => {
 export const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    let { type, name, image,isPopular, description, parentId, categoryCode, status } =
-      req.body;
+    let {
+      type,
+      name,
+      image,
+      isPopular,
+      description,
+      parentId,
+      categoryCode,
+      status,
+    } = req.body;
 
-    parentId = parentId?.trim() || undefined;
+    
+    parentId = type === "Main" ? undefined : parentId?.trim() || undefined;
 
-    if (!parentId || type === "Main") {
-      parentId = undefined;
-    }
-
+    
     if (!name || !type || !categoryCode) {
-      return res.status(200).json({ message: "Required fields are missing" });
+      return res.status(400).json({ message: "Required fields are missing" });
     }
 
-    // Name conflict check excluding current category
+    
+    const category = await Category.findById(id);
+    if (!category) {
+      return res.status(404).json({ message: "Category not found" });
+    }
+
+    
     const nameConflict = await Category.findOne({
       name,
       parentId,
@@ -132,7 +148,7 @@ export const updateCategory = async (req, res) => {
     });
 
     if (nameConflict) {
-      return res.status(200).json({
+      return res.status(409).json({
         message:
           type === "Main"
             ? "Another category with the same name exists."
@@ -140,52 +156,56 @@ export const updateCategory = async (req, res) => {
       });
     }
 
-    // Category code conflict check excluding current category
+    
     const codeConflict = await Category.findOne({
       categoryCode,
       _id: { $ne: id },
     });
 
     if (codeConflict) {
-      return res.status(200).json({
+      return res.status(409).json({
         message: "Category code is already in use by another category.",
       });
     }
 
-    const category = await Category.findById(id);
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
+    
+    category.name = name;
+    category.type = type;
+    category.description = description;
+    category.status = status;
+    category.isPopular = isPopular ?? false; 
+    category.parentId = parentId;
+    category.categoryCode = categoryCode;
 
-    // Check if image is base64 string (simple check for 'data:image/')
-    if (image && typeof image === "string" && image.startsWith("data:image/")) {
-      // Upload new image and replace the image URL
-      const uploadedImageUrl = await uploadBase64Image(
-        image,
-        "category-images/"
-      );
-      category.image = uploadedImageUrl;
-    } else if (image) {
-      // If image provided but not base64, set as is (could be URL)
-      category.image = image;
+    
+    if (typeof image === "string") {
+      if (image.startsWith("data:image/")) {
+        
+        const uploadedImageUrl = await uploadBase64Image(
+          image,
+          "category-images/"
+        );
+        category.image = uploadedImageUrl;
+      } else if (image === "") {
+    
+        category.image = null;
+      } else {
+       
+        category.image = image;
+      }
     }
-
-    category.name = name ?? category.name;
-    category.type = type ?? category.type;
-    category.description = description ?? category.description;
-    category.status = status ?? category.status;
-    category.isPopular = isPopular ?? category.isPopular;
-    category.parentId =
-      type === "Main" ? undefined : parentId ?? category.parentId;
-    category.categoryCode = categoryCode ?? category.categoryCode;
 
     await category.save();
 
-    res.status(200).json({ message: "Category updated", success: true });
+    return res.status(200).json({ message: "Category updated", success: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to update category" });
+    console.error("Update Category error:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to update category", error: err.message });
   }
 };
+
 
 
 export const changeCategoryStatus = async (req, res) => {
