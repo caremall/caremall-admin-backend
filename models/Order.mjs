@@ -29,6 +29,11 @@ const pickItemSchema = new Schema({
     enum: ["pending", "partial", "picked"],
     default: "pending",
   },
+  pickerStatus: {
+    type: String,
+    enum: ["assigned", "un-assigned"],
+    default: "un-assigned",
+  },
 });
 
 const packSchema = new Schema({
@@ -212,7 +217,7 @@ const orderSchema = new Schema(
       default: null,
     },
     pickings: [pickItemSchema],
-    packings: packSchema,
+    packings: [packSchema],
     dispatches: [dispatchSchema],
   },
   { timestamps: true }
