@@ -338,14 +338,16 @@ const products = await Product.find(query)
   }
 };
 
-
-
-
 export const getProductBySlug = async (req, res) => {
   try {
     const product = await Product.findOne({
       urlSlug: req.params.slug,
-    }).populate("brand category variants");
+    }).populate([
+      { path: "brand" },
+      { path: "category" },
+      { path: "variants" },
+      { path: "productType" }, // 👈 populate productType
+    ]);
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
@@ -366,6 +368,7 @@ export const getProductBySlug = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 export const updateProduct = async (req, res) => {
   try {
