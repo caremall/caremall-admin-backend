@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { getBestSellingProducts, getFilteredProducts, getMostWantedProducts, getNearbyProducts, getNewArrivalProducts, getProductById, getProductsByCategory, getProductSearchSuggestions, getSearchSuggestions } from "../../controllers/user/products.controller.mjs";
+import { getBestSellingProducts, getFilteredProducts, getMostWantedProducts, getNearbyProducts, getNewArrivalProducts, getProductById, getProductsByCategory,
+     getProductSearchSuggestions, getSearchSuggestions } from "../../controllers/user/products.controller.mjs";
 
 const router = Router()
 
