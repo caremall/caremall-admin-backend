@@ -1,4 +1,5 @@
 import damagedInventory from "../../models/damagedInventory.mjs";
+import Inbound from "../../models/Inbound.mjs";
 import Inventory from "../../models/inventory.mjs";
 import inventoryLog from "../../models/inventoryLog.mjs";
 import TransferRequest from "../../models/TransferRequest.mjs";
@@ -112,13 +113,13 @@ export const updateTransferRequestStatus = async (req, res) => {
       // Deduct quantity from source warehouse inventory
       const fromInventoryQuery = transferRequest.variant
         ? {
-          warehouse: transferRequest.fromWarehouse,
-          variant: transferRequest.variant,
-        }
+            warehouse: transferRequest.fromWarehouse,
+            variant: transferRequest.variant,
+          }
         : {
-          warehouse: transferRequest.fromWarehouse,
-          product: transferRequest.product,
-        };
+            warehouse: transferRequest.fromWarehouse,
+            product: transferRequest.product,
+          };
 
       const fromInventory = await Inventory.findOne(fromInventoryQuery);
       if (!fromInventory || fromInventory.availableQuantity < qty) {
@@ -133,13 +134,13 @@ export const updateTransferRequestStatus = async (req, res) => {
       // Add quantity to destination warehouse inventory
       const toInventoryQuery = transferRequest.variant
         ? {
-          warehouse: transferRequest.toWarehouse,
-          variant: transferRequest.variant,
-        }
+            warehouse: transferRequest.toWarehouse,
+            variant: transferRequest.variant,
+          }
         : {
-          warehouse: transferRequest.toWarehouse,
-          product: transferRequest.product,
-        };
+            warehouse: transferRequest.toWarehouse,
+            product: transferRequest.product,
+          };
 
       let toInventory = await Inventory.findOne(toInventoryQuery);
       if (!toInventory) {
@@ -358,7 +359,9 @@ export const decrementInventory = async (req, res) => {
     }
 
     if (inventory.availableQuantity <= 0) {
-      return res.status(400).json({ message: "Inventory cannot go below zero" });
+      return res
+        .status(400)
+        .json({ message: "Inventory cannot go below zero" });
     }
 
     inventory.availableQuantity -= 1;
@@ -480,12 +483,13 @@ export const getInventoryLogs = async (req, res) => {
       }
       const locationName = log.warehouseLocation
         ? log.warehouseLocation.code ||
-        log.warehouseLocation.name ||
-        "Unknown Location"
+          log.warehouseLocation.name ||
+          "Unknown Location"
         : "Unknown Location";
       const userName = log.updatedBy ? log.updatedBy.fullName : "Unknown User";
-      const message = `${qtyChange > 0 ? "+" : "-"
-        }${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
+      const message = `${
+        qtyChange > 0 ? "+" : "-"
+      }${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
 
       return {
         message,
@@ -499,7 +503,8 @@ export const getInventoryLogs = async (req, res) => {
     const favoriteLogs = logsWithMessages.filter((log) => log.isFavorite);
 
     res.status(200).json({
-      data: logsWithMessages, // all logs with message, time, and favorite
+      data: logsWithMessages,
+      logs: logs,
       favorites: favoriteLogs, // only favorite logs
     });
   } catch (error) {
@@ -525,8 +530,9 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
     await inventoryLog.save();
 
     res.status(200).json({
-      message: `Inventory log ${inventoryLog.isFavourite ? "favorited" : "unfavorited"
-        } successfully`,
+      message: `Inventory log ${
+        inventoryLog.isFavourite ? "favorited" : "unfavorited"
+      } successfully`,
       isFavourite: inventoryLog.isFavourite,
       inventoryLog,
     });
@@ -626,29 +632,40 @@ export const updateDamagedInventoryReport = async (req, res) => {
     }
 
     // Find the report by ID and warehouse
-    const report = await damagedInventory.findOne({ _id: id, warehouse: warehouseId });
+    const report = await damagedInventory.findOne({
+      _id: id,
+      warehouse: warehouseId,
+    });
     if (!report) {
-      return res.status(404).json({ message: "Report not found or unauthorized" });
+      return res
+        .status(404)
+        .json({ message: "Report not found or unauthorized" });
     }
 
     // Validate and update fields if provided
     if (currentQuantity !== undefined) {
       if (typeof currentQuantity !== "number" || currentQuantity < 0) {
-        return res.status(400).json({ message: "Current quantity must be a non-negative number" });
+        return res
+          .status(400)
+          .json({ message: "Current quantity must be a non-negative number" });
       }
       report.currentQuantity = currentQuantity;
     }
 
     if (quantityToReport !== undefined) {
       if (typeof quantityToReport !== "number" || quantityToReport <= 0) {
-        return res.status(400).json({ message: "Quantity to report must be a positive number" });
+        return res
+          .status(400)
+          .json({ message: "Quantity to report must be a positive number" });
       }
       report.quantityToReport = quantityToReport;
     }
 
     if (damageType !== undefined) {
       if (typeof damageType !== "string" || damageType.trim() === "") {
-        return res.status(400).json({ message: "Damage type must be a valid string" });
+        return res
+          .status(400)
+          .json({ message: "Damage type must be a valid string" });
       }
       report.damageType = damageType;
     }
@@ -657,14 +674,21 @@ export const updateDamagedInventoryReport = async (req, res) => {
       report.note = note;
     }
 
-    if (evidenceImages && Array.isArray(evidenceImages) && evidenceImages.length > 0) {
+    if (
+      evidenceImages &&
+      Array.isArray(evidenceImages) &&
+      evidenceImages.length > 0
+    ) {
       try {
         const uploadedImageUrls = await Promise.all(
           evidenceImages.map(async (image) => {
             if (typeof image === "string" && image.startsWith("data:image/")) {
               // It's a base64 image, upload it
               return await uploadBase64Images([image], "damaged-inventory/");
-            } else if (typeof image === "string" && (image.startsWith("http://") || image.startsWith("https://"))) {
+            } else if (
+              typeof image === "string" &&
+              (image.startsWith("http://") || image.startsWith("https://"))
+            ) {
               // It's a URL, use it as-is
               return image;
             } else {
@@ -676,13 +700,12 @@ export const updateDamagedInventoryReport = async (req, res) => {
         );
 
         // Filter out any null or undefined results
-        report.evidenceImages = uploadedImageUrls.filter(url => url !== null);
+        report.evidenceImages = uploadedImageUrls.filter((url) => url !== null);
       } catch (uploadError) {
         console.error("Image upload failed:", uploadError);
         return res.status(500).json({ message: "Failed to process images" });
       }
     }
-
 
     // Save the updated report
     await report.save();
@@ -736,7 +759,8 @@ export const getDamagedInventoryReportsById = async (req, res) => {
     if (productId) query.product = productId;
     if (variantId) query.variant = variantId;
 
-    const reports = await damagedInventory.findById(id)
+    const reports = await damagedInventory
+      .findById(id)
       .find(query)
       .populate("warehouse product variant uploadedBy")
       .sort({ createdAt: -1 })
@@ -769,12 +793,171 @@ export const deleteDamagedInventoryReport = async (req, res) => {
     const report = await damagedInventory.findOneAndDelete(query);
 
     if (!report) {
-      return res.status(404).json({ message: "Report not found or unauthorized" });
+      return res
+        .status(404)
+        .json({ message: "Report not found or unauthorized" });
     }
 
-    res.status(200).json({ message: "Report deleted successfully", data: report });
+    res
+      .status(200)
+      .json({ message: "Report deleted successfully", data: report });
   } catch (error) {
     console.error("Error deleting damaged inventory report:", error);
-    res.status(500).json({ message: "Server error deleting damaged inventory report" });
+    res
+      .status(500)
+      .json({ message: "Server error deleting damaged inventory report" });
+  }
+};
+
+export const getLowStockProducts = async (req, res) => {
+  try {
+    const warehouseId = req.user.assignedWarehouses?._id;
+    const query = {
+      $expr: { $lt: ["$availableQuantity", "$minimumQuantity"] },
+    };
+    if (warehouseId) query.warehouse = warehouseId; // Optional: filter by user's warehouse
+    const lowStockInventories = await Inventory.find(query)
+      .populate("warehouse")
+      .populate({
+        path: "variant",
+        populate: {
+          path: "productId",
+          select: "productName",
+        },
+      })
+      .lean();
+
+    // Generate user-friendly alert strings
+    const alerts = lowStockInventories.map((item) => {
+      let productName = "Unknown";
+      let sku = "NO-SKU";
+
+      if (item.variant && typeof item.variant === "object") {
+        sku = item.variant.SKU || sku;
+        if (item.variant.productId && item.variant.productId.productName) {
+          productName = item.variant.productId.productName;
+        }
+      }
+
+      if (item.product && typeof item.product === "object") {
+        productName = item.product.productName || productName;
+        if (item.product.SKU) sku = item.product.SKU;
+      }
+
+      if (item.availableQuantity === 0) {
+        return `OUT OF STOCK ALERT: ${productName} (${sku}) has ran out of stock`;
+      }
+
+      return `LOW STOCK ALERT: ${productName} (${sku}) below minimum threshold ${item.minimumQuantity} - ${item.availableQuantity} units left.`;
+    });
+
+    res.status(200).json({
+      data: alerts,
+    });
+  } catch (err) {
+    console.error("Error fetching low stock inventories:", err);
+    res
+      .status(500)
+      .json({ message: "Server error fetching low stock inventories" });
+  }
+};
+
+export const createInboundJob = async (req, res) => {
+  try {
+    const {
+      jobType,
+      jobNumber,
+      status,
+      date,
+      supplier,
+      allocatedLocation,
+      items,
+    } = req.body;
+
+    const warehouse = req.user.assignedWarehouses._id;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Inbound items are required" });
+    }
+
+    // Create inbound job document
+    const inboundJob = await Inbound.create({
+      jobType,
+      jobNumber,
+      status,
+      date,
+      supplier,
+      allocatedLocation,
+      items,
+      warehouse,
+    });
+
+    // Update inventory quantities for each item
+    for (const item of items) {
+      const productId = item.productId || null;
+      const variantId = item.variantId || null;
+      const receivedQty = item.receivedQuantity || 0;
+
+      if (!warehouse || (!productId && !variantId)) continue;
+
+      const query = {
+        warehouse,
+        ...(productId ? { product: productId } : { variant: variantId }),
+      };
+
+      let inventory = await Inventory.findOne(query);
+      if (!inventory) {
+        inventory = new Inventory({
+          warehouse,
+          product: productId || undefined,
+          variant: variantId || undefined,
+          availableQuantity: 0,
+          minimumQuantity: 0,
+          reorderQuantity: 0,
+          maximumQuantity: 0,
+        });
+      }
+
+      inventory.availableQuantity += receivedQty;
+      inventory.updatedAt = new Date();
+
+      await inventory.save();
+    }
+
+    return res.status(201).json({
+      message: "Inbound job created and inventory updated successfully",
+      inboundJob,
+    });
+  } catch (error) {
+    console.error("Error creating inbound job:", error);
+    return res
+      .status(500)
+      .json({ message: "Server error creating inbound job" });
+  }
+};
+
+export const getInboundJobs = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const warehouseId = req.user.assignedWarehouses._id;
+
+    const query = { warehouse: warehouseId };
+    if (status) query.status = status;
+
+    const inboundJobs = await Inbound.find(query)
+      .populate("supplier")
+      .populate("allocatedLocation")
+      .populate("items.productId")
+      .populate("items.variantId")
+      .lean();
+
+    return res.status(200).json({
+      data: inboundJobs,
+    });
+  } catch (error) {
+    console.error("Error fetching inbound jobs:", error);
+    return res
+      .status(500)
+      .json({ message: "Server error fetching inbound jobs" });
   }
 };
