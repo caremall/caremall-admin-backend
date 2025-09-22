@@ -1,14 +1,19 @@
 
 import mongoose from "mongoose";
 import OfferCard from "./offerCard.mjs";
+import { uploadBase64Image } from "../utils/uploadImage.mjs";
 
 // Create a new OfferCard
 export const createOfferCard = async (req, res) => {
   try {
-    const { title, offerPreviewType, offers, carouselSettings } = req.body;
+    const { title, offerPreviewType, offers, carouselSettings,image } = req.body;
 
     if (!title) {
       return res.status(400).json({ message: "Title is required" });
+    }
+    let imageUrl = "";
+    if(image){
+      imageUrl= await uploadBase64Image(image,"offer-card-images/");
     }
     if (!offerPreviewType) {
       return res
@@ -26,6 +31,7 @@ export const createOfferCard = async (req, res) => {
       offerPreviewType,
       offers,
       carouselSettings,
+      image:imageUrl
     });
 
     res
