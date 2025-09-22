@@ -9,6 +9,7 @@ import {
   getAllInventories,
   getDamagedInventoryReports,
   getDamagedInventoryReportsById,
+  getInboundJobById,
   getInboundJobs,
   getInventoryById,
   getInventoryLogs,
@@ -25,6 +26,7 @@ const inventoryRouter = Router();
 //inbound
 inventoryRouter.post("/inbound",createInboundJob )
 inventoryRouter.get("/inbound",getInboundJobs )
+inventoryRouter.get("/inbound/:id",getInboundJobById )
 //transfer
 inventoryRouter.post("/transfer",createTransferRequest)
 inventoryRouter.put("/transfer/:id",updateTransferRequestStatus)
