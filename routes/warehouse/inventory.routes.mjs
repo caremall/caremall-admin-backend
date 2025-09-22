@@ -2,14 +2,17 @@ import { Router } from "express";
 import {
   assignDriverToTransferRequest,
     createDamagedInventoryReport,
+  createInboundJob,
   createTransferRequest,
   decrementInventory,
   deleteDamagedInventoryReport,
   getAllInventories,
   getDamagedInventoryReports,
   getDamagedInventoryReportsById,
+  getInboundJobs,
   getInventoryById,
   getInventoryLogs,
+  getLowStockProducts,
   getTransferRequests,
   incrementInventory,
   toggleFavoriteInventoryLog,
@@ -19,6 +22,9 @@ import {
 } from "../../controllers/warehouse/inventory.controller.mjs";
 
 const inventoryRouter = Router();
+//inbound
+inventoryRouter.post("/inbound",createInboundJob )
+inventoryRouter.get("/inbound",getInboundJobs )
 //transfer
 inventoryRouter.post("/transfer",createTransferRequest)
 inventoryRouter.put("/transfer/:id",updateTransferRequestStatus)
@@ -37,6 +43,7 @@ inventoryRouter.put("/decrement/:id",decrementInventory)
 inventoryRouter.put("/", updateInventory);
 inventoryRouter.get("/", getAllInventories);
 inventoryRouter.get("/log", getInventoryLogs);
+inventoryRouter.get("/low-stock", getLowStockProducts);
 inventoryRouter.get("/:id", getInventoryById);
 inventoryRouter.put("/:id/favourite", toggleFavoriteInventoryLog);
 

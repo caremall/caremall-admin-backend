@@ -123,7 +123,7 @@ import Brand from "../../models/Brand.mjs";
 
 export const getFilteredProducts = async (req, res) => {
   try {
-    // Parse filters from query params
+    //Parse filters from query params
     const brands = req.query.brands
       ? Array.isArray(req.query.brands)
         ? req.query.brands
@@ -157,6 +157,7 @@ export const getFilteredProducts = async (req, res) => {
 
     // 1. Find all product IDs matching productStatus and brands filter (if any)
     let productMatch = { productStatus: status };
+   
     if (brands.length > 0) {
       productMatch.brand = {
         $in: brands.map((id) => new mongoose.Types.ObjectId(String(id))),
@@ -242,13 +243,14 @@ export const getFilteredProducts = async (req, res) => {
     // 6. Fetch filtered products
     const products = await Product.find(productFilter)
       .select(
-        "_id productName brand category urlSlug productStatus hasVariant sellingPrice defaultVariant productImages"
+        "_id productName brand category urlSlug productStatus hasVariant sellingPrice defaultVariant productImages mrpPrice"
       )
       .populate("brand", "_id brandName imageUrl")
       .sort({ sellingPrice: 1 }).lean();
       const enrichedProducts = await enrichProductsWithDefaultVariants(
         products
       );
+   
 
 
     // 7. Aggregate variant attributes for filter options (all variants in filtered products)
