@@ -2,33 +2,61 @@ import Return from '../../models/Return.mjs';
 import Order from '../../models/Order.mjs';
 
 export const createReturnRequest = async (req, res) => {
-        const userId = req.user._id;
-        const {
-            order,
-            product,
-            variant,
-            quantity,
-            priceAtOrder,
-            reason,
-            refundAmount,
-            comments,
-        } = req.body;
+  const userId = req.user._id;
+  const {
+    order,
+    product,
+    variant,
+    quantity,
+    priceAtOrder,
+    reason,
+    refundAmount,
+    comments,
+  } = req.body;
 
-        const newReturn = await Return.create({
-            order,
-            user: userId,
-            item: {
-                product,
-                variant,
-                quantity,
-                priceAtOrder,
-            },
-            reason,
-            refundAmount,
-            comments,
-        });
+  // Create return record
+  const newReturn = await Return.create({
+    order,
+    user: userId,
+    item: {
+      product,
+      variant,
+      quantity,
+      priceAtOrder,
+    },
+    reason,
+    refundAmount,
+    comments,
+  });
 
-        res.status(201).json({ success: true, return: newReturn });
+  // Fetch warehouse from order (assuming order stores warehouse)
+  const orderDoc = await Order.findById(order);
+  const warehouseId = orderDoc.warehouse; // Ensure your Order model includes warehouse info
+
+  // Find inventory record for this warehouse/product/variant
+  let inventoryRecord;
+  if (variant) {
+    inventoryRecord = await Inventory.findOne({
+      warehouse: warehouseId,
+      variant,
+    });
+  } else {
+    inventoryRecord = await Inventory.findOne({
+      warehouse: warehouseId,
+      product,
+    });
+  }
+
+  // If found, increase availableQuantity
+  if (inventoryRecord) {
+    inventoryRecord.availableQuantity += quantity;
+    await inventoryRecord.save();
+  } else {
+    // Optionally create inventory record if not exists
+    // Or return an error/log if this should never happen
+  }
+
+  res.status(201).json({ success: true, return: newReturn });
 };
 
 export const getUserReturns = async (req, res) => {

@@ -8,6 +8,10 @@ const offerCardSchema = new Schema(
       required: true,
       trim: true,
     },
+    image: {
+      type: String,
+      trim: true,
+    },
     offerPreviewType: {
       type: String,
       enum: ["grid", "carousel", "list"], // define types as per your UI/UX design
