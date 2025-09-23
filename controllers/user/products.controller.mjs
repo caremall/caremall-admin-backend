@@ -129,7 +129,11 @@ export const getFilteredProducts = async (req, res) => {
         ? req.query.brands
         : req.query.brands.split(",")
       : [];
-
+    const categories = req.query.categories
+      ? Array.isArray(req.query.categories)
+        ? req.query.categories
+        : req.query.categories.split(",")
+      : [];
     const minPrice = req.query.minPrice
       ? Number(req.query.minPrice)
       : undefined;
@@ -157,10 +161,16 @@ export const getFilteredProducts = async (req, res) => {
 
     // 1. Find all product IDs matching productStatus and brands filter (if any)
     let productMatch = { productStatus: status };
-   
+
     if (brands.length > 0) {
       productMatch.brand = {
         $in: brands.map((id) => new mongoose.Types.ObjectId(String(id))),
+      };
+    }
+
+    if (categories.length > 0) {
+      productMatch.category = {
+        $in: categories.map((id) => new mongoose.Types.ObjectId(String(id))),
       };
     }
 
@@ -247,10 +257,10 @@ export const getFilteredProducts = async (req, res) => {
       )
       .populate("brand", "_id brandName imageUrl")
       .sort({ sellingPrice: 1 }).lean();
-      const enrichedProducts = await enrichProductsWithDefaultVariants(
-        products
-      );
-   
+    const enrichedProducts = await enrichProductsWithDefaultVariants(
+      products
+    );
+
 
 
     // 7. Aggregate variant attributes for filter options (all variants in filtered products)
@@ -359,12 +369,20 @@ export const getFilteredProducts = async (req, res) => {
       status: "active",
     }).select("_id brandName imageUrl");
 
+    const availableCategoryIds = products.map((p) =>
+      p.category._id ? p.category._id : p.category
+    );
+    const availableCategories = await Category.find({
+      _id: { $in: availableCategoryIds },
+      status: "active",
+    }).select("_id name image");
     // 10. Return filtered products and filter options
     res.status(200).json({
       products: enrichedProducts,
       filterOptions: {
         variantAttributes: variantFilters,
         brands: availableBrands,
+        categories: availableCategories,
         priceRange: { min: minPriceFinal, max: maxPriceFinal },
         discountRange: { min: minDiscountFinal, max: maxDiscountFinal },
       },
@@ -384,9 +402,10 @@ export const getFilteredProducts = async (req, res) => {
   }
 };
 
+
 export const getMostWantedProducts = async (req, res) => {
   try {
-    const products = await Product.find({productStatus: "published", visibility: "visible"}).lean();
+    const products = await Product.find({ productStatus: "published", visibility: "visible" }).lean();
 
     // Enrich products with default variant data
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
@@ -456,7 +475,7 @@ export const getMostWantedProducts = async (req, res) => {
 
 export const getNewArrivalProducts = async (req, res) => {
   try {
-    const products = await Product.find({productStatus: "published", visibility: "visible"}).sort({ createdAt: -1 }).lean();
+    const products = await Product.find({ productStatus: "published", visibility: "visible" }).sort({ createdAt: -1 }).lean();
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
     // Aggregate review stats for all products
@@ -504,7 +523,7 @@ export const getNewArrivalProducts = async (req, res) => {
 
 export const getBestSellingProducts = async (req, res) => {
   try {
-    const bestSellers = await Product.find({productStatus: "published", visibility: "visible"}).sort({ orderCount: -1 }).lean();
+    const bestSellers = await Product.find({ productStatus: "published", visibility: "visible" }).sort({ orderCount: -1 }).lean();
     const enrichedProducts = await enrichProductsWithDefaultVariants(
       bestSellers
     );
