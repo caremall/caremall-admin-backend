@@ -12,6 +12,7 @@ import driverRouter from "./driver.router.mjs";
 import locationRouter from "./location.router.mjs";
 import supplierRouter from "./supplier.router.mjs";
 import returnsRouter from "./returns.router.mjs";
+import dashboardRouter from "./dashboard.router.mjs";
 const warehouseRouter = Router()
 
 warehouseRouter.use("/auth", authRouter);
@@ -27,5 +28,6 @@ warehouseRouter.use("/drivers", verifyToken, driverRouter);
 warehouseRouter.use("/locations", verifyToken, locationRouter);
 warehouseRouter.use("/supplier", verifyToken, supplierRouter);
 warehouseRouter.use("/returns", verifyToken, returnsRouter);
+warehouseRouter.use("/dashboard", verifyToken, dashboardRouter);
 
 export default warehouseRouter;
