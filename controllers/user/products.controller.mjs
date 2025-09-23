@@ -225,7 +225,11 @@ export const getFilteredProducts = async (req, res) => {
         $in: brands.map((id) => new mongoose.Types.ObjectId(String(id))),
       };
     }
-
+    if (categories.length > 0) {
+      productFilter.category = {
+        $in: categories.map((id) => new mongoose.Types.ObjectId(String(id))),
+      };
+    }
     // Filter products without variants by price and discount
     if (minPrice !== undefined && maxPrice !== undefined) {
       productFilter.$or = productFilter.$or.map((cond) => {
@@ -372,6 +376,13 @@ export const getFilteredProducts = async (req, res) => {
     const availableCategoryIds = products.map((p) =>
       p.category._id ? p.category._id : p.category
     );
+    const category = await Category.findById(availableCategoryIds)
+      .select("_id type image name categoryCode status")
+      .populate({
+        path: "subcategories",
+        select: "_id type image name categoryCode status parentId",
+        match: { status: "active" }, // only active subcategories
+      });
     const availableCategories = await Category.find({
       _id: { $in: availableCategoryIds },
       status: "active",
@@ -383,6 +394,7 @@ export const getFilteredProducts = async (req, res) => {
         variantAttributes: variantFilters,
         brands: availableBrands,
         categories: availableCategories,
+        subcategories:category,
         priceRange: { min: minPriceFinal, max: maxPriceFinal },
         discountRange: { min: minDiscountFinal, max: maxDiscountFinal },
       },

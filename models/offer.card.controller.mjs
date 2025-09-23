@@ -83,7 +83,7 @@ export const getOfferCardById = async (req, res) => {
 export const updateOfferCard = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, offerPreviewType, offers, carouselSettings } = req.body;
+    const { title, offerPreviewType, offers, carouselSettings, image } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid OfferCard ID" });
@@ -107,9 +107,21 @@ export const updateOfferCard = async (req, res) => {
     }
     if (carouselSettings !== undefined)
       card.carouselSettings = carouselSettings;
+
+    // if (image) {
+    //   const imageUrl = await uploadBase64Image(image, "offer-card-images/");
+    //   card.image = imageUrl;
+    // }
+
     if (image) {
-      const imageUrl = await uploadBase64Image(image, "offer-card-images/");
-      card.image = imageUrl;
+      if (typeof image === "string" && image.startsWith("data:image/")) {
+        // base64 → upload
+        const imageUrl = await uploadBase64Image(image, "offer-card-images/");
+        card.image = imageUrl;
+      } else {
+        // assume it's a valid URL
+        card.image = image;
+      }
     }
 
     await card.save();
