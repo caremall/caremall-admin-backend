@@ -36,6 +36,7 @@ export const getCategoryProducts = async (req, res) => {
       .select("_id type image name categoryCode status")
       .populate({
         path: "subcategories",
+        
         select: "_id type image name categoryCode status parentId",
         match: { status: "active" }, // only active subcategories
       });
