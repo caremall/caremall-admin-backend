@@ -31,7 +31,7 @@ const inboundItemSchema = new Schema({
   variantId: {
     type: Schema.Types.ObjectId,
     ref: "Product",
-    required: true
+    required: false
   }
 });
 
