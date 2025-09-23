@@ -165,6 +165,7 @@ export const getAllocatedOrders = async (req, res) => {
 
     const orders = await Order.find(query)
       .populate("user")
+      .populate("dispatches.driver")
       .populate("items.product")
       .populate("items.variant")
       .sort({ createdAt: -1 });
@@ -395,6 +396,11 @@ export const markOrderDispatched = async (req, res) => {
 
     order.dispatches.push(newDispatch); // push into dispatches array
     order.orderStatus = "dispatched";
+    if (manifestStatus) {
+      order.manifestStatus = manifestStatus; // update top-level manifest status
+    } else {
+      order.manifestStatus = "Pending";
+    }
 
     await order.save();
 

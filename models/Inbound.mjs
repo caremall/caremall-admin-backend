@@ -23,6 +23,16 @@ const inboundItemSchema = new Schema({
   damageRemarks: String,
   bin: String,
   receiveDate: Date,
+  productId: {
+    type: Schema.Types.ObjectId,
+    ref: "Product",
+    required: true
+  },
+  variantId: {
+    type: Schema.Types.ObjectId,
+    ref: "Product",
+    required: false
+  }
 });
 
 const inboundJobSchema = new Schema(

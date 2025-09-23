@@ -946,6 +946,7 @@ export const getInboundJobs = async (req, res) => {
 
     const inboundJobs = await Inbound.find(query)
       .populate("supplier")
+      .populate("warehouse")
       .populate("allocatedLocation")
       .populate("items.productId")
       .populate("items.variantId")
@@ -959,5 +960,40 @@ export const getInboundJobs = async (req, res) => {
     return res
       .status(500)
       .json({ message: "Server error fetching inbound jobs" });
+  }
+};
+
+export const getInboundJobById = async (req, res) => {
+  try {
+    const { id } = req.params; // inbound job id from route param
+    const warehouseId = req.user.assignedWarehouses._id;
+
+    if (!id) {
+      return res.status(400).json({ message: "Inbound job ID is required" });
+    }
+
+    const inboundJob = await Inbound.findOne({
+      _id: id,
+      warehouse: warehouseId, // make sure user only accesses their warehouse
+    })
+      .populate("supplier")
+      .populate("warehouse")
+      .populate("allocatedLocation")
+      .populate("items.productId")
+      .populate("items.variantId")
+      .lean();
+
+    if (!inboundJob) {
+      return res.status(404).json({ message: "Inbound job not found" });
+    }
+
+    return res.status(200).json({
+      data: inboundJob,
+    });
+  } catch (error) {
+    console.error("Error fetching inbound job by ID:", error);
+    return res
+      .status(500)
+      .json({ message: "Server error fetching inbound job by ID" });
   }
 };
