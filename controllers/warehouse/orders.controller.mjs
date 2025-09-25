@@ -412,3 +412,34 @@ export const markOrderDispatched = async (req, res) => {
     res.status(500).json({ message: "Failed to mark order as dispatched" });
   }
 };
+
+export const markOrderCancelled = async (req, res) => {
+  try {
+    const { status, reason, remarks } = req.body;
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    order.orderStatus = status;
+
+    // ✅ only add cancellation details if status is "cancelled"
+    if (status === "cancelled") {
+      order.cancellationDetails = {
+        cancelledBy: req.warehouse?._id || null, // from admin auth middleware
+        cancelledAt: new Date(),
+        reason,
+        remarks,
+      };
+    }
+
+    await order.save();
+
+    res.status(200).json({ message: "Order status updated", order });
+  } catch (error) {
+    console.error("Update Order Status Error:", error);
+    res.status(500).json({ message: "Failed to update order status" });
+  }
+};

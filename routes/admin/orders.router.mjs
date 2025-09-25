@@ -4,6 +4,7 @@ import {
   deleteOrder,
   getAllOrders,
   getOrderById,
+  markOrderCancelled,
   markOrderDelivered,
   updateOrderStatus,
 } from "../../controllers/admin/orders.controller.mjs";
@@ -22,10 +23,10 @@ router.patch("/:id/status", updateOrderStatus);
 
 // PATCH: mark order as delivered
 router.patch("/:id/deliver", markOrderDelivered);
-
+router.patch("/:id/cancel", markOrderCancelled)
 // DELETE order
 router.delete("/:id", deleteOrder);
 
-router.put("/allocate-warehouse/:id",verifyToken,allocateWarehouse)
+router.put("/allocate-warehouse/:id", verifyToken, allocateWarehouse)
 
 export default router;

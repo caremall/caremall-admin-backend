@@ -280,26 +280,38 @@ export const getOrderById = async (req, res) => {
 
 export const cancelOrder = async (req, res) => {
   try {
+    const { reason, remarks } = req.body; // 👈 take reason from request body
+
     const order = await Order.findOne({
       _id: req.params.id,
       user: req.user._id,
     });
 
-    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
 
-    if (
-      order.orderStatus === "cancelled" ||
-      order.orderStatus === "delivered"
-    ) {
+    if (order.orderStatus === "cancelled" || order.orderStatus === "delivered") {
       return res.status(400).json({ message: "Cannot cancel this order" });
     }
 
+    // ✅ update order status
     order.orderStatus = "cancelled";
+
+    // ✅ save cancellation details
+    order.cancellationDetails = {
+      cancelledBy: req.user._id,  // assuming user object is added by auth middleware
+      cancelledAt: new Date(),
+      reason,
+      remarks
+    };
+
     await order.save();
 
-    res.status(200).json({ success: true, message: "Order cancelled" });
+    res.status(200).json({ success: true, message: "Order cancelled successfully" });
   } catch (err) {
     console.error("Cancel Order Error:", err);
     res.status(500).json({ message: "Failed to cancel order" });
   }
 };
+

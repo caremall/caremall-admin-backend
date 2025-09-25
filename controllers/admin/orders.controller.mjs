@@ -95,6 +95,42 @@ export const updateOrderStatus = async (req, res) => {
   }
 };
 
+export const markOrderCancelled = async (req, res) => {
+  try {
+    const { status, reason, remarks } = req.body;
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    order.orderStatus = status;
+
+
+    // ✅ only add cancellation details if status is "cancelled"
+    if (status === "cancelled") {
+      order.cancellationDetails = {
+        cancelledBy: req.admin?._id || null, // from admin auth middleware
+        cancelledAt: new Date(),
+        reason,
+        remarks,
+      };
+    }
+    if (status === "cancelled" && !reason) {
+      return res.status(400).json({ message: "Reason is required when cancelling an order" });
+    }
+    
+    await order.save();
+
+    res.status(200).json({ message: "Order status updated", order });
+  } catch (error) {
+    console.error("Update Order Status Error:", error);
+    res.status(500).json({ message: "Failed to update order status" });
+  }
+};
+
+
 export const markOrderDelivered = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
