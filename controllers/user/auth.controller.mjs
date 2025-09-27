@@ -43,7 +43,21 @@ export const login = async (req, res) => {
 
   try {
     const user = await User.findOne({ email }).select("+password");
-    if (!user || !(await user.comparePassword(password))) {
+    
+   
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    
+    if (user.isBlocked) {
+      return res.status(403).json({ 
+        message: "Your account has been blocked. Please contact support." 
+      });
+    }
+
+  
+    if (!(await user.comparePassword(password))) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
@@ -56,6 +70,7 @@ export const login = async (req, res) => {
       sameSite: "Strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
+    
     user.password = "";
     res.status(200).json({
       accessToken,
@@ -67,6 +82,7 @@ export const login = async (req, res) => {
     res.status(500).json({ message: "Login failed" });
   }
 };
+
 
 export const sendOtp = async (req, res) => {
   const { email } = req.body;
