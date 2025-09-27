@@ -13,7 +13,7 @@ export const createRole = async (req, res) => {
 
 export const getAllRoles = async (req, res) => {
   try {
-    const { search, permission, page = 1, limit = 10 } = req.query;
+    const { search, permission, status, page, limit } = req.query;
 
     const filter = {};
 
@@ -30,23 +30,46 @@ export const getAllRoles = async (req, res) => {
       filter.permissions = permission;
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // Filter by status
+    if (status && ['draft', 'published'].includes(status)) {
+      filter.status = status;
+    }
+
+    // If no pagination parameters provided, return all data
+    if (!page && !limit) {
+      const roles = await Role.find(filter).sort({ createdAt: -1 });
+      
+      return res.status(200).json({
+        data: roles,
+        meta: {
+          total: roles.length,
+          page: 1,
+          limit: roles.length,
+          totalPages: 1,
+        },
+      });
+    }
+
+    // Use pagination if parameters provided
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
+    const skip = (pageNum - 1) * limitNum;
 
     // Get total for pagination
     const total = await Role.countDocuments(filter);
 
     const roles = await Role.find(filter)
       .skip(skip)
-      .limit(parseInt(limit))
-      .sort({ createdAt: -1 }); // Optional: newest first
+      .limit(limitNum)
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       data: roles,
       meta: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / limit),
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum),
       },
     });
   } catch (err) {
