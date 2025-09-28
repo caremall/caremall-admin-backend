@@ -1,4 +1,5 @@
 import DeliveryBoy from "../../models/DeliveryBoy.mjs";
+import Order from "../../models/Order.mjs";
 import { generateAccessToken, generateRefreshToken } from "../../utils/generateTokens.mjs";
 import { uploadBase64Image } from "../../utils/uploadImage.mjs";
 
@@ -137,5 +138,43 @@ export const loginDeliveryBoy = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getAssignedOrders = async (req, res) => {
+  try {
+    const deliveryBoyId = req.user._id;
+
+    const orders = await Order.find({ deliveryBoy: deliveryBoyId })
+      .populate("user")
+      .populate("items.product")
+      .populate("items.variant")
+      .populate("allocatedWarehouse")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({ success: true, data: orders });
+  } catch (error) {
+    console.error("Get Assigned Orders Error:", error);
+    res.status(500).json({ message: "Failed to fetch assigned orders" });
+  }
+};
+
+export const markOrderDelivered = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.isDelivered = true;
+    order.deliveredAt = new Date();
+    order.orderStatus = "delivered";
+
+    await order.save();
+
+    res.status(200).json({ message: "Order marked as delivered", order });
+  } catch (error) {
+    console.error("Mark Order Delivered Error:", error);
+    res.status(500).json({ message: "Failed to mark order as delivered" });
   }
 };

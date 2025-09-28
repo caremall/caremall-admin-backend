@@ -2,6 +2,7 @@
 import jwt from "jsonwebtoken"
 import Admin from "../models/Admin.mjs"
 import User from "../models/User.mjs"
+import DeliveryBoy from "../models/DeliveryBoy.mjs";
 
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET
 
@@ -59,6 +60,35 @@ export const verifyUserToken = async (req, res, next) => {
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
     req.user = await User.findById(decoded?.userId).select("-password");
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Token expired or invalid" });
+  }
+};
+
+export const verifyDeliveryBoyToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET);
+
+    const deliveryBoy = await DeliveryBoy.findById(decoded?._id).select(
+      "-password"
+    );
+    if (!deliveryBoy) {
+      return res.status(403).json({ message: "Delivery boy not found" });
+    }
+    if (deliveryBoy.isBlocked) {
+      return res
+        .status(403)
+        .json({ message: "Access blocked for this delivery boy" });
+    }
+
+    req.user = deliveryBoy;
     next();
   } catch (err) {
     return res.status(401).json({ message: "Token expired or invalid" });

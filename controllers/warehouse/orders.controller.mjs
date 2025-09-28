@@ -1,3 +1,4 @@
+import DeliveryBoy from "../../models/DeliveryBoy.mjs";
 import Order from "../../models/Order.mjs";
 import mongoose from "mongoose";
 
@@ -224,10 +225,16 @@ export const updatePickedQuantities = async (req, res) => {
         });
       }
 
-      if (!pickerName || typeof pickerName !== "string" || pickerName.trim() === "") {
+      if (
+        !pickerName ||
+        typeof pickerName !== "string" ||
+        pickerName.trim() === ""
+      ) {
         return res
           .status(400)
-          .json({ message: `pickerName is required for product ${pickItemId}` });
+          .json({
+            message: `pickerName is required for product ${pickItemId}`,
+          });
       }
 
       const pickItem = order.pickings.find(
@@ -265,7 +272,6 @@ export const updatePickedQuantities = async (req, res) => {
     res.status(500).json({ message: "Failed to update picked quantities" });
   }
 };
-
 
 // export const updatePackingDetails = async (req, res) => {
 //   try {
@@ -441,5 +447,40 @@ export const markOrderCancelled = async (req, res) => {
   } catch (error) {
     console.error("Update Order Status Error:", error);
     res.status(500).json({ message: "Failed to update order status" });
+  }
+};
+
+export const assignOrderToDeliveryBoy = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { deliveryBoyId } = req.body;
+
+    if (!deliveryBoyId) {
+      return res.status(400).json({ message: "deliveryBoyId is required" });
+    }
+
+    // Check if delivery boy exists
+    const deliveryBoy = await DeliveryBoy.findById(deliveryBoyId);
+    if (!deliveryBoy) {
+      return res.status(404).json({ message: "Delivery boy not found" });
+    }
+
+    // Find order to assign
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    // Assign delivery boy
+    order.deliveryBoy = deliveryBoyId;
+
+    // Optionally update order status, e.g., assigned to delivery
+    order.orderStatus = "assigned";
+
+    await order.save();
+    res.status(200).json({ message: "Order assigned to delivery boy" });
+  } catch (error) {
+    console.error("Assign Order to Delivery Boy Error:", error);
+    res.status(500).json({ message: "Failed to assign order to delivery boy" });
   }
 };
