@@ -5,6 +5,8 @@ import Role from "../../models/Role.mjs"; // Import Role model
 import mongoose from "mongoose";
 
 export const getAllAdmins = async (req, res) => {
+  const Admin = mongoose.model("Admin");
+  console.log(Admin, "admin dataasss");
   try {
     const {
       status,
@@ -39,28 +41,40 @@ export const getAllAdmins = async (req, res) => {
 
     const total = await Admin.countDocuments(query);
 
-    // No pagination - fetch all matching admins
     const admins = await Admin.find(query)
       .populate("role")
-      .populate("assignedWarehouses")
+      .populate({
+        path: "assignedWarehouses",
+        options: { sort: { name: 1 } } // Optional: sort warehouses by name
+      })
       .sort({ [sortBy]: order === "asc" ? 1 : -1 });
 
+    // Transform data to include warehouse count
+    const adminsWithWarehouseCount = admins.map(admin => {
+      const adminObj = admin.toObject();
+      return {
+        ...adminObj,
+        assignedWarehousesCount: admin.assignedWarehouses?.length || 0,
+        // assignedWarehouses will now contain ALL warehouses
+      };
+    });
+
+    console.log("Fetched Admins:", JSON.stringify(adminsWithWarehouseCount, null, 2));
+
     res.status(200).json({
-      data: admins,
+      data: adminsWithWarehouseCount,
       meta: {
         total,
-        perPage: total, // Since all results are returned
-        currentPage: 1, // Only one page
-        totalPages: 1, // Only one page
+        perPage: total,
+        currentPage: 1,
+        totalPages: 1,
         sortBy,
         order,
       },
     });
   } catch (err) {
     console.error(err);
-    res
-      .status(500)
-      .json({ message: "Failed to fetch admins", error: err.message });
+    res.status(500).json({ message: "Failed to fetch admins", error: err.message });
   }
 };
 
