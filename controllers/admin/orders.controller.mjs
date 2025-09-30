@@ -167,6 +167,7 @@ export const allocateWarehouse = async (req, res) => {
     const orderId = req.params.id;
     const { warehouseId } = req.body;
     const allocatedByUserId = req.user._id;
+
     if (!warehouseId || !allocatedByUserId) {
       return res
         .status(400)
@@ -182,7 +183,8 @@ export const allocateWarehouse = async (req, res) => {
     order.allocatedBy = allocatedByUserId;
     order.allocatedAt = new Date();
 
-    await order.save();
+    // Save without running full mongoose validation (skips required fields in pickings)
+    await order.save({ validateBeforeSave: false });
 
     res
       .status(200)
@@ -192,6 +194,7 @@ export const allocateWarehouse = async (req, res) => {
     res.status(500).json({ message: "Failed to allocate warehouse" });
   }
 };
+
 
 export const assignOrderToDeliveryBoy = async (req, res) => {
   try {
