@@ -129,7 +129,7 @@ export const getAllocatedOrders = async (req, res) => {
     if (!warehouseId) {
       return res
         .status(400)
-        .json({ message: "No warehouse assigned to this user" });
+        .json({ message: "No warehouse assigned to this warehouse" });
     }
 
     const { search = "", status, startDate, endDate } = req.query;
