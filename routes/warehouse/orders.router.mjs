@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   addPackingDetails,
+  assignOrderToDeliveryBoy,
   deleteOrder,
   getAllocatedOrders,
   getAllOrders,
@@ -22,6 +23,7 @@ router.post("/:id/pick", updatePickedQuantities)
 router.post("/:id/pack", addPackingDetails)
 router.post("/:id/dispatch", markOrderDispatched)
 router.patch("/:id/cancel", markOrderCancelled)
+router.put("/:id/assign-deliveryboy", assignOrderToDeliveryBoy);
 
 router.get("/allocated",getAllocatedOrders)
 // GET all orders with filter, search, pagination
