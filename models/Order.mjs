@@ -164,6 +164,7 @@ const orderSchema = new Schema(
         "picked",
         "packed",
         "dispatched",
+        "assigned",
         "shipped",
         "delivered",
         "cancelled",
