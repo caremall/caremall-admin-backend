@@ -124,7 +124,11 @@ export const deleteOrder = async (req, res) => {
 
 export const getAllocatedOrders = async (req, res) => {
   try {
-    const warehouseId = req.user.assignedWarehouses?._id;
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
 
     if (!warehouseId) {
       return res
@@ -230,11 +234,9 @@ export const updatePickedQuantities = async (req, res) => {
         typeof pickerName !== "string" ||
         pickerName.trim() === ""
       ) {
-        return res
-          .status(400)
-          .json({
-            message: `pickerName is required for product ${pickItemId}`,
-          });
+        return res.status(400).json({
+          message: `pickerName is required for product ${pickItemId}`,
+        });
       }
 
       const pickItem = order.pickings.find(
