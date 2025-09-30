@@ -6,7 +6,7 @@ const { Schema, model } = mongoose;
 const pinSchema = new Schema(
     {
         pincode: {
-            type: Number,
+            type: [Number],
             required: true,
             unique: true,
             index: true, // makes searching faster
@@ -25,6 +25,11 @@ const pinSchema = new Schema(
             type: String,
             required: true,
             trim: true,
+        },
+        status: {
+            type: String,
+            enum: ["active", "blocked"], // only allow these values
+            default: "active", // default status
         },
     },
     { timestamps: true }

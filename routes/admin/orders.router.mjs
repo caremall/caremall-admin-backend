@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   allocateWarehouse,
+  assignOrderToDeliveryBoy,
   deleteOrder,
   getAllOrders,
   getOrderById,
@@ -28,5 +29,6 @@ router.patch("/:id/cancel", markOrderCancelled)
 router.delete("/:id", deleteOrder);
 
 router.put("/allocate-warehouse/:id", verifyToken, allocateWarehouse)
+router.put("/:id/assign-deliveryboy", assignOrderToDeliveryBoy);
 
 export default router;
