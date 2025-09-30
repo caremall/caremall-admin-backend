@@ -113,13 +113,13 @@ export const updateTransferRequestStatus = async (req, res) => {
       // Deduct quantity from source warehouse inventory
       const fromInventoryQuery = transferRequest.variant
         ? {
-          warehouse: transferRequest.fromWarehouse,
-          variant: transferRequest.variant,
-        }
+            warehouse: transferRequest.fromWarehouse,
+            variant: transferRequest.variant,
+          }
         : {
-          warehouse: transferRequest.fromWarehouse,
-          product: transferRequest.product,
-        };
+            warehouse: transferRequest.fromWarehouse,
+            product: transferRequest.product,
+          };
 
       const fromInventory = await Inventory.findOne(fromInventoryQuery);
       if (!fromInventory || fromInventory.availableQuantity < qty) {
@@ -134,13 +134,13 @@ export const updateTransferRequestStatus = async (req, res) => {
       // Add quantity to destination warehouse inventory
       const toInventoryQuery = transferRequest.variant
         ? {
-          warehouse: transferRequest.toWarehouse,
-          variant: transferRequest.variant,
-        }
+            warehouse: transferRequest.toWarehouse,
+            variant: transferRequest.variant,
+          }
         : {
-          warehouse: transferRequest.toWarehouse,
-          product: transferRequest.product,
-        };
+            warehouse: transferRequest.toWarehouse,
+            product: transferRequest.product,
+          };
 
       let toInventory = await Inventory.findOne(toInventoryQuery);
       if (!toInventory) {
@@ -483,12 +483,13 @@ export const getInventoryLogs = async (req, res) => {
       }
       const locationName = log.warehouseLocation
         ? log.warehouseLocation.code ||
-        log.warehouseLocation.name ||
-        "Unknown Location"
+          log.warehouseLocation.name ||
+          "Unknown Location"
         : "Unknown Location";
       const userName = log.updatedBy ? log.updatedBy.fullName : "Unknown User";
-      const message = `${qtyChange > 0 ? "+" : "-"
-        }${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
+      const message = `${
+        qtyChange > 0 ? "+" : "-"
+      }${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
 
       return {
         message,
@@ -529,16 +530,19 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
     await log.save();
 
     res.status(200).json({
-      message: `Inventory log ${log.isFavorite ? "favorited" : "unfavorited"} successfully`,
+      message: `Inventory log ${
+        log.isFavorite ? "favorited" : "unfavorited"
+      } successfully`,
       isFavorite: log.isFavorite,
       inventoryLog: log,
     });
   } catch (error) {
     console.error("Error toggling favorite inventory log:", error);
-    res.status(500).json({ message: "Server error toggling favorite inventory log" });
+    res
+      .status(500)
+      .json({ message: "Server error toggling favorite inventory log" });
   }
 };
-
 
 export const createDamagedInventoryReport = async (req, res) => {
   try {
@@ -621,7 +625,11 @@ export const updateDamagedInventoryReport = async (req, res) => {
       evidenceImages,
     } = req.body;
 
-    const warehouseId = req.user.assignedWarehouses?._id;
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
 
     if (!warehouseId) {
       return res.status(400).json({ message: "Warehouse ID is required" });
@@ -780,7 +788,11 @@ export const deleteDamagedInventoryReport = async (req, res) => {
       return res.status(400).json({ message: "Inventory ID is required" });
     }
 
-    const warehouseId = req.user.assignedWarehouses?._id;
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
 
     const query = { _id: id };
     if (warehouseId) query.warehouse = warehouseId;
@@ -807,7 +819,12 @@ export const deleteDamagedInventoryReport = async (req, res) => {
 
 export const getLowStockProducts = async (req, res) => {
   try {
-    const warehouseId = req.user.assignedWarehouses?._id;
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
+
     const query = {
       $expr: { $lt: ["$availableQuantity", "$minimumQuantity"] },
     };
