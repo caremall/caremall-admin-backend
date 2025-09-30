@@ -167,7 +167,6 @@ const orderSchema = new Schema(
         "shipped",
         "delivered",
         "cancelled",
-        "assigned",
       ],
       default: "processing",
     },
@@ -217,29 +216,21 @@ const orderSchema = new Schema(
       type: Date,
       default: null,
     },
-    deliveryBoy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "DeliveryBoy",
-      default: null,
-    },
     pickings: [pickItemSchema],
     packings: [packSchema],
     dispatches: [dispatchSchema],
     cancellationDetails: {
-      cancelledBy: {
-        type: Schema.Types.ObjectId,
-        ref: "User",
-        required: false,
-      },
+      cancelledBy: { type: Schema.Types.ObjectId, ref: "User", required: false },
       cancelledAt: { type: Date, default: Date.now },
       reason: {
         type: String,
         required: function () {
-          return this.orderStatus === "cancelled";
-        },
+          return this.orderStatus === 'cancelled';
+        }
       },
       remarks: { type: String, required: false },
-    },
+    }
+
   },
   { timestamps: true }
 );
