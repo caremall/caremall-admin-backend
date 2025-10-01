@@ -113,13 +113,13 @@ export const updateTransferRequestStatus = async (req, res) => {
       // Deduct quantity from source warehouse inventory
       const fromInventoryQuery = transferRequest.variant
         ? {
-            warehouse: transferRequest.fromWarehouse,
-            variant: transferRequest.variant,
-          }
+          warehouse: transferRequest.fromWarehouse,
+          variant: transferRequest.variant,
+        }
         : {
-            warehouse: transferRequest.fromWarehouse,
-            product: transferRequest.product,
-          };
+          warehouse: transferRequest.fromWarehouse,
+          product: transferRequest.product,
+        };
 
       const fromInventory = await Inventory.findOne(fromInventoryQuery);
       if (!fromInventory || fromInventory.availableQuantity < qty) {
@@ -134,13 +134,13 @@ export const updateTransferRequestStatus = async (req, res) => {
       // Add quantity to destination warehouse inventory
       const toInventoryQuery = transferRequest.variant
         ? {
-            warehouse: transferRequest.toWarehouse,
-            variant: transferRequest.variant,
-          }
+          warehouse: transferRequest.toWarehouse,
+          variant: transferRequest.variant,
+        }
         : {
-            warehouse: transferRequest.toWarehouse,
-            product: transferRequest.product,
-          };
+          warehouse: transferRequest.toWarehouse,
+          product: transferRequest.product,
+        };
 
       let toInventory = await Inventory.findOne(toInventoryQuery);
       if (!toInventory) {
@@ -483,13 +483,12 @@ export const getInventoryLogs = async (req, res) => {
       }
       const locationName = log.warehouseLocation
         ? log.warehouseLocation.code ||
-          log.warehouseLocation.name ||
-          "Unknown Location"
+        log.warehouseLocation.name ||
+        "Unknown Location"
         : "Unknown Location";
       const userName = log.updatedBy ? log.updatedBy.fullName : "Unknown User";
-      const message = `${
-        qtyChange > 0 ? "+" : "-"
-      }${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
+      const message = `${qtyChange > 0 ? "+" : "-"
+        }${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
 
       return {
         message,
@@ -530,9 +529,8 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
     await log.save();
 
     res.status(200).json({
-      message: `Inventory log ${
-        log.isFavorite ? "favorited" : "unfavorited"
-      } successfully`,
+      message: `Inventory log ${log.isFavorite ? "favorited" : "unfavorited"
+        } successfully`,
       isFavorite: log.isFavorite,
       inventoryLog: log,
     });
@@ -888,7 +886,11 @@ export const createInboundJob = async (req, res) => {
       items,
     } = req.body;
 
-    const warehouse = req.user.assignedWarehouses._id;
+    const warehouse = req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
+
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Inbound items are required" });
@@ -952,35 +954,55 @@ export const createInboundJob = async (req, res) => {
 
 export const getInboundJobs = async (req, res) => {
   try {
+    console.log('User warehouses:', req.user.assignedWarehouses);
     const { status } = req.query;
-    const warehouseId = req.user.assignedWarehouses._id;
+
+    // Handle array or object
+    let warehouseId;
+    if (Array.isArray(req.user.assignedWarehouses)) {
+      warehouseId = req.user.assignedWarehouses[0]?._id;
+    } else {
+      warehouseId = req.user.assignedWarehouses?._id;
+    }
+
+    if (!warehouseId) {
+      return res.status(400).json({ message: 'No warehouse assigned to user' });
+    }
 
     const query = { warehouse: warehouseId };
     if (status) query.status = status;
 
+    console.log('InboundJob query:', query);
+
     const inboundJobs = await Inbound.find(query)
-      .populate("supplier")
-      .populate("warehouse")
-      .populate("allocatedLocation")
-      .populate("items.productId")
-      .populate("items.variantId")
+      .populate('supplier')
+      .populate('warehouse')
+      .populate('allocatedLocation')
+      .populate('items.productId')
+      .populate('items.variantId')
       .lean();
 
-    return res.status(200).json({
-      data: inboundJobs,
-    });
+    console.log('Found inbound jobs:', inboundJobs.length);
+
+    return res.status(200).json({ data: inboundJobs });
   } catch (error) {
-    console.error("Error fetching inbound jobs:", error);
+    console.error('Error fetching inbound jobs:', error);
     return res
       .status(500)
-      .json({ message: "Server error fetching inbound jobs" });
+      .json({ message: 'Server error fetching inbound jobs' });
   }
 };
+
 
 export const getInboundJobById = async (req, res) => {
   try {
     const { id } = req.params; // inbound job id from route param
-    const warehouseId = req.user.assignedWarehouses._id;
+    let warehouseId;
+    if (Array.isArray(req.user.assignedWarehouses)) {
+      warehouseId = req.user.assignedWarehouses[0]?._id;
+    } else {
+      warehouseId = req.user.assignedWarehouses?._id;
+    }
 
     if (!id) {
       return res.status(400).json({ message: "Inbound job ID is required" });
