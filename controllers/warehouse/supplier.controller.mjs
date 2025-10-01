@@ -71,12 +71,18 @@ export const createSupplier = async (req, res) => {
 export const getSuppliers = async (req, res) => {
   try {
     const assignedWarehouse = req.user?.assignedWarehouses;
-    if (!assignedWarehouse?._id) {
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
+        
+    if (!warehouseId) {
       return res
         .status(400)
         .json({ message: "User is not assigned to any warehouse" });
     }
-    const warehouseId = assignedWarehouse._id;
+
 
     const suppliers = await Supplier.find({ warehouse: warehouseId })
       .populate("warehouse", "name type")
