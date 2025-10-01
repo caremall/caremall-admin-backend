@@ -55,7 +55,7 @@ const packSchema = new Schema({
 
 const dispatchSchema = new Schema(
   {
-    carrier: { type: String },
+    carrier: { type: Schema.Types.ObjectId, ref: "Carrier" },
     driver: { type: Schema.Types.ObjectId, ref: "Driver" },
     vehicleNumber: { type: String },
     dispatchDate: { type: Date, default: Date.now },
@@ -63,6 +63,7 @@ const dispatchSchema = new Schema(
     totalPackages: { type: Number },
     totalWeight: { type: Number },
     destinationHub: { type: String },
+    toLocation: { type: String },
     manifestStatus: {
       type: String,
       enum: ["Pending", "In Transit", "Delivered"],
