@@ -1,5 +1,5 @@
 import express from "express";
-import { getAllOfferCards, getOfferCardById } from "../../models/offer.card.controller.mjs";
+import { getAllOfferCards, getOfferCardById  } from "../../models/offer.card.controller.mjs";
 
 
 const router = express.Router();

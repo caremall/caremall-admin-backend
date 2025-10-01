@@ -28,7 +28,7 @@ inventoryRouter.post("/inbound",createInboundJob )
 inventoryRouter.get("/inbound",getInboundJobs )
 inventoryRouter.get("/inbound/:id",getInboundJobById )
 //transfer
-inventoryRouter.post("/transfer",createTransferRequest)
+inventoryRouter.post("/transfer/create",createTransferRequest)
 inventoryRouter.put("/transfer/:id",updateTransferRequestStatus)
 inventoryRouter.get("/transfer",getTransferRequests)
 inventoryRouter.post("/transfer/assign-driver/:id",assignDriverToTransferRequest)
