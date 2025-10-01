@@ -519,7 +519,7 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
       return res.status(400).json({ message: "Inventory log ID is required" });
     }
 
-    const log = await InventoryLog.findById(id);
+    const log = await inventoryLog.findById(id);
     if (!log) {
       return res.status(404).json({ message: "Inventory log not found" });
     }
