@@ -13,24 +13,22 @@ const transferRequestSchema = new Schema({
     ref: "Warehouse",
     required: true,
   },
-  carrier:{
-    type:String
+  carrier: {
+    type: String,
   },
-  dispatchTime:{
-    type:Date
+  dispatchTime: {
+    type: Date,
   },
-  totalWeight:{
-    type:Number
+  totalWeight: {
+    type: Number,
   },
-  product: {
+ product: [
+  {
     type: Schema.Types.ObjectId,
     ref: "Product",
-  },
-  variant: {
-    type: Schema.Types.ObjectId,
-    ref: "Variant",
-  },
-
+    required: true,
+  }
+],
   quantityRequested: {
     type: Number,
     required: true,
@@ -58,7 +56,7 @@ const transferRequestSchema = new Schema({
   receivedAt: Date,
   manifestStatus: {
     type: String,
-    enum: ["pending","in-transit","delivered"],
+    enum: ["pending", "in-transit", "delivered"],
     default: "pending",
   },
   requestedAt: {
@@ -67,17 +65,12 @@ const transferRequestSchema = new Schema({
   },
 });
 
-// Custom validation to ensure either product or variant is present
+// Custom validation: variant removed, so only product is required
 transferRequestSchema.pre("validate", function (next) {
-  if (!this.product && !this.variant) {
-    next(
-      new Error(
-        "Either product or variant must be specified in transfer request"
-      )
-    );
-  } else {
-    next();
+  if (!this.product) {
+    return next(new Error("Product must be specified in transfer request"));
   }
+  next();
 });
 
 const TransferRequest = model("TransferRequest", transferRequestSchema);

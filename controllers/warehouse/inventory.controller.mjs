@@ -7,72 +7,83 @@ import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 
 export const createTransferRequest = async (req, res) => {
   try {
-    const toWarehouse = req.user.assignedWarehouses._id;
+    console.log("Create Transfer Request - User:", req.user);
+
+    if (!req.user) {
+      return res.status(401).json({ message: "Unauthorized: User not authenticated" });
+    }
+
+    const assignedWarehouses = req.user.assignedWarehouses;
+
+    // If assignedWarehouses is an array, grab first warehouse's _id
+    const toWarehouse = Array.isArray(assignedWarehouses)
+      ? assignedWarehouses[0]?._id
+      : assignedWarehouses?._id;
+
+    if (!toWarehouse) {
+      return res.status(400).json({ message: "User does not have an assigned warehouse" });
+    }
+
     const {
       fromWarehouse,
       product,
-      variant,
       carrier,
       dispatchTime,
       totalWeight,
       quantityRequested,
     } = req.body;
 
-    if (!fromWarehouse || !quantityRequested || quantityRequested <= 0) {
-      return res
-        .status(400)
-        .json({ message: "Required fields missing or invalid" });
+    if (!fromWarehouse || !product || !quantityRequested || quantityRequested <= 0) {
+      return res.status(400).json({ message: "Required fields missing or invalid" });
     }
 
-    if (!product && !variant) {
-      return res
-        .status(400)
-        .json({ message: "Either product or variant must be specified" });
-    }
+    if (!fromWarehouse) {
+  return res.status(400).json({ message: "fromWarehouse is required" });
+}
 
-    if (fromWarehouse.toString() === toWarehouse.toString()) {
-      return res.status(400).json({
-        message: "Source and destination warehouses cannot be the same",
-      });
-    }
+if (!product || !Array.isArray(product) || product.length === 0) {
+  return res.status(400).json({ message: "Product must be a non-empty array" });
+}
 
-    // Optionally verify source warehouse inventory here...
-
+if (!quantityRequested || quantityRequested <= 0) {
+  return res.status(400).json({ message: "quantityRequested must be greater than zero" });
+}
     const transferRequest = await TransferRequest.create({
       fromWarehouse,
       toWarehouse,
       product,
-      variant,
       carrier,
-      dispatchTime,
+      dispatchTime: dispatchTime ? new Date(dispatchTime) : null,
       totalWeight,
       quantityRequested,
     });
 
-    res
-      .status(201)
-      .json({ message: "Transfer request created", transferRequest });
+    res.status(201).json({ message: "Transfer request created", data: transferRequest });
   } catch (err) {
-    console.error("Create transfer request error:", err);
-    res.status(500).json({ message: "Server error creating transfer request" });
+    console.error("Create transfer request error:", err.message, err.stack);
+    res.status(500).json({ message: "Server error creating transfer request", error: err.message });
   }
 };
+
+
 
 export const getTransferRequests = async (req, res) => {
   try {
     const { status } = req.query;
     const query = {};
-    const warehouseId = req.user.assignedWarehouses._id;
+
+    const warehouseId = req.user.assignedWarehouses?._id;
     if (warehouseId) {
       query.$or = [
         { fromWarehouse: warehouseId },
         { toWarehouse: warehouseId },
       ];
     }
+
     if (status) query.status = status;
 
     const transferRequests = await TransferRequest.find(query)
-      .populate("fromWarehouse toWarehouse product variant driver")
+      .populate("fromWarehouse toWarehouse product driver") // ⬅️ Removed 'variant'
       .sort({ requestedAt: -1 })
       .lean();
 
@@ -81,13 +92,13 @@ export const getTransferRequests = async (req, res) => {
     });
   } catch (err) {
     console.error("Get transfer requests error:", err);
-    res
-      .status(500)
-      .json({ message: "Server error fetching transfer requests" });
+    res.status(500).json({
+      message: "Server error fetching transfer requests",
+    });
   }
 };
 
-export const updateTransferRequestStatus = async (req, res) => {
+export const  updateTransferRequestStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
