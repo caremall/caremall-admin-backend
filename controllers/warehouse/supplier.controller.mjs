@@ -16,12 +16,17 @@ export const createSupplier = async (req, res) => {
     } = req.body;
 
     const assignedWarehouse = req.user?.assignedWarehouses;
-    if (!assignedWarehouse?._id) {
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
+
+    if (!warehouseId) {
       return res
         .status(400)
         .json({ message: "User is not assigned to any warehouse" });
     }
-    const warehouseId = assignedWarehouse._id;
 
     // Check existing supplier by name scoped only to assigned warehouse
     const existingSupplier = await Supplier.findOne({
@@ -71,12 +76,18 @@ export const createSupplier = async (req, res) => {
 export const getSuppliers = async (req, res) => {
   try {
     const assignedWarehouse = req.user?.assignedWarehouses;
-    if (!assignedWarehouse?._id) {
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
+
+    if (!warehouseId) {
       return res
         .status(400)
         .json({ message: "User is not assigned to any warehouse" });
     }
-    const warehouseId = assignedWarehouse._id;
+
 
     const suppliers = await Supplier.find({ warehouse: warehouseId })
       .populate("warehouse", "name type")
@@ -131,16 +142,19 @@ export const updateSupplier = async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     const assignedWarehouse = req.user?.assignedWarehouses;
-
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid supplier ID" });
     }
-    if (!assignedWarehouse?._id) {
+    if (!warehouseId) {
       return res
         .status(400)
         .json({ message: "User is not assigned to any warehouse" });
     }
-    const warehouseId = assignedWarehouse._id;
     if (updateData.image && updateData.image.startsWith("data:image/")) {
       const uploadedImageUrl = await uploadBase64Image(
         updateData.image,
@@ -174,16 +188,20 @@ export const deleteSupplier = async (req, res) => {
   try {
     const { id } = req.params;
     const assignedWarehouse = req.user?.assignedWarehouses;
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid supplier ID" });
     }
-    if (!assignedWarehouse?._id) {
+    if (!warehouseId) {
       return res
         .status(400)
         .json({ message: "User is not assigned to any warehouse" });
     }
-    const warehouseId = assignedWarehouse._id;
 
     const supplier = await Supplier.findOneAndDelete({
       _id: id,
@@ -208,16 +226,20 @@ export const deleteSuppliers = async (req, res) => {
   try {
     const { ids } = req.body; // Expect ids as an array of supplier IDs
     const assignedWarehouse = req.user?.assignedWarehouses;
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
 
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ message: "ids must be a non-empty array" });
     }
-    if (!assignedWarehouse?._id) {
+    if (!warehouseId) {
       return res
         .status(400)
         .json({ message: "User is not assigned to any warehouse" });
     }
-    const warehouseId = assignedWarehouse._id;
 
     // Validate all IDs
     const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));

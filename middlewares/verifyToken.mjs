@@ -38,6 +38,8 @@ export const verifyToken = (req, res, next) => {
       }
 
       req.user = admin;
+console.log("Populated admin in middleware:", admin);
+console.log("req.user in getAllocatedOrders:", req.user);
 
       next();
     });
