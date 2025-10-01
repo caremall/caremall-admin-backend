@@ -61,4 +61,6 @@ const inboundJobSchema = new Schema(
   { timestamps: true }
 );
 
-export default model('InboundJob', inboundJobSchema);
+const Inbound = model("InboundJob", inboundJobSchema);
+
+export default Inbound;
