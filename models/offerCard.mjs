@@ -14,13 +14,13 @@ const offerCardSchema = new Schema(
     },
     offerPreviewType: {
       type: String,
-      enum: ["grid", "carousel", "list"], // define types as per your UI/UX design
+      enum: ["grid", "carousel", "list"],
       required: true,
     },
     offers: [
       {
         type: Schema.Types.ObjectId,
-        ref: "Offer", // Reference to Offer model
+        ref: "Offer", 
         required: true,
       },
     ],

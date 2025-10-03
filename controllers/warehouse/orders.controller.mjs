@@ -171,6 +171,8 @@ export const getAllocatedOrders = async (req, res) => {
     const orders = await Order.find(query)
       .populate("user")
       .populate("dispatches.driver")
+      .populate("dispatches.carrier")
+      .populate("allocatedWarehouse")
       .populate("items.product")
       .populate("items.variant")
       .sort({ createdAt: -1 });
@@ -385,6 +387,7 @@ export const markOrderDispatched = async (req, res) => {
       totalWeight,
       destinationHub,
       manifestStatus,
+      toLocation
     } = req.body;
 
     const order = await Order.findById(orderId);
@@ -392,13 +395,14 @@ export const markOrderDispatched = async (req, res) => {
 
     const newDispatch = {
       carrier,
-      driver,
+      driver: driver || null,
       vehicleNumber,
       dispatchDate: dispatchDate ? new Date(dispatchDate) : new Date(),
       dispatchTime,
       totalPackages,
       totalWeight,
       destinationHub,
+      toLocation,
       manifestStatus: manifestStatus || "Pending",
     };
 

@@ -92,18 +92,94 @@ export const getOfferCardById = async (req, res) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid OfferCard ID" });
+      return res.status(400).json({ success: false, message: "Invalid OfferCard ID" });
     }
 
-    const card = await OfferCard.findById(id).populate("offers").lean();
+    const card = await OfferCard.findById(id)
+      .populate({
+        path: "offers",
+        populate: {
+          path: "offerEligibleItems",
+          model: "Product",
+          select: "productId productName shortDescription productDescription brand category sellingPrice mrpPrice productImages urlSlug hasVariant defaultVariant",
+          populate: [
+            {
+              path: "brand",
+              model: "Brand",
+              select: "name"
+            },
+            {
+              path: "category", 
+              model: "Category",
+              select: "name"
+            },
+            {
+              path: "defaultVariant",
+              model: "Variant",
+              select: "varientId variantName sellingPrice mrpPrice productImages sku barcode"
+            },
+            {
+              path: "variants",
+              model: "Variant",
+              select: "variantName sellingPrice mrpPrice productImages sku barcode availableQuantity weight dimensions isDefault"
+            }
+          ]
+        }
+      })
+      .lean();
+
     if (!card) {
-      return res.status(404).json({ message: "OfferCard not found" });
+      return res.status(404).json({ success: false, message: "OfferCard not found" });
     }
 
-    res.status(200).json({ success: true, data: card });
+    // Process products to handle variants
+    if (card.offers && card.offers.length > 0) {
+      card.offers = card.offers.map(offer => {
+        if (offer.offerEligibleItems && offer.offerEligibleItems.length > 0) {
+          offer.offerEligibleItems = offer.offerEligibleItems.map(product => {
+            // Use default variant data if available
+            if (product.hasVariant && product.defaultVariant) {
+              const variantData = product.defaultVariant;
+              console.log(variantData,'this is variant fata')
+              
+              return {
+                ...product,
+                sellingPrice: variantData.sellingPrice,
+                mrpPrice: variantData.mrpPrice,
+                productImages: variantData.productImages?.length > 0 
+                  ? variantData.productImages 
+                  : product.productImages,
+                sku: variantData.sku,
+                barcode: variantData.barcode,
+                availableQuantity: variantData.availableQuantity,
+                weight: variantData.weight,
+                dimensions: variantData.dimensions,
+                variantDetails: variantData,
+                isUsingVariantData: true
+              };
+            }
+            
+            return {
+              ...product,
+              isUsingVariantData: false
+            };
+          });
+        }
+        return offer;
+      });
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      data: card 
+    });
   } catch (error) {
     console.error("Get OfferCard By ID Error:", error);
-    res.status(500).json({ message: "Failed to fetch offer card" });
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch offer card",
+      error: error.message 
+    });
   }
 };
 

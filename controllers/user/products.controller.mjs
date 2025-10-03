@@ -581,6 +581,8 @@ export const getBestSellingProducts = async (req, res) => {
   }
 };
 
+
+
 export const getProductById = async (req, res) => {
   try {
     const product = await Product.findOne({ urlSlug: req.params.slug }).lean();
