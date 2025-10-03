@@ -2,6 +2,8 @@
 import mongoose from "mongoose";
 import OfferCard from "./offerCard.mjs";
 import { uploadBase64Image } from "../utils/uploadImage.mjs";
+import Product from "./Product.mjs";
+import Variant from "./Variant.mjs";
 
 // Create a new OfferCard
 export const createOfferCard = async (req, res) => {
@@ -51,12 +53,38 @@ export const getAllOfferCards = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    for (const card of cards) {
+      for (const offer of card.offers) {
+        if (
+          !offer.offerEligibleItems ||
+          offer.offerEligibleItems.length === 0
+        ) {
+          offer.products = [];
+          continue;
+        }
+
+        const ids = offer.offerEligibleItems.filter((id) =>
+          mongoose.Types.ObjectId.isValid(id)
+        );
+
+        // Fetch products and variants in parallel by all IDs
+        const [products, variants] = await Promise.all([
+          Product.find({ _id: { $in: ids } }).lean(),
+          Variant.find({ _id: { $in: ids } }).lean(),
+        ]);
+
+        // Combine both arrays into one
+        offer.products = products.concat(variants);
+      }
+    }
+
     res.status(200).json({ success: true, data: cards });
   } catch (error) {
     console.error("Get All OfferCards Error:", error);
     res.status(500).json({ message: "Failed to fetch offer cards" });
   }
 };
+
 
 // Get a single OfferCard by ID with populated offers
 export const getOfferCardById = async (req, res) => {
