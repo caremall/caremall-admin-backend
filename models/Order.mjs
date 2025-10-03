@@ -218,6 +218,10 @@ const orderSchema = new Schema(
       type: Date,
       default: null,
     },
+    isFirstOrderDiscountApplied: {
+      type: Boolean,
+      default: false,
+    },
     pickings: [pickItemSchema],
     packings: [packSchema],
     dispatches: [dispatchSchema],
