@@ -94,6 +94,9 @@ export const getOfferCardById = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: "Invalid OfferCard ID" });
     }
+    const enrichedProducts = await enrichProductsWithDefaultVariants(
+      bestSellers
+    );
 
     const card = await OfferCard.findById(id)
       .populate({
@@ -109,7 +112,7 @@ export const getOfferCardById = async (req, res) => {
               select: "name"
             },
             {
-              path: "category", 
+              path: "category",
               model: "Category",
               select: "name"
             },
@@ -140,14 +143,14 @@ export const getOfferCardById = async (req, res) => {
             // Use default variant data if available
             if (product.hasVariant && product.defaultVariant) {
               const variantData = product.defaultVariant;
-              console.log(variantData,'this is variant fata')
-              
+              console.log(variantData, 'this is variant fata')
+
               return {
                 ...product,
                 sellingPrice: variantData.sellingPrice,
                 mrpPrice: variantData.mrpPrice,
-                productImages: variantData.productImages?.length > 0 
-                  ? variantData.productImages 
+                productImages: variantData.productImages?.length > 0
+                  ? variantData.productImages
                   : product.productImages,
                 sku: variantData.sku,
                 barcode: variantData.barcode,
@@ -158,7 +161,7 @@ export const getOfferCardById = async (req, res) => {
                 isUsingVariantData: true
               };
             }
-            
+
             return {
               ...product,
               isUsingVariantData: false
@@ -169,16 +172,16 @@ export const getOfferCardById = async (req, res) => {
       });
     }
 
-    res.status(200).json({ 
-      success: true, 
-      data: card 
+    res.status(200).json({
+      success: true,
+      data: card
     });
   } catch (error) {
     console.error("Get OfferCard By ID Error:", error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: "Failed to fetch offer card",
-      error: error.message 
+      error: error.message
     });
   }
 };
