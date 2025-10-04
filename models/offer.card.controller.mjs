@@ -4,6 +4,7 @@ import OfferCard from "./offerCard.mjs";
 import { uploadBase64Image } from "../utils/uploadImage.mjs";
 import Product from "./Product.mjs";
 import Variant from "./Variant.mjs";
+import { enrichProductsWithDefaultVariants } from "../utils/enrichedProducts.mjs";
 
 // Create a new OfferCard
 export const createOfferCard = async (req, res) => {
@@ -136,41 +137,16 @@ export const getOfferCardById = async (req, res) => {
     }
 
     // Process products to handle variants
-    if (card.offers && card.offers.length > 0) {
-      card.offers = card.offers.map(offer => {
-        if (offer.offerEligibleItems && offer.offerEligibleItems.length > 0) {
-          offer.offerEligibleItems = offer.offerEligibleItems.map(product => {
-            // Use default variant data if available
-            if (product.hasVariant && product.defaultVariant) {
-              const variantData = product.defaultVariant;
-              console.log(variantData, 'this is variant fata')
+   if (card.offers && card.offers.length) {
+     for (const offer of card.offers) {
+       if (offer.offerEligibleItems && offer.offerEligibleItems.length) {
+         offer.offerEligibleItems = await enrichProductsWithDefaultVariants(
+           offer.offerEligibleItems
+         );
+       }
+     }
+   }
 
-              return {
-                ...product,
-                sellingPrice: variantData.sellingPrice,
-                mrpPrice: variantData.mrpPrice,
-                productImages: variantData.productImages?.length > 0
-                  ? variantData.productImages
-                  : product.productImages,
-                sku: variantData.sku,
-                barcode: variantData.barcode,
-                availableQuantity: variantData.availableQuantity,
-                weight: variantData.weight,
-                dimensions: variantData.dimensions,
-                variantDetails: variantData,
-                isUsingVariantData: true
-              };
-            }
-
-            return {
-              ...product,
-              isUsingVariantData: false
-            };
-          });
-        }
-        return offer;
-      });
-    }
 
     res.status(200).json({
       success: true,
