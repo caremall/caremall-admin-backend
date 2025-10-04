@@ -29,8 +29,15 @@ export const addToCart = async (req, res) => {
 
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ message: 'Product not found' });
+    
+    
+    let price;
+    if (product.landingSellPrice) {
+      price = product.landingSellPrice;
+    } else {
+      price = product.sellingPrice;
+    }
 
-    let price = product.sellingPrice;
     if (parsedVariantId) {
       const variant = await Variant.findById(parsedVariantId);
       if (!variant) return res.status(404).json({ message: 'Variant not found' });
