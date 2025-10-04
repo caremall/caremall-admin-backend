@@ -221,34 +221,34 @@ export const createProduct = async (req, res) => {
       }
     }
 
-    if (!hasVariant) {
-      await Inventory.create({
-        warehouse,
-        product: newProduct._id,
-        availableQuantity: availableQuantity || 0,
-        minimumQuantity: minimumQuantity || 0,
-        reorderQuantity: reorderQuantity || 0,
-        maximumQuantity: maximumQuantity || 0,
-        warehouseLocation: warehouseLocation || null,
-      });
-    } else if (hasVariant && createdVariants.length > 0) {
-      for (const createdVariant of createdVariants) {
-        const inputVariant = variants.find(
-          (v) =>
-            v.SKU?.trim() === createdVariant.SKU &&
-            v.barcode?.trim() === createdVariant.barcode
-        );
-        await Inventory.create({
-          warehouse,
-          variant: createdVariant._id,
-          availableQuantity: inputVariant?.availableQuantity || 0,
-          minimumQuantity: inputVariant?.minimumQuantity || 0,
-          reorderQuantity: inputVariant?.reorderQuantity || 0,
-          maximumQuantity: inputVariant?.maximumQuantity || 0,
-          warehouseLocation: inputVariant?.warehouseLocation || null,
-        });
-      }
-    }
+    // if (!hasVariant) {
+    //   await Inventory.create({
+    //     warehouse,
+    //     product: newProduct._id,
+    //     availableQuantity: availableQuantity || 0,
+    //     minimumQuantity: minimumQuantity || 0,
+    //     reorderQuantity: reorderQuantity || 0,
+    //     maximumQuantity: maximumQuantity || 0,
+    //     warehouseLocation: warehouseLocation || null,
+    //   });
+    // } else if (hasVariant && createdVariants.length > 0) {
+    //   for (const createdVariant of createdVariants) {
+    //     const inputVariant = variants.find(
+    //       (v) =>
+    //         v.SKU?.trim() === createdVariant.SKU &&
+    //         v.barcode?.trim() === createdVariant.barcode
+    //     );
+    //     await Inventory.create({
+    //       warehouse,
+    //       variant: createdVariant._id,
+    //       availableQuantity: inputVariant?.availableQuantity || 0,
+    //       minimumQuantity: inputVariant?.minimumQuantity || 0,
+    //       reorderQuantity: inputVariant?.reorderQuantity || 0,
+    //       maximumQuantity: inputVariant?.maximumQuantity || 0,
+    //       warehouseLocation: inputVariant?.warehouseLocation || null,
+    //     });
+    //   }
+    // }
 
     res.status(201).json({
       success: true,
