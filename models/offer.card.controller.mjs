@@ -95,9 +95,6 @@ export const getOfferCardById = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: "Invalid OfferCard ID" });
     }
-    const enrichedProducts = await enrichProductsWithDefaultVariants(
-      bestSellers
-    );
 
     const card = await OfferCard.findById(id)
       .populate({
