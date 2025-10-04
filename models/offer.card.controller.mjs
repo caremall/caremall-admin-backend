@@ -114,15 +114,15 @@ export const getOfferCardById = async (req, res) => {
               select: "name"
             },
             {
-              path: "defaultVariant",
-              model: "Variant",
-              select: "varientId variantName sellingPrice mrpPrice productImages sku barcode"
-            },
-            {
-              path: "variants",
-              model: "Variant",
-              select: "variantName sellingPrice mrpPrice productImages sku barcode availableQuantity weight dimensions isDefault"
-            }
+  path: "defaultVariant",
+  model: "Variant",
+  select: "variantId images sellingPrice mrpPrice SKU barcode isDefault"
+},
+{
+  path: "variants",
+  model: "Variant",
+  select: "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault"
+}
           ]
         }
       })
