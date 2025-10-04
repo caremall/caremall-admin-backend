@@ -125,7 +125,7 @@ import FirstOrder from "../../models/FirstOrder.mjs";
 
 export const getFilteredProducts = async (req, res) => {
   try {
-    //Parse filters from query params
+    // Parse filters from query params
     const brands = req.query.brands
       ? Array.isArray(req.query.brands)
         ? req.query.brands
@@ -150,18 +150,27 @@ export const getFilteredProducts = async (req, res) => {
       : undefined;
     const status = req.query.status || "published";
 
-    // Parse variant attribute filters
-    let filters = req.query.filters;
-    if (filters && typeof filters === "string") {
-      try {
-        filters = JSON.parse(filters);
-      } catch {
-        filters = {};
-      }
-    }
-    filters = filters || {};
+    // Extract variant attribute filters from query params (excluding reserved fields)
+    const reservedFields = [
+      "brands",
+      "categories",
+      "minPrice",
+      "maxPrice",
+      "minDiscount",
+      "maxDiscount",
+      "status",
+      "page",
+      "limit",
+    ];
 
-    // 1. Find all product IDs matching productStatus and brands filter (if any)
+    const filters = {};
+    Object.keys(req.query).forEach((key) => {
+      if (!reservedFields.includes(key)) {
+        filters[key] = req.query[key];
+      }
+    });
+
+    // Build base product match
     let productMatch = { productStatus: status };
 
     if (brands.length > 0) {
@@ -178,7 +187,7 @@ export const getFilteredProducts = async (req, res) => {
 
     const productIds = await Product.find(productMatch).distinct("_id");
 
-    // 2. Build variant attribute filters dynamically
+    // Build variant attribute filters
     const variantAttributeFilters = [];
     for (const [attrName, attrValues] of Object.entries(filters)) {
       const valuesArray = Array.isArray(attrValues)
@@ -194,7 +203,7 @@ export const getFilteredProducts = async (req, res) => {
       });
     }
 
-    // 3. Query variants matching variant attribute filters & price/discount if set
+    // Query variants matching filters
     const variantMatch = { productId: { $in: productIds } };
     if (variantAttributeFilters.length > 0) {
       variantMatch.$and = variantAttributeFilters;
@@ -206,19 +215,25 @@ export const getFilteredProducts = async (req, res) => {
       variantMatch.discountPercent = { $gte: minDiscount, $lte: maxDiscount };
     }
 
-    const filteredVariants = await Variant.find(variantMatch);
+    const filteredVariants = await Variant.find(variantMatch).lean();
 
-    // 4. Collect product IDs from filtered variants
+    // Collect product IDs from filtered variants
     const filteredProductIdsFromVariants = [
       ...new Set(filteredVariants.map((v) => v.productId.toString())),
     ];
 
-    // 5. Build product filters for products without variants or with matching variants
+    // Build product filter
     let productFilter = {
       productStatus: status,
       $or: [
         { hasVariant: false },
-        { _id: { $in: filteredProductIdsFromVariants } },
+        {
+          _id: {
+            $in: filteredProductIdsFromVariants.map(
+              (id) => new mongoose.Types.ObjectId(id)
+            ),
+          },
+        },
       ],
     };
 
@@ -232,6 +247,7 @@ export const getFilteredProducts = async (req, res) => {
         $in: categories.map((id) => new mongoose.Types.ObjectId(String(id))),
       };
     }
+
     // Filter products without variants by price and discount
     if (minPrice !== undefined && maxPrice !== undefined) {
       productFilter.$or = productFilter.$or.map((cond) => {
@@ -256,20 +272,85 @@ export const getFilteredProducts = async (req, res) => {
       });
     }
 
-    // 6. Fetch filtered products
+    // Fetch filtered products
     const products = await Product.find(productFilter)
       .select(
-        "_id productName brand category urlSlug productStatus hasVariant sellingPrice defaultVariant productImages mrpPrice"
+        "_id productName brand category urlSlug productStatus hasVariant sellingPrice defaultVariant productImages mrpPrice SKU barcode costPrice discountPercent taxRate landingSellPrice"
       )
       .populate("brand", "_id brandName imageUrl")
-      .sort({ sellingPrice: 1 }).lean();
-    const enrichedProducts = await enrichProductsWithDefaultVariants(
-      products
-    );
+      .populate("category", "_id name image")
+      .sort({ sellingPrice: 1 })
+      .lean();
 
+    // Build flat products array
+    const flatProducts = [];
+    const variantsByProductId = filteredVariants.reduce((acc, v) => {
+      const pid = v.productId.toString();
+      if (!acc[pid]) acc[pid] = [];
+      acc[pid].push(v);
+      return acc;
+    }, {});
 
+    for (const product of products) {
+      if (product.hasVariant) {
+        // Get matching variants for this product
+        const matchingVariants =
+          variantsByProductId[product._id.toString()] || [];
 
-    // 7. Aggregate variant attributes for filter options (all variants in filtered products)
+        // Add each variant as a separate product entry
+        matchingVariants.forEach((variant) => {
+          flatProducts.push({
+            _id: variant._id,
+            type: "variant",
+            productId: product._id,
+            productName: product.productName,
+            brand: product.brand,
+            category: product.category,
+            urlSlug: product.urlSlug,
+            productStatus: product.productStatus,
+            hasVariant: true,
+            variantAttributes: variant.variantAttributes,
+            SKU: variant.SKU,
+            barcode: variant.barcode,
+            productImages:
+              variant.images && variant.images.length
+                ? variant.images
+                : product.productImages,
+            costPrice: variant.costPrice,
+            sellingPrice: variant.sellingPrice,
+            mrpPrice: variant.mrpPrice,
+            landingSellPrice: variant.landingSellPrice,
+            discountPercent: variant.discountPercent,
+            taxRate: variant.taxRate,
+            isDefault: variant.isDefault,
+            variantId: variant.variantId,
+          });
+        });
+      } else {
+        // Add product without variant
+        flatProducts.push({
+          _id: product._id,
+          type: "product",
+          productName: product.productName,
+          brand: product.brand,
+          category: product.category,
+          urlSlug: product.urlSlug,
+          productStatus: product.productStatus,
+          hasVariant: false,
+          SKU: product.SKU,
+          barcode: product.barcode,
+          productImages: product.productImages,
+          costPrice: product.costPrice,
+          sellingPrice: product.sellingPrice,
+          mrpPrice: product.mrpPrice,
+          landingSellPrice: product.landingSellPrice,
+          discountPercent: product.discountPercent,
+          taxRate: product.taxRate,
+        });
+      }
+    }
+
+    // Aggregate variant attributes for filter options
     const variantAttributesAggregation = await Variant.aggregate([
       { $match: { productId: { $in: productIds } } },
       { $unwind: "$variantAttributes" },
@@ -289,14 +370,15 @@ export const getFilteredProducts = async (req, res) => {
       },
       { $sort: { _id: 1 } },
     ]);
+
     const variantFilters = {};
     variantAttributesAggregation.forEach((attr) => {
-      variantFilters[attr._id] = attr.values.filter(
-        (v) => v != null && v !== ""
-      );
+      variantFilters[attr._id] = attr.values
+        .filter((v) => v != null && v !== "")
+        .sort();
     });
 
-    // 8. Aggregate price and discount ranges from products and variants for filter UI
+    // Aggregate price and discount ranges
     const productPriceRange = await Product.aggregate([
       {
         $match: {
@@ -315,6 +397,7 @@ export const getFilteredProducts = async (req, res) => {
         },
       },
     ]);
+
     const variantProductIds = products
       .filter((p) => p.hasVariant)
       .map((p) => p._id);
@@ -336,6 +419,7 @@ export const getFilteredProducts = async (req, res) => {
         },
       },
     ]);
+
     const combinedMinPrice = Math.min(
       productPriceRange[0]?.minPrice ?? Infinity,
       variantPriceRange[0]?.minPrice ?? Infinity
@@ -352,6 +436,7 @@ export const getFilteredProducts = async (req, res) => {
       productPriceRange[0]?.maxDiscount ?? 0,
       variantPriceRange[0]?.maxDiscount ?? 0
     );
+
     const minPriceFinal =
       Number.isFinite(combinedMinPrice) && combinedMinPrice !== Infinity
         ? combinedMinPrice
@@ -368,41 +453,54 @@ export const getFilteredProducts = async (req, res) => {
       ? combinedMaxDiscount
       : minDiscountFinal;
 
-    // 9. Get all brands for filter dropdown based on filtered products
-    const availableBrandIds = products.map((p) => p.brand._id);
+    // Get available brands
+    const availableBrandIds = [
+      ...new Set(products.map((p) => p.brand._id.toString())),
+    ];
     const availableBrands = await Brand.find({
       _id: { $in: availableBrandIds },
       status: "active",
     }).select("_id brandName imageUrl");
 
-    const availableCategoryIds = products.map((p) =>
-      p.category._id ? p.category._id : p.category
-    );
-    const category = await Category.findById(availableCategoryIds)
-      .select("_id type image name categoryCode status")
-      .populate({
-        path: "subcategories",
-        select: "_id type image name categoryCode status parentId",
-        match: { status: "active" }, // only active subcategories
-      });
+    // Get available categories
+    const availableCategoryIds = [
+      ...new Set(
+        products.map((p) =>
+          p.category._id ? p.category._id.toString() : p.category.toString()
+        )
+      ),
+    ];
     const availableCategories = await Category.find({
       _id: { $in: availableCategoryIds },
       status: "active",
     }).select("_id name image");
-    // 10. Return filtered products and filter options
+
+    // Get category with subcategories (if single category)
+    let categoryWithSubcategories = null;
+    if (categories.length === 1) {
+      categoryWithSubcategories = await Category.findById(categories[0])
+        .select("_id type image name categoryCode status")
+        .populate({
+          path: "subcategories",
+          select: "_id type image name categoryCode status parentId",
+          match: { status: "active" },
+        });
+    }
+
     res.status(200).json({
-      products: enrichedProducts,
+      products: flatProducts,
       filterOptions: {
         variantAttributes: variantFilters,
         brands: availableBrands,
         categories: availableCategories,
-        subcategories:category,
+        subcategories: categoryWithSubcategories,
         priceRange: { min: minPriceFinal, max: maxPriceFinal },
         discountRange: { min: minDiscountFinal, max: maxDiscountFinal },
       },
       selectedFilters: {
         filters,
         brands,
+        categories,
         priceRange: { min: minPrice ?? 0, max: maxPrice ?? maxPriceFinal },
         discountRange: {
           min: minDiscount ?? 0,

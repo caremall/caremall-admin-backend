@@ -38,10 +38,11 @@ export const addToCart = async (req, res) => {
       price = product.sellingPrice;
     }
 
+
     if (parsedVariantId) {
       const variant = await Variant.findById(parsedVariantId);
       if (!variant) return res.status(404).json({ message: 'Variant not found' });
-      price = variant.sellingPrice || price;
+      price = variant.landingSellPrice ? variant.landingSellPrice : variant.sellingPrice || price;
     }
 
     const itemTotal = price * quantity;
@@ -181,7 +182,7 @@ export const getCart = async (req, res) => {
   try {
     const userId = req.user._id;
     const cart = await Cart.findOne({ user: userId })
-      .populate('items.product', 'productName productImages sellingPrice urlSlug mrpPrice sellingPrice hasVariant')
+      .populate('items.product', 'productName productImages sellingPrice urlSlug mrpPrice sellingPrice landingSellPrice hasVariant')
       .populate('items.variant');
 
     if (!cart) return res.status(200).json({ items: [], cartTotal: 0 });
