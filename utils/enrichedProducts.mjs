@@ -37,6 +37,7 @@ export const enrichProductsWithDefaultVariants = async (products) => {
             : product.productImages,
         costPrice: defaultVariant.costPrice ?? product.costPrice,
         sellingPrice: defaultVariant.sellingPrice ?? product.sellingPrice,
+        landingSellPrice: defaultVariant.landingSellPrice ?? product.landingSellPrice,
         mrpPrice: defaultVariant.mrpPrice ?? product.mrpPrice,
         discountPercent:
           defaultVariant.discountPercent ?? product.discountPercent,

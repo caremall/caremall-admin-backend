@@ -69,6 +69,10 @@ const productSchema = new Schema(
         return this.hasVariant === false;
       },
     },
+    landingSellPrice: {
+      type: Number,
+      required: false
+    },
 
     discountPercent: Number,
     taxRate: Number,

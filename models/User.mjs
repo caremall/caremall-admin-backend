@@ -49,6 +49,10 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    firstOrderDiscount: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

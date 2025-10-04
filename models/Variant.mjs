@@ -45,6 +45,11 @@ const variantSchema = new Schema(
 
     mrpPrice: { type: Number, required: true },
 
+    landingSellPrice: {
+      type: Number,
+      required: false
+    },
+
     discountPercent: { type: Number },
 
     taxRate: Number,
