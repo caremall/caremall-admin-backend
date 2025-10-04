@@ -110,7 +110,7 @@ export const getOfferCardById = async (req, res) => {
               select: "name"
             },
             {
-              path: "category", 
+              path: "category",
               model: "Category",
               select: "name"
             },
@@ -145,16 +145,16 @@ export const getOfferCardById = async (req, res) => {
    }
 
 
-    res.status(200).json({ 
-      success: true, 
-      data: card 
+    res.status(200).json({
+      success: true,
+      data: card
     });
   } catch (error) {
     console.error("Get OfferCard By ID Error:", error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: "Failed to fetch offer card",
-      error: error.message 
+      error: error.message
     });
   }
 };
