@@ -453,39 +453,39 @@ export const updateProduct = async (req, res) => {
     }
 
     // ---------- UNIQUENESS CHECKS ----------
-    const checkUnique = async (field, value, model, excludeId, fieldName) => {
-      if (!value) return;
-      const exists = await model.findOne({ [field]: value.trim(), _id: { $ne: excludeId } });
-      if (exists) throw new Error(`${fieldName} is already in use`);
-    };
+    // const checkUnique = async (field, value, model, excludeId, fieldName) => {
+    //   if (!value) return;
+    //   const exists = await model.findOne({ [field]: value.trim(), _id: { $ne: excludeId } });
+    //   if (exists) throw new Error(`${fieldName} is already in use`);
+    // };
 
-    if (productName && productName.trim() !== existingProduct.productName)
-      await checkUnique("productName", productName, Product, productId, "Product name");
+    // if (productName && productName.trim() !== existingProduct.productName)
+    //   await checkUnique("productName", productName, Product, productId, "Product name");
 
-    if (urlSlug && urlSlug.trim() !== existingProduct.urlSlug)
-      await checkUnique("urlSlug", urlSlug, Product, productId, "Slug");
+    // if (urlSlug && urlSlug.trim() !== existingProduct.urlSlug)
+    //   await checkUnique("urlSlug", urlSlug, Product, productId, "Slug");
 
-    if (!hasVariant && SKU && SKU.trim() !== existingProduct.SKU)
-      await checkUnique("SKU", SKU, Product, productId, "SKU");
+    // if (!hasVariant && SKU && SKU.trim() !== existingProduct.SKU)
+    //   await checkUnique("SKU", SKU, Product, productId, "SKU");
 
-    if (!hasVariant && barcode && barcode.trim() !== existingProduct.barcode)
-      await checkUnique("barcode", barcode, Product, productId, "Barcode");
+    // if (!hasVariant && barcode && barcode.trim() !== existingProduct.barcode)
+    //   await checkUnique("barcode", barcode, Product, productId, "Barcode");
 
     if (hasVariant && Array.isArray(variants)) {
       for (let variant of variants) {
         let existingVariant = variant._id ? await Variant.findById(variant._id) : null;
 
-        if (
-          variant.SKU &&
-          (!existingVariant || variant.SKU.trim() !== existingVariant.SKU)
-        )
-          await checkUnique("SKU", variant.SKU, Variant, variant._id, `Variant SKU '${variant.SKU}'`);
+        // if (
+        //   variant.SKU &&
+        //   (!existingVariant || variant.SKU.trim() !== existingVariant.SKU)
+        // )
+        //   await checkUnique("SKU", variant.SKU, Variant, variant._id, `Variant SKU '${variant.SKU}'`);
 
-        if (
-          variant.barcode &&
-          (!existingVariant || variant.barcode.trim() !== existingVariant.barcode)
-        )
-          await checkUnique("barcode", variant.barcode, Variant, variant._id, `Variant Barcode '${variant.barcode}'`);
+        // if (
+        //   variant.barcode &&
+        //   (!existingVariant || variant.barcode.trim() !== existingVariant.barcode)
+        // )
+        //   await checkUnique("barcode", variant.barcode, Variant, variant._id, `Variant Barcode '${variant.barcode}'`);
       }
     }
 

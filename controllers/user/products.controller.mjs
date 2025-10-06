@@ -271,7 +271,7 @@ export const getFilteredProducts = async (req, res) => {
         return cond;
       });
     }
-
+    // const enrichedProducts = await enrichProductsWithDefaultVariants(products);
     // Fetch filtered products
     const products = await Product.find(productFilter)
       .select(
