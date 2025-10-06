@@ -17,7 +17,7 @@ import highlightsRouter from "./highlights.router.mjs";
 import offerCardRouter from "./offer.card.routes.mjs";
 import photoGalleryRouter from "./photo.gallery.router.mjs";
 import productCardRouter from "./product.card.router.mjs";
-import firstOrderRouter from "./firstorder.router.mjs";
+// import firstOrderRouter from "./firstorder.router.mjs";
 const userRouter = Router()
 
 userRouter.use("/auth", authRouter);
@@ -25,7 +25,7 @@ userRouter.use("/upload", uploadRouter);
 userRouter.use("/products", productsRouter);
 userRouter.use("/cart", cartRouter);
 
-userRouter.use("/first-order-amount", firstOrderRouter);
+// userRouter.use("/first-order-amount", firstOrderRouter);
 userRouter.use("/wishlist", wishlistRouter);
 userRouter.use("/addresses", addressRouter);
 userRouter.use("/orders", ordersRouter);
