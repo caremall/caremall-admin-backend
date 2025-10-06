@@ -182,7 +182,7 @@ export const getCart = async (req, res) => {
   try {
     const userId = req.user._id;
     const cart = await Cart.findOne({ user: userId })
-      .populate('items.product', 'productName productImages sellingPrice urlSlug mrpPrice sellingPrice landingSellPrice hasVariant')
+      .populate('items.product', 'productName productImages sellingPrice urlSlug mrpPrice sellingPrice landingSellPrice hasVariant discountPercent')
       .populate('items.variant');
 
     if (!cart) return res.status(200).json({ items: [], cartTotal: 0 });
