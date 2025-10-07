@@ -15,6 +15,7 @@ import {
   getInventoryLogs,
   getLowStockProducts,
   getTransferRequests,
+  getUpdatedInventories,
   incrementInventory,
   toggleFavoriteInventoryLog,
   updateDamagedInventoryReport,
@@ -43,6 +44,7 @@ inventoryRouter.delete("/damaged/:id", deleteDamagedInventoryReport);
 inventoryRouter.put("/increment/:id",incrementInventory)
 inventoryRouter.put("/decrement/:id",decrementInventory)
 inventoryRouter.put("/", updateInventory);
+inventoryRouter.get("/updated-inventory", getUpdatedInventories);
 inventoryRouter.get("/", getAllInventories);
 inventoryRouter.get("/log", getInventoryLogs);
 inventoryRouter.get("/low-stock", getLowStockProducts);
