@@ -5,10 +5,14 @@ import { uploadBase64Image } from "../../utils/uploadImage.mjs";
 // Create a new driver
 export const createDriver = async (req, res) => {
   try {
-    const { name, location, vehicleNumber,image, notes } =
+    const { name, location, vehicleNumber, image, notes } =
       req.body;
 
-    const warehouse = req.user.assignedWarehouses._id;
+    const warehouse =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
 
     if (!name || !vehicleNumber || !warehouse) {
       return res
@@ -17,8 +21,8 @@ export const createDriver = async (req, res) => {
     }
 
     let imageUrl = "";
-    if(image){
-        imageUrl=await uploadBase64Image(image, "driver-images/");
+    if (image) {
+      imageUrl = await uploadBase64Image(image, "driver-images/");
     }
 
     const newDriver = new Driver({
@@ -27,7 +31,7 @@ export const createDriver = async (req, res) => {
       vehicleNumber,
       warehouse,
       notes,
-      image:imageUrl
+      image: imageUrl
     });
 
     await newDriver.save();
@@ -42,7 +46,11 @@ export const createDriver = async (req, res) => {
 // Get list of all drivers (optionally filtered by warehouse)
 export const getAllDrivers = async (req, res) => {
   try {
-    const warehouseId = req.user.assignedWarehouses._id;
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
     const filter = {};
 
     if (warehouseId) {

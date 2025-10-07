@@ -3,7 +3,12 @@ import WarehouseLocation from "../../models/WarehouseLocation.mjs";
 export const createWarehouseLocation = async (req, res) => {
   try {
     const { code, name, capacity } = req.body;
-    const warehouse = req.user.assignedWarehouses._id;
+    const warehouse =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
+
     if (!warehouse || !code) {
       return res
         .status(400)
@@ -27,7 +32,12 @@ export const createWarehouseLocation = async (req, res) => {
 export const getWarehouseLocations = async (req, res) => {
   try {
     const { status, type } = req.query;
-    const warehouse = req.user.assignedWarehouses._id;
+    const warehouse =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
+        
     const query = {};
     if (warehouse) query.warehouse = warehouse;
     if (status) query.status = status;

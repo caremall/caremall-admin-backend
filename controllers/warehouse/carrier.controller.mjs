@@ -7,7 +7,11 @@ export const createCarrier = async (req, res) => {
   try {
     const { name, location, phoneNumber, image, email } = req.body;
 
-    const warehouse = req.user.assignedWarehouses._id;
+    const warehouse =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
 
     if (!name || !phoneNumber || !warehouse || !email) {
       return res.status(400).json({
@@ -41,7 +45,12 @@ export const createCarrier = async (req, res) => {
 // Get list of all carriers (optionally filtered by warehouse)
 export const getAllCarriers = async (req, res) => {
   try {
-    const warehouseId = req.user.assignedWarehouses._id;
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
+        
     const filter = {};
 
     if (warehouseId) {
