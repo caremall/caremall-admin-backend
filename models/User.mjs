@@ -43,6 +43,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isFirstOrder: {
+      type: Boolean,
+      default: true,
+    },
     otp: {
       type: Number,
       default: null,

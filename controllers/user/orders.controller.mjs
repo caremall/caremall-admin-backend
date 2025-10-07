@@ -13,6 +13,7 @@ const razorpay = new Razorpay({
 });
 
 export const createOrder = async (req, res) => {
+  console.log("create order 1");
   try {
     const {
       items,
@@ -148,6 +149,19 @@ export const createOrder = async (req, res) => {
       order,
       razorpayOrderId: razorpayOrder.id,
     });
+
+    // Update user's first order status to false
+    if (order.user) {
+      const user = await User.findById(order.user);
+
+      if (user && user.isFirstOrder) {
+        await User.findByIdAndUpdate(
+          order.user,
+          { isFirstOrder: false },
+          { new: true }
+        );
+      }
+    }
   } catch (error) {
     console.error("Create Order Error:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -193,14 +207,16 @@ export const verifyOrder = async (req, res) => {
       await Product.bulkWrite(bulkOps);
     }
 
-    // Update user's first order status to false
-    if (order.user) {
-      const user = await User.findById(order.user);
-      if (user && user.isFirstOrder) {
-        user.isFirstOrder = false;
-        await user.save();
-      }
-    }
+    // // Update user's first order status to false
+    // if (order.user) {
+    //   const user = await User.findById(order.user);
+    //   if (user && user.isFirstOrder) {
+    //     user.isFirstOrder = false;
+    //     await user.save();
+    //   }
+    // }
+
+    console.log("verify order 3");
 
     res.status(200).json({ success: true, order });
   } catch (err) {
