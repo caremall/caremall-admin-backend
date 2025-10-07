@@ -94,16 +94,45 @@ export const getAdminById = async (req, res) => {
 };
 
 export const createAdmin = async (req, res) => {
+  try {
     const { fullName, email, mobileNumber, role, password, notes } = req.body;
 
+    // Check if there's any admin with this email (including removed ones)
     const existingAdmin = await Admin.findOne({ email });
+    
     if (existingAdmin) {
-      return res.status(409).json({ message: "Email already exists" });
+      if (existingAdmin.status !== "removed") {
+        return res.status(409).json({ message: "Email already exists" });
+      }
+      
+      // If admin exists but is removed, update it instead of creating new
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+      const encryptedPassword = encrypt(password);
+
+      const updatedAdmin = await Admin.findByIdAndUpdate(
+        existingAdmin._id,
+        {
+          fullName,
+          mobileNumber,
+          role,
+          password: hashedPassword,
+          encryptedPassword,
+          notes,
+          status: "active" // Reactivate the admin
+        },
+        { new: true, runValidators: true }
+      );
+
+      return res.status(200).json({ 
+        message: "Admin reactivated successfully", 
+        admin: updatedAdmin 
+      });
     }
 
+    // Create new admin if no existing record found
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-
     const encryptedPassword = encrypt(password);
 
     const newAdmin = new Admin({
@@ -118,10 +147,19 @@ export const createAdmin = async (req, res) => {
 
     await newAdmin.save();
 
-    res
-      .status(201)
-      .json({ message: "Admin created successfully", admin: newAdmin });
+    res.status(201).json({ 
+      message: "Admin created successfully", 
+      admin: newAdmin 
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Internal server error", 
+      error: error.message 
+    });
+  }
 };
+
+
 
 export const updateAdmin = async (req, res) => {
   try {
