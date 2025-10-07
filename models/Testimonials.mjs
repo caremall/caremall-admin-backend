@@ -20,7 +20,11 @@ const testimonialSchema = new Schema({
   },
   testimonial:{
     type: String,
-  }
+  },
+  isActive: {
+      type: Boolean,
+      default: true,
+    },
   
 
 },{ timestamps: true });
