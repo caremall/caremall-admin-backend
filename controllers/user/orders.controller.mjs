@@ -5,6 +5,7 @@ import Offer from "../../models/offerManagement.mjs";
 import Address from "../../models/Address.mjs";
 import Coupon from "../../models/coupon.mjs";
 import Product from "../../models/Product.mjs";
+import User from "../../models/User.mjs";
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -192,6 +193,15 @@ export const verifyOrder = async (req, res) => {
       await Product.bulkWrite(bulkOps);
     }
 
+    // Update user's first order status to false
+    if (order.user) {
+      const user = await User.findById(order.user);
+      if (user && user.isFirstOrder) {
+        user.isFirstOrder = false;
+        await user.save();
+      }
+    }
+
     res.status(200).json({ success: true, order });
   } catch (err) {
     console.error("Verify Order Error:", err);
@@ -291,7 +301,10 @@ export const cancelOrder = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    if (order.orderStatus === "cancelled" || order.orderStatus === "delivered") {
+    if (
+      order.orderStatus === "cancelled" ||
+      order.orderStatus === "delivered"
+    ) {
       return res.status(400).json({ message: "Cannot cancel this order" });
     }
 
@@ -300,18 +313,19 @@ export const cancelOrder = async (req, res) => {
 
     // ✅ save cancellation details
     order.cancellationDetails = {
-      cancelledBy: req.user._id,  // assuming user object is added by auth middleware
+      cancelledBy: req.user._id, // assuming user object is added by auth middleware
       cancelledAt: new Date(),
       reason,
-      remarks
+      remarks,
     };
 
     await order.save();
 
-    res.status(200).json({ success: true, message: "Order cancelled successfully" });
+    res
+      .status(200)
+      .json({ success: true, message: "Order cancelled successfully" });
   } catch (err) {
     console.error("Cancel Order Error:", err);
     res.status(500).json({ message: "Failed to cancel order" });
   }
 };
-
