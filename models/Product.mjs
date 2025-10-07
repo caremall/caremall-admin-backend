@@ -63,7 +63,7 @@ const productSchema = new Schema(
         return this.hasVariant === false;
       },
       set: function (v) {
-        return Math.round(Number(v) * 100) / 100;
+        return Math.ceil(Number(v));
       }
     },
     mrpPrice: {
@@ -76,7 +76,7 @@ const productSchema = new Schema(
       type: Number,
       required: false,
       set: function (v) {
-        return Math.round(Number(v) * 100) / 100;
+        return Math.ceil(Number(v));
       }
     },
 
