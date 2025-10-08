@@ -61,9 +61,6 @@ const productSchema = new Schema(
       type: Number,
       required: function () {
         return this.hasVariant === false;
-      },
-      set: function (v) {
-        return Math.ceil(Number(v));
       }
     },
     mrpPrice: {
