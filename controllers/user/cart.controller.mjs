@@ -147,7 +147,9 @@ export const bulkAddToCart = async (req, res) => {
       }
 
       // Set price (variant overrides product price if exists)
-      let price = product.sellingPrice;
+      let price = product.landingSellPrice && product.landingSellPrice > 0
+        ? product.landingSellPrice
+        : product.sellingPrice;
       if (parsedVariantId) {
         const variant = await Variant.findById(parsedVariantId);
         if (!variant) {
@@ -155,7 +157,9 @@ export const bulkAddToCart = async (req, res) => {
             .status(404)
             .json({ message: `Variant not found: ${parsedVariantId}` });
         }
-        price = variant.sellingPrice || price;
+        price = (variant.landingSellPrice && variant.landingSellPrice > 0
+          ? variant.landingSellPrice
+          : variant.sellingPrice) || price;
       }
 
       const itemTotal = price * quantity;
