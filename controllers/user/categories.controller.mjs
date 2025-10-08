@@ -36,7 +36,7 @@ export const getCategoryProducts = async (req, res) => {
       .select("_id type image name categoryCode status")
       .populate({
         path: "subcategories",
-        
+
         select: "_id type image name categoryCode status parentId",
         match: { status: "active" }, // only active subcategories
       });
@@ -46,22 +46,22 @@ export const getCategoryProducts = async (req, res) => {
     }
 
     // Determine categories to filter for products
-let categoriesToFilter = [];
-if (category.type === "Main") {
-  if (req.query.subcategories) {
-    // Use only specified subcategories (strictly)
-    categoriesToFilter = req.query.subcategories
-      .split(",")
-      .map((id) => new mongoose.Types.ObjectId(id.trim()));
-  } else {
-    // Use all subcategories if no explicit filter
-    categoriesToFilter = category.subcategories.map(
-      (sub) => new mongoose.Types.ObjectId(sub._id)
-    );
-  }
-} else {
-  categoriesToFilter = [new mongoose.Types.ObjectId(categoryId)];
-}
+    let categoriesToFilter = [];
+    if (category.type?.toLowerCase() === "main") {
+      if (req.query.subcategories) {
+        // Use only specified subcategories (strictly)
+        categoriesToFilter = req.query.subcategories
+          .split(",")
+          .map((id) => new mongoose.Types.ObjectId(id.trim()));
+      } else {
+        // Use all subcategories if no explicit filter
+        categoriesToFilter = category.subcategories.map(
+          (sub) => new mongoose.Types.ObjectId(sub._id)
+        );
+      }
+    } else {
+      categoriesToFilter = [new mongoose.Types.ObjectId(categoryId)];
+    }
 
     // If no subcategories under main (empty array), return empty list early
     if (category.type === "Main" && categoriesToFilter.length === 0) {
@@ -350,7 +350,7 @@ export const getAllCategories = async (req, res) => {
 
     const categories = await Category.find(filter)
       .populate({
-        path:"products",
+        path: "products",
         select: "productName urlSlug",
       })
       .populate({
