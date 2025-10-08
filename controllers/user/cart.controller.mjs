@@ -208,9 +208,9 @@ export const getCart = async (req, res) => {
       )
       .populate("items.variant");
 
-    if (!cart) return res.status(200).json({ items: [], cartTotal: 0 });
+    if (!cart || !cart.items || cart.items.length === 0)
+      return res.status(200).json({ items: [], cartTotal: 0 });
 
-    // Fetch active published offers valid now
     const now = new Date();
     const offers = await Offer.find({
       offerStatus: "published",
@@ -228,9 +228,22 @@ export const getCart = async (req, res) => {
       return price;
     };
 
-    let cartTotal = 0;
+    let cartSubtotal = 0;
     const discountedItems = cart.items.map((item) => {
-      let discountedPrice = item.product.sellingPrice;
+      if (!item.product) {
+        console.warn("Product missing for item:", item);
+        return item.toObject();
+      }
+
+      // Use variant price if present, else product price
+      let discountedPrice =
+        (item.variant &&
+          (item.variant.landingSellPrice > 0
+            ? item.variant.landingSellPrice
+            : item.variant.sellingPrice)) ||
+        item.product.sellingPrice;
+
+      let originalPrice = discountedPrice;
 
       for (const offer of offers) {
         switch (offer.offerType) {
@@ -246,7 +259,6 @@ export const getCart = async (req, res) => {
             }
             break;
           case "category":
-            // Check category eligibility (category is ObjectId)
             if (
               item.product.category &&
               offer.offerEligibleItems.includes(
@@ -261,7 +273,6 @@ export const getCart = async (req, res) => {
             }
             break;
           case "brand":
-            // Check brand eligibility (brand is ObjectId)
             if (
               item.product.brand &&
               offer.offerEligibleItems.includes(item.product.brand.toString())
@@ -278,7 +289,7 @@ export const getCart = async (req, res) => {
 
       discountedPrice = Math.max(0, discountedPrice);
       const lineTotal = discountedPrice * item.quantity;
-      cartTotal += lineTotal;
+      cartSubtotal += lineTotal;
 
       return {
         ...item.toObject(),
@@ -287,11 +298,10 @@ export const getCart = async (req, res) => {
       };
     });
 
-    // Apply cart-level offers on the total after item discounts
-    let finalCartTotal = cartTotal;
+    let finalCartTotal = cartSubtotal;
     for (const offer of offers) {
       if (offer.offerType === "cart") {
-        if (cartTotal >= offer.offerMinimumOrderValue) {
+        if (cartSubtotal >= offer.offerMinimumOrderValue) {
           finalCartTotal = applyDiscount(
             finalCartTotal,
             offer.offerDiscountUnit,
@@ -302,6 +312,8 @@ export const getCart = async (req, res) => {
       }
     }
 
+    finalCartTotal = finalCartTotal ?? 0;
+
     res.status(200).json({
       items: discountedItems,
       cartTotal: finalCartTotal,
@@ -311,6 +323,7 @@ export const getCart = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch cart" });
   }
 };
+
 
 export const updateCartItem = async (req, res) => {
   try {

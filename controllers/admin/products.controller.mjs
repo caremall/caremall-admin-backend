@@ -281,7 +281,6 @@ export const createProduct = async (req, res) => {
   }
 };
 
-
 export const getAllProducts = async (req, res) => {
   try {
     const {
@@ -394,7 +393,6 @@ export const getProductBySlug = async (req, res) => {
   }
 };
 
-
 export const updateProduct = async (req, res) => {
   try {
     const {
@@ -457,7 +455,10 @@ export const updateProduct = async (req, res) => {
     if (productImages && productImages.length > 0) {
       finalProductImages = await Promise.all(
         productImages.map(async (img) => {
-          if (typeof img === "string" && /^data:image\/[a-zA-Z]+;base64,/.test(img)) {
+          if (
+            typeof img === "string" &&
+            /^data:image\/[a-zA-Z]+;base64,/.test(img)
+          ) {
             const uploadedUrls = await uploadBase64Images([img], "products/");
             return uploadedUrls;
           }
@@ -470,7 +471,9 @@ export const updateProduct = async (req, res) => {
     const updateFields = {
       ...(productName && { productName: productName.trim() }),
       ...(shortDescription && { shortDescription: shortDescription.trim() }),
-      ...(productDescription && { productDescription: productDescription.trim() }),
+      ...(productDescription && {
+        productDescription: productDescription.trim(),
+      }),
       ...(warrantyPolicy && { warrantyPolicy }),
       ...(brand && { brand }),
       ...(category && { category }),
@@ -479,7 +482,8 @@ export const updateProduct = async (req, res) => {
       ...(barcode && !hasVariant && { barcode: barcode.trim() }),
       ...(defaultVariant && { defaultVariant }),
       ...(productType && hasVariant && { productType }),
-      ...(finalProductImages.length > 0 && !hasVariant && { productImages: finalProductImages }),
+      ...(finalProductImages.length > 0 &&
+        !hasVariant && { productImages: finalProductImages }),
       ...(tags && { tags: Array.isArray(tags) ? tags : [] }),
       ...(costPrice !== undefined && !hasVariant && { costPrice }),
       ...(sellingPrice !== undefined && !hasVariant && { sellingPrice }),
@@ -502,7 +506,9 @@ export const updateProduct = async (req, res) => {
       ...(quantityPerBox !== undefined && { quantityPerBox }),
       ...(supplierId && { supplierId }),
       ...(affiliateId && { affiliateId }),
-      ...(externalLinks && { externalLinks: Array.isArray(externalLinks) ? externalLinks : [] }),
+      ...(externalLinks && {
+        externalLinks: Array.isArray(externalLinks) ? externalLinks : [],
+      }),
       ...(metaTitle && { metaTitle }),
       ...(metaDescription && { metaDescription }),
       ...(urlSlug && { urlSlug: urlSlug.trim() }),
@@ -531,8 +537,14 @@ export const updateProduct = async (req, res) => {
         if (variant.images && variant.images.length > 0) {
           processedImages = await Promise.all(
             variant.images.map(async (img) => {
-              if (typeof img === "string" && /^data:image\/[a-zA-Z]+;base64,/.test(img)) {
-                const uploadedUrls = await uploadBase64Images([img], "variant-images/");
+              if (
+                typeof img === "string" &&
+                /^data:image\/[a-zA-Z]+;base64,/.test(img)
+              ) {
+                const uploadedUrls = await uploadBase64Images(
+                  [img],
+                  "variant-images/"
+                );
                 return uploadedUrls;
               }
               return img;
@@ -545,10 +557,25 @@ export const updateProduct = async (req, res) => {
         const tax = variant.taxRate ? (base * variant.taxRate) / 100 : 0;
         const variantData = {
           ...variant,
-          images: processedImages.length > 0 ? processedImages : variant.images || [],
+          images:
+            processedImages.length > 0 ? processedImages : variant.images || [],
           productId,
           landingSellPrice: base + tax,
         };
+
+        const variantSKU = variant.SKU?.trim();
+
+        if (variantSKU) {
+          const duplicateSKU = await Variant.findOne({
+            SKU: variantSKU,
+            _id: { $ne: variant._id }, // ignore itself on update
+          });
+          if (duplicateSKU) {
+            return res.status(400).json({
+              message: `Duplicate SKU detected: ${variantSKU} already exists on another variant.`,
+            });
+          }
+        }
 
         if (variant._id) {
           // Fetch existing variant
@@ -561,13 +588,18 @@ export const updateProduct = async (req, res) => {
             delete variantData.SKU;
           }
 
-          if (variant.barcode && variant.barcode.trim() !== existingVariant.barcode) {
+          if (
+            variant.barcode &&
+            variant.barcode.trim() !== existingVariant.barcode
+          ) {
             variantData.barcode = variant.barcode.trim();
           } else {
             delete variantData.barcode;
           }
 
-          await Variant.findByIdAndUpdate(variant._id, variantData, { new: true });
+          await Variant.findByIdAndUpdate(variant._id, variantData, {
+            new: true,
+          });
         } else {
           // New variant
           if (variant.SKU) variantData.SKU = variant.SKU.trim();
@@ -590,10 +622,11 @@ export const updateProduct = async (req, res) => {
     });
   } catch (err) {
     console.error("Update product error:", err);
-    res.status(500).json({ message: "Failed to update product", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Failed to update product", error: err.message });
   }
 };
-
 
 export const deleteProduct = async (req, res) => {
   try {
@@ -604,8 +637,6 @@ export const deleteProduct = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-
-
 
 export const getSearchSuggestions = async (req, res) => {
   try {
@@ -618,43 +649,34 @@ export const getSearchSuggestions = async (req, res) => {
 
     const [products, categories] = await Promise.all([
       Product.find({
-        $or: [
-          { productName: regex },
-          { SKU: regex },
-          { barcode: regex }
-        ],
+        $or: [{ productName: regex }, { SKU: regex }, { barcode: regex }],
         productStatus: "published",
-        visibility: "visible"
+        visibility: "visible",
       })
         .limit(10)
         .select("productName sellingPrice category productImages")
         .lean(),
 
-
-
-      Category.find({ name: regex })
-        .limit(10)
-        .select("name slug")
-        .lean()
+      Category.find({ name: regex }).limit(10).select("name slug").lean(),
     ]);
 
     console.log("\n--- Product Suggestions ---");
-    products.forEach(product => {
+    products.forEach((product) => {
       console.log({
         thumbnail: product.productImages?.[0] || "No Image",
         name: product.productName,
         price: product.sellingPrice,
-        category: product.category?.name || "No Category"
+        category: product.category?.name || "No Category",
       });
     });
 
     // Log category suggestions
     console.log("\n--- Category Suggestions ---");
-    categories.forEach(category => {
+    categories.forEach((category) => {
       console.log({
         name: category.name,
         price: null, // Categories don't have prices
-        category: "Category"
+        category: "Category",
       });
     });
 
