@@ -230,7 +230,9 @@ export const getCart = async (req, res) => {
 
     let cartTotal = 0;
     const discountedItems = cart.items.map((item) => {
-      let discountedPrice = item.product.sellingPrice;
+      let discountedPrice = item.product.landingSellPrice && item.product.landingSellPrice > 0
+        ? item.product.landingSellPrice
+        : item.product.sellingPrice;
 
       for (const offer of offers) {
         switch (offer.offerType) {
