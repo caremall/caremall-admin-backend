@@ -543,7 +543,7 @@ export const updateProduct = async (req, res) => {
         // Compute landingSellPrice
         const base = variant.sellingPrice ?? 0;
         const tax = variant.taxRate ? (base * variant.taxRate) / 100 : 0;
-        const variantData: any = {
+        const variantData = {
           ...variant,
           images: processedImages.length > 0 ? processedImages : variant.images || [],
           productId,
