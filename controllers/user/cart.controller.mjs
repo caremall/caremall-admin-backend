@@ -32,13 +32,22 @@ export const addToCart = async (req, res) => {
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    let price = product.sellingPrice;
+    let price = product.landingSellPrice && product.landingSellPrice > 0
+      ? product.landingSellPrice
+      : product.sellingPrice;
+
     if (parsedVariantId) {
       const variant = await Variant.findById(parsedVariantId);
-      if (!variant)
+      if (!variant) {
         return res.status(404).json({ message: "Variant not found" });
-      price = variant.sellingPrice || price;
+      }
+
+      price =
+        (variant.landingSellPrice && variant.landingSellPrice > 0
+          ? variant.landingSellPrice
+          : variant.sellingPrice) || price;
     }
+
 
     const itemTotal = price * quantity;
 
@@ -63,7 +72,7 @@ export const addToCart = async (req, res) => {
         (item) =>
           item.product.toString() === productId &&
           ((item.variant && item.variant.toString()) || "") ===
-            (variantId || "")
+          (variantId || "")
       );
 
       if (index >= 0) {
@@ -156,7 +165,7 @@ export const bulkAddToCart = async (req, res) => {
         (i) =>
           i.product.toString() === productId &&
           ((i.variant && i.variant.toString()) || "") ===
-            (parsedVariantId || "")
+          (parsedVariantId || "")
       );
 
       if (index >= 0) {
@@ -368,7 +377,7 @@ export const removeCartItem = async (req, res) => {
         !(
           item.product.toString() === productId &&
           ((item.variant && item.variant.toString()) || "") ===
-            (variantId || "")
+          (variantId || "")
         )
     );
 
