@@ -31,7 +31,7 @@ const variantSchema = new Schema(
     SKU: {
       type: String,
       required: true,
-      unique: true,
+      // unique: true,
     },
 
     barcode: {
