@@ -204,7 +204,7 @@ export const getCart = async (req, res) => {
     const cart = await Cart.findOne({ user: userId })
       .populate(
         "items.product",
-        "productName productImages sellingPrice urlSlug mrpPrice sellingPrice hasVariant category brand"
+        "productName productImages sellingPrice urlSlug mrpPrice sellingPrice hasVariant category brand discountPercent"
       )
       .populate("items.variant");
 
