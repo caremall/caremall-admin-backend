@@ -36,7 +36,7 @@ const variantSchema = new Schema(
 
     barcode: {
       type: String,
-      unique: true,
+      // unique: true,
     },
 
     costPrice: { type: Number, required: true },
