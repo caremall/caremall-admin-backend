@@ -25,6 +25,7 @@ export const createProductCard = async (req, res) => {
       buttonLinkType,
       redirectLink,
       products,
+      active
     });
 
     res
@@ -106,6 +107,7 @@ export const updateProductCard = async (req, res) => {
     if (buttonText !== undefined) card.buttonText = buttonText;
     if (buttonLinkType !== undefined) card.buttonLinkType = buttonLinkType;
     if (redirectLink !== undefined) card.redirectLink = redirectLink;
+    if (active !== undefined) card.active = active;
     if (products !== undefined) {
       if (!Array.isArray(products)) {
         return res
