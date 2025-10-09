@@ -51,6 +51,20 @@ export const getAllProductCards = async (req, res) => {
   }
 };
 
+export const getAllActiveProductCards = async (req, res) => {
+  try {
+    const cards = await ProductCard.find({ active: true })
+      .populate("products")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({ success: true, data: cards });
+  } catch (error) {
+    console.error("Get All ProductCards Error:", error);
+    res.status(500).json({ message: "Failed to fetch product cards" });
+  }
+};
+
 // Get single ProductCard by ID with populated products
 export const getProductCardById = async (req, res) => {
   try {
