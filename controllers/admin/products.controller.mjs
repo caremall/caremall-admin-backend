@@ -565,17 +565,17 @@ export const updateProduct = async (req, res) => {
 
         const variantSKU = variant.SKU?.trim();
 
-        if (variantSKU) {
-          const duplicateSKU = await Variant.findOne({
-            SKU: variantSKU,
-            _id: { $ne: variant._id }, // ignore itself on update
-          });
-          if (duplicateSKU) {
-            return res.status(400).json({
-              message: `Duplicate SKU detected: ${variantSKU} already exists on another variant.`,
-            });
-          }
-        }
+        // if (variantSKU) {
+        //   const duplicateSKU = await Variant.findOne({
+        //     SKU: variantSKU,
+        //     _id: { $ne: variant._id }, // ignore itself on update
+        //   });
+        //   if (duplicateSKU) {
+        //     return res.status(400).json({
+        //       message: `Duplicate SKU detected: ${variantSKU} already exists on another variant.`,
+        //     });
+        //   }
+        // }
 
         if (variant._id) {
           // Fetch existing variant

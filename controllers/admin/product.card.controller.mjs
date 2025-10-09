@@ -5,7 +5,7 @@ import ProductCard from "../../models/productCard.mjs";
 // Create a new ProductCard with linked products
 export const createProductCard = async (req, res) => {
   try {
-    const { title, buttonText, buttonLinkType, redirectLink, products } =
+    const { title, buttonText, buttonLinkType, redirectLink, products, active } =
       req.body;
 
     if (!title) {
@@ -91,7 +91,7 @@ export const getProductCardById = async (req, res) => {
 export const updateProductCard = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, buttonText, buttonLinkType, redirectLink, products } =
+    const { title, buttonText, buttonLinkType, redirectLink, products, active } =
       req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
