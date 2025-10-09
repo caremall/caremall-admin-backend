@@ -39,7 +39,7 @@ export const createProductCard = async (req, res) => {
 // Get all ProductCards with populated products
 export const getAllProductCards = async (req, res) => {
   try {
-    const cards = await ProductCard.find()
+    const cards = await ProductCard.find({ active: true })
       .populate("products")
       .sort({ createdAt: -1 })
       .lean();
@@ -50,6 +50,7 @@ export const getAllProductCards = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch product cards" });
   }
 };
+
 
 // Get single ProductCard by ID with populated products
 export const getProductCardById = async (req, res) => {

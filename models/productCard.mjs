@@ -18,6 +18,10 @@ const productCardSchema = new Schema(
       type: String,
       trim: true,
     },
+    active: {
+      type: Boolean,
+      default: true,
+    },
     products: [
       {
         type: Schema.Types.ObjectId,
