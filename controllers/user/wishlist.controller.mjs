@@ -12,7 +12,7 @@ export const getWishlist = async (req, res) => {
             .populate({
                 path: "items.product",
                 select:
-                    "productName productImages sellingPrice urlSlug mrpPrice defaultVariant hasVariant",
+                    "productName productImages sellingPrice urlSlug mrpPrice defaultVariant hasVariant landingSellPrice",
                 populate: {
                     path: "reviews",
                     model: "Review",
