@@ -1,9 +1,9 @@
+import jwt from "jsonwebtoken";
+import Admin from "../models/Admin.mjs";
+import User from "../models/User.mjs";
+import FinanceAdmin from "../models/finance/FinanceAdmin.mjs";
 
-import jwt from "jsonwebtoken"
-import Admin from "../models/Admin.mjs"
-import User from "../models/User.mjs"
-
-const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET
+const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
 
 export const verifyToken = (req, res, next) => {
   try {
@@ -20,9 +20,10 @@ export const verifyToken = (req, res, next) => {
         return res.status(403).json({ message: "Forbidden", auth: false });
       }
 
-      const admin = await Admin.findById(decoded._id).populate("role").populate("assignedWarehouses").select(
-        "-password -encryptedPassword"
-      );
+      const admin = await Admin.findById(decoded._id)
+        .populate("role")
+        .populate("assignedWarehouses")
+        .select("-password -encryptedPassword");
 
       if (!admin) {
         return res
@@ -48,7 +49,6 @@ export const verifyToken = (req, res, next) => {
   }
 };
 
-
 export const verifyUserToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -62,5 +62,34 @@ export const verifyUserToken = async (req, res, next) => {
     next();
   } catch (err) {
     return res.status(401).json({ message: "Token expired or invalid" });
+  }
+};
+
+export const verifyFinanceAdminToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res
+      .status(401)
+      .json({ success: false, message: "No token provided" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.FINANCE_JWT_SECRET);
+    req.user = await FinanceAdmin.findById(decoded.id).select("-password");
+    if (!req.user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Auth Middleware Error:", error);
+    res
+      .status(401)
+      .json({ success: false, message: "Invalid or expired token" });
   }
 };
