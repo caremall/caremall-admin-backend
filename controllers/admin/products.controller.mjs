@@ -563,39 +563,39 @@ export const updateProduct = async (req, res) => {
           landingSellPrice: base + tax,
         };
 
-        // const variantSKU = variant.SKU?.trim();
+        const variantSKU = variant.SKU?.trim();
 
-        // if (variantSKU) {
-        //   const duplicateSKU = await Variant.findOne({
-        //     SKU: variantSKU,
-        //     _id: { $ne: variant._id }, // ignore itself on update
-        //   });
-        //   if (duplicateSKU) {
-        //     return res.status(400).json({
-        //       message: `Duplicate SKU detected: ${variantSKU} already exists on another variant.`,
-        //     });
-        //   }
-        // }
+        if (variantSKU) {
+          const duplicateSKU = await Variant.findOne({
+            SKU: variantSKU,
+            _id: { $ne: variant._id }, // ignore itself on update
+          });
+          if (duplicateSKU) {
+            return res.status(400).json({
+              message: `Duplicate SKU detected: ${variantSKU} already exists on another variant.`,
+            });
+          }
+        }
 
         if (variant._id) {
           // Fetch existing variant
-          // const existingVariant = await Variant.findById(variant._id);
+          const existingVariant = await Variant.findById(variant._id);
 
           // Only update SKU/Barcode if changed
-          // if (variant.SKU && variant.SKU.trim() !== existingVariant.SKU) {
-          //   variantData.SKU = variant.SKU.trim();
-          // } else {
-          //   delete variantData.SKU;
-          // }
+          if (variant.SKU && variant.SKU.trim() !== existingVariant.SKU) {
+            variantData.SKU = variant.SKU.trim();
+          } else {
+            delete variantData.SKU;
+          }
 
-          // if (
-          //   variant.barcode &&
-          //   variant.barcode.trim() !== existingVariant.barcode
-          // ) {
-          //   variantData.barcode = variant.barcode.trim();
-          // } else {
-          //   delete variantData.barcode;
-          // }
+          if (
+            variant.barcode &&
+            variant.barcode.trim() !== existingVariant.barcode
+          ) {
+            variantData.barcode = variant.barcode.trim();
+          } else {
+            delete variantData.barcode;
+          }
 
           await Variant.findByIdAndUpdate(variant._id, variantData, {
             new: true,
