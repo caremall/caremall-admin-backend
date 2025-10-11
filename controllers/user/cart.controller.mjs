@@ -207,12 +207,30 @@ export const getCart = async (req, res) => {
     const cart = await Cart.findOne({ user: userId })
       .populate(
         "items.product",
-        "productName productImages sellingPrice urlSlug mrpPrice sellingPrice hasVariant category brand discountPercent"
+        "productName productImages sellingPrice urlSlug mrpPrice landingSellPrice hasVariant category brand discountPercent"
       )
-      .populate("items.variant");
+      .populate("items.variant")
+      .lean(); // Use lean() for better performance and fresh data
 
     if (!cart || !cart.items || cart.items.length === 0)
       return res.status(200).json({ items: [], cartTotal: 0 });
+
+    // Filter out items where product no longer exists
+    const validItems = cart.items.filter((item) => {
+      if (!item.product) {
+        console.warn("Product missing for cart item, will be cleaned up");
+        return false;
+      }
+      return true;
+    });
+
+    // Clean invalid items from cart
+    if (validItems.length !== cart.items.length) {
+      await Cart.updateOne(
+        { user: userId },
+        { $pull: { items: { product: null } } }
+      );
+    }
 
     const now = new Date();
     const offers = await Offer.find({
@@ -232,22 +250,47 @@ export const getCart = async (req, res) => {
     };
 
     let cartSubtotal = 0;
-    const discountedItems = cart.items.map((item) => {
-      if (!item.product) {
-        console.warn("Product missing for item:", item);
-        return item.toObject();
+    const discountedItems = validItems.map((item) => {
+      // Determine base price
+      let basePrice;
+
+      if (item.product.hasVariant && item.variant) {
+        basePrice =
+          item.variant.landingSellPrice > 0
+            ? item.variant.landingSellPrice
+            : item.variant.sellingPrice;
+
+        console.log("Using variant price:", {
+          productId: item.product._id,
+          variantId: item.variant._id,
+          landingSellPrice: item.variant.landingSellPrice,
+          sellingPrice: item.variant.sellingPrice,
+          finalPrice: basePrice,
+        });
+      } else {
+        basePrice =
+          item.product.landingSellPrice > 0
+            ? item.product.landingSellPrice
+            : item.product.sellingPrice;
+
+        console.log("Using product price:", {
+          productId: item.product._id,
+          landingSellPrice: item.product.landingSellPrice,
+          sellingPrice: item.product.sellingPrice,
+          finalPrice: basePrice,
+        });
       }
 
-      // Use variant price if present, else product price
-      let discountedPrice =
-        (item.variant &&
-          (item.variant.landingSellPrice > 0
-            ? item.variant.landingSellPrice
-            : item.variant.sellingPrice)) ||
-        item.product.sellingPrice;
+      // Validate basePrice
+      if (!basePrice || basePrice <= 0) {
+        console.warn("Invalid base price for item:", item);
+        basePrice = item.product.sellingPrice || 0;
+      }
 
-      let originalPrice = discountedPrice;
+      let discountedPrice = basePrice;
+      let originalPrice = basePrice;
 
+      // Apply discounts
       for (const offer of offers) {
         switch (offer.offerType) {
           case "product":
@@ -295,13 +338,17 @@ export const getCart = async (req, res) => {
       cartSubtotal += lineTotal;
 
       return {
-        ...item.toObject(),
+        ...item,
+        priceAtCart: discountedPrice, // override to reflect latest price
+        totalPrice: lineTotal, // override to reflect latest total
+        originalPrice,
         discountedPrice,
         lineTotal,
       };
     });
 
     let finalCartTotal = cartSubtotal;
+
     for (const offer of offers) {
       if (offer.offerType === "cart") {
         if (cartSubtotal >= offer.offerMinimumOrderValue) {
@@ -315,7 +362,7 @@ export const getCart = async (req, res) => {
       }
     }
 
-    finalCartTotal = finalCartTotal ?? 0;
+    finalCartTotal = Math.round(finalCartTotal * 100) / 100; // round 2 decimals
 
     res.status(200).json({
       items: discountedItems,
@@ -326,6 +373,7 @@ export const getCart = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch cart" });
   }
 };
+
 
 
 export const updateCartItem = async (req, res) => {
