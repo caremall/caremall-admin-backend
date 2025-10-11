@@ -1,4 +1,5 @@
 import Highlight from "../../models/Highlight.mjs";
+import { enrichProductsWithDefaultVariants } from "../../utils/enrichedProducts.mjs";
 import { uploadBase64Image, uploadBase64Video } from "../../utils/uploadImage.mjs";
 
 export const createHighlight = async (req, res) => {
@@ -42,8 +43,22 @@ export const createHighlight = async (req, res) => {
 
 export const getHighlights = async (req, res) => {
   try {
+    // Fetch highlights and populate product (as plain objects)
     const highlights = await Highlight.find().populate("product").lean();
-    res.status(200).json(highlights);
+
+    // Collect products from highlights (filter out any empty)
+    const products = highlights.map((h) => h.product).filter(Boolean);
+
+    // Enrich products with default variant details
+    const enrichedProducts = await enrichProductsWithDefaultVariants(products);
+
+    // Merge enriched products back into highlights
+    const highlightsEnriched = highlights.map((h, idx) => ({
+      ...h,
+      product: enrichedProducts[idx], // assume order matches
+    }));
+
+    res.status(200).json(highlightsEnriched);
   } catch (error) {
     console.error(error);
     res
@@ -52,6 +67,7 @@ export const getHighlights = async (req, res) => {
   }
 };
 
+// Single highlight – enrich product
 export const getHighlightById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -59,6 +75,12 @@ export const getHighlightById = async (req, res) => {
     if (!highlight) {
       return res.status(404).json({ message: "Highlight not found" });
     }
+
+    // Enrich this product if present
+    const productArr = highlight.product ? [highlight.product] : [];
+    const [enriched] = await enrichProductsWithDefaultVariants(productArr);
+    highlight.product = enriched || highlight.product;
+
     res.status(200).json(highlight);
   } catch (error) {
     console.error(error);

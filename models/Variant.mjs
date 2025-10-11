@@ -31,12 +31,12 @@ const variantSchema = new Schema(
     SKU: {
       type: String,
       required: true,
-      unique: true,
+      // unique: true,
     },
 
     barcode: {
       type: String,
-      unique: true,
+      // unique: true,
     },
 
     costPrice: { type: Number, required: true },
