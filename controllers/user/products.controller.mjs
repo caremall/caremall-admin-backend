@@ -590,7 +590,7 @@ export const getNewArrivalProducts = async (req, res) => {
     const products = await Product.find({ productStatus: "published", visibility: "visible" }).sort({ createdAt: -1 }).lean();
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
-    // Aggregate review stats for all products
+    
     const productIds = enrichedProducts.map((p) => p._id);
 
     const reviewStats = await Review.aggregate([

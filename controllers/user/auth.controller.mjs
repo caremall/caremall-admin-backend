@@ -7,6 +7,7 @@ import {
 } from "../../utils/generateTokens.mjs";
 import sendMail from "../../utils/sendMail.mjs";
 import { uploadBase64Image } from "../../utils/uploadImage.mjs";
+
 export const signup = async (req, res) => {
   const { name, email, password, avatar, phone } = req.body;
   const userExists = await User.findOne({ email });

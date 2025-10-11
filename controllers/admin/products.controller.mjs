@@ -370,7 +370,7 @@ export const getProductBySlug = async (req, res) => {
       { path: "brand" },
       { path: "category" },
       { path: "variants" },
-      { path: "productType" }, // 👈 populate productType
+      { path: "productType" },
     ]);
 
     if (!product) {

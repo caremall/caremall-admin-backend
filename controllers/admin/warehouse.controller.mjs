@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import Warehouse from "../../models/Warehouse.mjs";
 import Orders from "../../models/Order.mjs"
+import Order from "../../models/Order.mjs";
+import damagedInventory from "../../models/damagedInventory.mjs";
 
 // Create a new warehouse
 export const createWarehouse = async (req, res) => {
@@ -55,31 +57,172 @@ export const getWarehouses = async (req, res) => {
 
 
 
-// Get a single warehouse by ID
+
 export const getWarehouseById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid warehouse ID" });
     }
+
     const warehouse = await Warehouse.findById(id)
       .populate("manager")
       .populate({
         path: "supportedSKUs",
         populate: { path: "productId", select: "productName SKU" },
       });
-    if (!warehouse)
+
+    if (!warehouse) {
       return res.status(404).json({ message: "Warehouse not found" });
-    res.status(200).json({ warehouse });
+    }
+
+    // Calculate all metrics
+    const [
+      totalOrders,
+      totalDeliveredOrders, 
+      totalReturnOrders,
+      damagedItemsResult,
+      processingOrders,
+      pickedOrders,
+      packedOrders,
+      dispatchedOrders
+    ] = await Promise.all([
+      // Total orders allocated to this warehouse
+      Order.countDocuments({
+        allocatedWarehouse: id
+      }),
+
+      // Total delivered orders
+      Order.countDocuments({
+        allocatedWarehouse: id,
+        orderStatus: "delivered"
+      }),
+
+      // Total return/cancelled orders
+      Order.countDocuments({
+        allocatedWarehouse: id,
+        orderStatus: "cancelled"
+      }),
+
+      // Total damaged items quantity
+      damagedInventory.aggregate([
+        {
+          $match: { warehouse: new mongoose.Types.ObjectId(id) }
+        },
+        {
+          $group: {
+            _id: null,
+            totalDamagedItems: { $sum: "$quantityToReport" }
+          }
+        }
+      ]),
+
+      // Processing orders
+      Order.countDocuments({
+        allocatedWarehouse: id,
+        orderStatus: "processing"
+      }),
+
+      // Picked orders
+      Order.countDocuments({
+        allocatedWarehouse: id,
+        orderStatus: "picked"
+      }),
+
+      // Packed orders
+      Order.countDocuments({
+        allocatedWarehouse: id,
+        orderStatus: "packed"
+      }),
+
+      // Dispatched orders
+      Order.countDocuments({
+        allocatedWarehouse: id,
+        orderStatus: "dispatched"
+      })
+    ]);
+
+    // Extract damaged items count
+    const totalDamagedItems = damagedItemsResult.length > 0 ? damagedItemsResult[0].totalDamagedItems : 0;
+
+    // Calculate success rate (delivered orders / total orders)
+    const successRate = totalOrders > 0 ? (totalDeliveredOrders / totalOrders) * 100 : 0;
+
+    // Prepare response with all metrics
+    const response = {
+      warehouse,
+      metrics: {
+        totalOrders,
+        totalDeliveredOrders,
+        totalReturnOrders,
+        totalDamagedItems,
+        processingOrders,
+        pickedOrders,
+        packedOrders,
+        dispatchedOrders,
+        successRate: Math.round(successRate * 100) / 100 // Round to 2 decimal places
+      }
+    };
+
+    res.status(200).json(response);
   } catch (err) {
     console.error(err);
-    res
-      .status(500)
-      .json({ message: "Failed to fetch warehouse", error: err.message });
+    res.status(500).json({ 
+      message: "Failed to fetch warehouse", 
+      error: err.message 
+    });
   }
 };
 
 
+
+
+
+// export const getWarehouseById = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     if (!mongoose.Types.ObjectId.isValid(id)) {
+//       return res.status(400).json({ message: "Invalid warehouse ID" });
+//     }
+
+//     console.log('Warehouse ID from params:', id);
+//     console.log('Warehouse ID type:', typeof id);
+
+//     // Check if the ID is a valid ObjectId
+//     const objectId = new mongoose.Types.ObjectId(id);
+//     console.log('Converted to ObjectId:', objectId);
+
+//     // Test the delivered orders query only
+//     const query = {
+//       allocatedWarehouse: id,
+//       orderStatus: "delivered",
+//       isDelivered: true
+//     };
+    
+//     console.log('Query object:', JSON.stringify(query, null, 2));
+
+//     const totalDeliveredOrders = await Order.countDocuments(query);
+//     console.log('Total Delivered Orders:', totalDeliveredOrders);
+
+//     // For debugging, let's also check if any orders exist with this warehouse at all
+//     const anyOrders = await Order.findOne({ allocatedWarehouse: id });
+//     console.log('Sample order with this warehouse:', anyOrders);
+
+//     // Return just this for testing
+//     res.status(200).json({
+//       warehouseId: id,
+//       totalDeliveredOrders,
+//       queryUsed: query
+//     });
+
+//   } catch (err) {
+//     console.error('Error in getWarehouseById:', err);
+//     res.status(500).json({ 
+//       message: "Failed to fetch warehouse", 
+//       error: err.message 
+//     });
+//   }
+// };
 // Update a warehouse by ID
 // ✅ Update an existing warehouse
 export const updateWarehouse = async (req, res) => {

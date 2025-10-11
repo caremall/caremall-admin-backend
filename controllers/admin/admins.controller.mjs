@@ -1,7 +1,7 @@
 import { encrypt } from "../../utils/encryptPassword.mjs";
 import Admin from "../../models/Admin.mjs";
 import bcrypt from "bcryptjs";
-import Role from "../../models/Role.mjs"; // Import Role model
+import Role from "../../models/Role.mjs";
 import mongoose from "mongoose";
 
 export const getAllAdmins = async (req, res) => {
