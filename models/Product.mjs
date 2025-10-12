@@ -61,13 +61,20 @@ const productSchema = new Schema(
       type: Number,
       required: function () {
         return this.hasVariant === false;
-      },
+      }
     },
     mrpPrice: {
       type: Number,
       required: function () {
         return this.hasVariant === false;
       },
+    },
+    landingSellPrice: {
+      type: Number,
+      required: false,
+      // set: function (v) {
+      //   return Math.ceil(Number(v));
+      // }
     },
 
     discountPercent: Number,
@@ -140,11 +147,15 @@ const productSchema = new Schema(
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
+
+
+
+
 // In your Product schema file
 productSchema.virtual("variants", {
   ref: "Variant",
   localField: "_id",
-  foreignField: "productId"
+  foreignField: "productId",
 });
 
 productSchema.virtual("reviews", {
@@ -172,6 +183,5 @@ productSchema.pre("validate", function () {
     this.productId = prefix + randomPart;
   }
 });
-
 
 export default model("Product", productSchema);

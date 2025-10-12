@@ -6,6 +6,18 @@ import Orders from "../../models/Order.mjs"
 export const createWarehouse = async (req, res) => {
   try {
     const warehouseData = req.body;
+    
+    // Check if warehouse with same name already exists
+    const existingWarehouse = await Warehouse.findOne({ 
+      name: warehouseData.name 
+    });
+    
+    if (existingWarehouse) {
+      return res.status(400).json({ 
+        message: "Warehouse name already exists. Please use a different name." 
+      });
+    }
+    
     const warehouse = new Warehouse(warehouseData);
     await warehouse.save();
     res.status(201).json({ message: "Warehouse created", warehouse });
@@ -69,12 +81,34 @@ export const getWarehouseById = async (req, res) => {
 
 
 // Update a warehouse by ID
+// ✅ Update an existing warehouse
 export const updateWarehouse = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid warehouse ID" });
+    }
+
+    // 🟢 Fetch the current warehouse first
+    const currentWarehouse = await Warehouse.findById(id);
+    if (!currentWarehouse) {
+      return res.status(404).json({ message: "Warehouse not found" });
+    }
+
+    // 🔑 Only check for duplicate name if the name is being changed
+    if (updateData.name && updateData.name !== currentWarehouse.name) {
+      const existingWarehouse = await Warehouse.findOne({
+        name: updateData.name,
+        _id: { $ne: id }, // exclude current warehouse
+      });
+
+      if (existingWarehouse) {
+        return res.status(400).json({
+          message: "Warehouse name already exists. Please use a different name.",
+        });
+      }
     }
 
     // Validate supportedSKUs array if present
@@ -93,16 +127,16 @@ export const updateWarehouse = async (req, res) => {
         populate: { path: "productId", select: "productName SKU" },
       });
 
-    if (!warehouse)
-      return res.status(404).json({ message: "Warehouse not found" });
     res.status(200).json({ message: "Warehouse updated", warehouse });
   } catch (err) {
     console.error(err);
-    res
-      .status(500)
-      .json({ message: "Failed to update warehouse", error: err.message });
+    res.status(500).json({
+      message: "Failed to update warehouse",
+      error: err.message,
+    });
   }
 };
+
 
 
 // Delete a warehouse by ID

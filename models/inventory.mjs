@@ -9,7 +9,12 @@ const inventorySchema = new Schema(
       ref: "Warehouse",
       required: true,
     },
-    product: { type: Schema.Types.ObjectId, ref: "Product" }, // optional
+   product: [
+    {
+    type: Schema.Types.ObjectId,
+    ref: "Product",
+    }
+  ],
     variant: { type: Schema.Types.ObjectId, ref: "Variant" }, // optional
     availableQuantity: { type: Number, required: true, default: 0 },
     minimumQuantity: { type: Number, required: true, default: 0 },

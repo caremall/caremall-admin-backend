@@ -2,6 +2,9 @@
 import mongoose from "mongoose";
 import OfferCard from "./offerCard.mjs";
 import { uploadBase64Image } from "../utils/uploadImage.mjs";
+import Product from "./Product.mjs";
+import Variant from "./Variant.mjs";
+import { enrichProductsWithDefaultVariants } from "../utils/enrichedProducts.mjs";
 
 // Create a new OfferCard
 export const createOfferCard = async (req, res) => {
@@ -51,6 +54,31 @@ export const getAllOfferCards = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    for (const card of cards) {
+      for (const offer of card.offers) {
+        if (
+          !offer.offerEligibleItems ||
+          offer.offerEligibleItems.length === 0
+        ) {
+          offer.products = [];
+          continue;
+        }
+
+        const ids = offer.offerEligibleItems.filter((id) =>
+          mongoose.Types.ObjectId.isValid(id)
+        );
+
+        // Fetch products and variants in parallel by all IDs
+        const [products, variants] = await Promise.all([
+          Product.find({ _id: { $in: ids } }).lean(),
+          Variant.find({ _id: { $in: ids } }).lean(),
+        ]);
+
+        // Combine both arrays into one
+        offer.products = products.concat(variants);
+      }
+    }
+
     res.status(200).json({ success: true, data: cards });
   } catch (error) {
     console.error("Get All OfferCards Error:", error);
@@ -58,24 +86,76 @@ export const getAllOfferCards = async (req, res) => {
   }
 };
 
+
 // Get a single OfferCard by ID with populated offers
 export const getOfferCardById = async (req, res) => {
   try {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid OfferCard ID" });
+      return res.status(400).json({ success: false, message: "Invalid OfferCard ID" });
     }
 
-    const card = await OfferCard.findById(id).populate("offers").lean();
+    const card = await OfferCard.findById(id)
+      .populate({
+        path: "offers",
+        populate: {
+          path: "offerEligibleItems",
+          model: "Product",
+          select: "productId productName shortDescription productDescription brand category sellingPrice mrpPrice productImages urlSlug hasVariant defaultVariant",
+          populate: [
+            {
+              path: "brand",
+              model: "Brand",
+              select: "name"
+            },
+            {
+              path: "category",
+              model: "Category",
+              select: "name"
+            },
+            {
+  path: "defaultVariant",
+  model: "Variant",
+  select: "variantId images sellingPrice mrpPrice SKU barcode isDefault"
+},
+{
+  path: "variants",
+  model: "Variant",
+  select: "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault"
+}
+          ]
+        }
+      })
+      .lean();
+
     if (!card) {
-      return res.status(404).json({ message: "OfferCard not found" });
+      return res.status(404).json({ success: false, message: "OfferCard not found" });
     }
 
-    res.status(200).json({ success: true, data: card });
+    // Process products to handle variants
+   if (card.offers && card.offers.length) {
+     for (const offer of card.offers) {
+       if (offer.offerEligibleItems && offer.offerEligibleItems.length) {
+         offer.offerEligibleItems = await enrichProductsWithDefaultVariants(
+           offer.offerEligibleItems
+         );
+       }
+     }
+   }
+
+
+    res.status(200).json({
+      success: true,
+      data: card
+    });
   } catch (error) {
     console.error("Get OfferCard By ID Error:", error);
-    res.status(500).json({ message: "Failed to fetch offer card" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch offer card",
+      error: error.message
+    });
   }
 };
 

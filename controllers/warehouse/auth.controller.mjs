@@ -23,11 +23,11 @@ export const login = async (req, res) => {
 
     if (!admin) return res.status(404).json({ message: "Admin not found" });
 
-  if (!admin.assignedWarehouses) {
-    return res
-      .status(403)
-      .json({ message: "Access denied: no warehouse assigned" });
-  }
+    if (!admin.assignedWarehouses) {
+      return res
+        .status(403)
+        .json({ message: "Access denied: no warehouse assigned" });
+    }
 
     const role = await Role.findById(admin.role);
 
@@ -108,5 +108,83 @@ export const logout = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.send({ success: false, message: "Internal server error" });
+  }
+};
+
+export const getLoggedInAdmin = async (req, res) => {
+  try {
+    const userId = req.user._id; // Assuming authentication middleware sets req.user
+
+    // Fetch user excluding sensitive fields
+    const user = await Admin.findById(userId)
+      .select(
+        "-password -otp -otpExpires")
+      .populate("role", "name");
+      
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+
+    res.status(200).json({
+      success: true,
+      user,
+    });
+  } catch (error) {
+    console.error("Get Logged In User Details Error:", error);
+    res.status(500).json({ message: "Failed to get user details" });
+  }
+};
+
+export const editAdminProfile = async (req, res) => {
+  try {
+    const adminId = req.user._id; // Assuming auth middleware sets req.admin
+    const { name, email, password, role, assignedWarehouses } = req.body;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) return res.status(404).json({ message: "Admin not found" });
+
+    // Update name
+    if (name) admin.name = name.trim();
+
+    // Update email
+    if (email && email !== admin.email) {
+      const emailExists = await Admin.findOne({ email });
+      if (emailExists)
+        return res.status(409).json({ message: "Email already in use" });
+      admin.email = email.toLowerCase().trim();
+    }
+
+    // Update password
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      admin.password = await bcrypt.hash(password, salt);
+    }
+
+    // Update role (optional, only if superAdmin allows)
+    if (role) {
+      const roleExists = await Role.findById(role);
+      if (!roleExists)
+        return res.status(400).json({ message: "Invalid role ID" });
+      admin.role = role;
+    }
+
+    // Update assigned warehouses (array of IDs)
+    if (assignedWarehouses && Array.isArray(assignedWarehouses)) {
+      admin.assignedWarehouses = assignedWarehouses;
+    }
+
+    await admin.save();
+
+    // Remove sensitive info before sending response
+    admin.password = undefined;
+    admin.encryptedPassword = undefined;
+
+    res
+      .status(200)
+      .json({ message: "Profile updated successfully", admin });
+  } catch (error) {
+    console.error("Edit Admin Profile Error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };

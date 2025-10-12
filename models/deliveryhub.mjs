@@ -1,9 +1,9 @@
-// models/Admin.mjs
+// models/Deliveryhub.mjs
 import mongoose from 'mongoose';
 
 const { Schema, model } = mongoose;
 
-const adminSchema = new Schema(
+const DeliveryhubSchema = new Schema(
   {
     fullName: {
       type: String,
@@ -13,6 +13,7 @@ const adminSchema = new Schema(
     email: {
       type: String,
       required: true,
+      unique: true,
       lowercase: true,
       trim: true,
     },
@@ -53,12 +54,12 @@ const adminSchema = new Schema(
   }
 );
 
-adminSchema.virtual("assignedWarehouses", {
+DeliveryhubSchema.virtual("assignedWarehouses", {
   ref: "Warehouse", // model to use
   localField: "_id", // find warehouses where 'manager' matches admin _id
   foreignField: "manager",
-  justOne: false, // set true if one warehouse per admin
+  justOne: true, // set true if one warehouse per admin
 });
 
-const Admin = model('Admin', adminSchema);
-export default Admin;
+const Deliveryhub = model('Deliveryhub', DeliveryhubSchema);
+export default Deliveryhub;

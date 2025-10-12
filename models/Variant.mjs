@@ -31,12 +31,12 @@ const variantSchema = new Schema(
     SKU: {
       type: String,
       required: true,
-      unique: true,
+      // unique: true,
     },
 
     barcode: {
       type: String,
-      unique: true,
+      // unique: true,
     },
 
     costPrice: { type: Number, required: true },
@@ -44,6 +44,11 @@ const variantSchema = new Schema(
     sellingPrice: { type: Number, required: true },
 
     mrpPrice: { type: Number, required: true },
+
+    landingSellPrice: {
+      type: Number,
+      required: false
+    },
 
     discountPercent: { type: Number },
 

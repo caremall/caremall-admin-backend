@@ -19,7 +19,7 @@ export const createBrand = async (req, res) => {
       return res.status(200).json({ message: "Brand already exists" });
     }
 
-    // Upload base64 image to S3 if imageUrl provided as base64
+  
     let uploadedImageUrl = null;
     if (imageUrl) {
       uploadedImageUrl = await uploadBase64Image(imageUrl, "brand-images/");

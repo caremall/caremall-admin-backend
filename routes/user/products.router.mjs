@@ -14,6 +14,8 @@ router.get('/search', getSearchSuggestions)
 router.get('/:slug', getProductById)
 router.get("/by-category", getProductsByCategory);
 router.get("/nearby", getNearbyProducts)
+// router.get("/first-order-amount", getFirstOrderAmount)
+
 
 
 export default router

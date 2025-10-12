@@ -15,6 +15,7 @@ import {
   getInventoryLogs,
   getLowStockProducts,
   getTransferRequests,
+  getUpdatedInventories,
   incrementInventory,
   toggleFavoriteInventoryLog,
   updateDamagedInventoryReport,
@@ -28,7 +29,7 @@ inventoryRouter.post("/inbound",createInboundJob )
 inventoryRouter.get("/inbound",getInboundJobs )
 inventoryRouter.get("/inbound/:id",getInboundJobById )
 //transfer
-inventoryRouter.post("/transfer",createTransferRequest)
+inventoryRouter.post("/transfer/create",createTransferRequest)
 inventoryRouter.put("/transfer/:id",updateTransferRequestStatus)
 inventoryRouter.get("/transfer",getTransferRequests)
 inventoryRouter.post("/transfer/assign-driver/:id",assignDriverToTransferRequest)
@@ -43,6 +44,7 @@ inventoryRouter.delete("/damaged/:id", deleteDamagedInventoryReport);
 inventoryRouter.put("/increment/:id",incrementInventory)
 inventoryRouter.put("/decrement/:id",decrementInventory)
 inventoryRouter.put("/", updateInventory);
+inventoryRouter.get("/updated-inventory", getUpdatedInventories);
 inventoryRouter.get("/", getAllInventories);
 inventoryRouter.get("/log", getInventoryLogs);
 inventoryRouter.get("/low-stock", getLowStockProducts);

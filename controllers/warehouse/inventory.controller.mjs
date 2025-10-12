@@ -7,72 +7,83 @@ import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 
 export const createTransferRequest = async (req, res) => {
   try {
-    const toWarehouse = req.user.assignedWarehouses._id;
+    console.log("Create Transfer Request - User:", req.user);
+
+    if (!req.user) {
+      return res.status(401).json({ message: "Unauthorized: User not authenticated" });
+    }
+
+    const assignedWarehouses = req.user.assignedWarehouses;
+
+    // If assignedWarehouses is an array, grab first warehouse's _id
+    const toWarehouse = Array.isArray(assignedWarehouses)
+      ? assignedWarehouses[0]?._id
+      : assignedWarehouses?._id;
+
+    if (!toWarehouse) {
+      return res.status(400).json({ message: "User does not have an assigned warehouse" });
+    }
+
     const {
       fromWarehouse,
       product,
-      variant,
       carrier,
       dispatchTime,
       totalWeight,
       quantityRequested,
     } = req.body;
 
-    if (!fromWarehouse || !quantityRequested || quantityRequested <= 0) {
-      return res
-        .status(400)
-        .json({ message: "Required fields missing or invalid" });
+    if (!fromWarehouse || !product || !quantityRequested || quantityRequested <= 0) {
+      return res.status(400).json({ message: "Required fields missing or invalid" });
     }
 
-    if (!product && !variant) {
-      return res
-        .status(400)
-        .json({ message: "Either product or variant must be specified" });
+    if (!fromWarehouse) {
+      return res.status(400).json({ message: "fromWarehouse is required" });
     }
 
-    if (fromWarehouse.toString() === toWarehouse.toString()) {
-      return res.status(400).json({
-        message: "Source and destination warehouses cannot be the same",
-      });
+    if (!product || !Array.isArray(product) || product.length === 0) {
+      return res.status(400).json({ message: "Product must be a non-empty array" });
     }
 
-    // Optionally verify source warehouse inventory here...
-
+    if (!quantityRequested || quantityRequested <= 0) {
+      return res.status(400).json({ message: "quantityRequested must be greater than zero" });
+    }
     const transferRequest = await TransferRequest.create({
       fromWarehouse,
       toWarehouse,
       product,
-      variant,
       carrier,
-      dispatchTime,
+      dispatchTime: dispatchTime ? new Date(dispatchTime) : null,
       totalWeight,
       quantityRequested,
     });
 
-    res
-      .status(201)
-      .json({ message: "Transfer request created", transferRequest });
+    res.status(201).json({ message: "Transfer request created", data: transferRequest });
   } catch (err) {
-    console.error("Create transfer request error:", err);
-    res.status(500).json({ message: "Server error creating transfer request" });
+    console.error("Create transfer request error:", err.message, err.stack);
+    res.status(500).json({ message: "Server error creating transfer request", error: err.message });
   }
 };
+
+
 
 export const getTransferRequests = async (req, res) => {
   try {
     const { status } = req.query;
     const query = {};
-    const warehouseId = req.user.assignedWarehouses._id;
+
+    const warehouseId = req.user.assignedWarehouses?._id;
     if (warehouseId) {
       query.$or = [
         { fromWarehouse: warehouseId },
         { toWarehouse: warehouseId },
       ];
     }
+
     if (status) query.status = status;
 
     const transferRequests = await TransferRequest.find(query)
-      .populate("fromWarehouse toWarehouse product variant driver")
+      .populate("fromWarehouse toWarehouse product driver") // ⬅️ Removed 'variant'
       .sort({ requestedAt: -1 })
       .lean();
 
@@ -81,9 +92,9 @@ export const getTransferRequests = async (req, res) => {
     });
   } catch (err) {
     console.error("Get transfer requests error:", err);
-    res
-      .status(500)
-      .json({ message: "Server error fetching transfer requests" });
+    res.status(500).json({
+      message: "Server error fetching transfer requests",
+    });
   }
 };
 
@@ -215,7 +226,10 @@ export const updateInventory = async (req, res) => {
       maximumQuantity,
       minimumQuantity,
     } = req.body;
-    const warehouseId = req.user.assignedWarehouses._id;
+    const warehouseId =
+      Array.isArray(req.user?.assignedWarehouses)
+        ? req.user.assignedWarehouses[0]?._id
+        : req.user?.assignedWarehouses?._id || warehouseFromBody;
 
     if (!warehouseId) {
       return res.status(400).json({ message: "Warehouse is required" });
@@ -227,11 +241,11 @@ export const updateInventory = async (req, res) => {
         .json({ message: "Product ID or Variant ID is required" });
     }
 
-    if (typeof quantityChange !== "number" || quantityChange === 0) {
-      return res
-        .status(400)
-        .json({ message: "Quantity change must be a non-zero number" });
-    }
+    // if (typeof quantityChange !== "number" || quantityChange === 0) {
+    //   return res
+    //     .status(400)
+    //     .json({ message: "Quantity change must be a non-zero number" });
+    // }
 
     if (!reasonForUpdate || reasonForUpdate.trim() === "") {
       return res.status(400).json({ message: "Reason for update is required" });
@@ -262,11 +276,11 @@ export const updateInventory = async (req, res) => {
     const previousQuantity = inventory.availableQuantity;
     const newQuantity = previousQuantity + quantityChange;
 
-    if (newQuantity < 0) {
-      return res
-        .status(400)
-        .json({ message: "Resulting quantity cannot be negative" });
-    }
+    // if (newQuantity < 0) {
+    //   return res
+    //     .status(400)
+    //     .json({ message: "Resulting quantity cannot be negative" });
+    // }
     if (
       inventory.maximumQuantity > 0 &&
       newQuantity > inventory.maximumQuantity
@@ -378,10 +392,64 @@ export const decrementInventory = async (req, res) => {
   }
 };
 
+// 📦 Get Recently Updated Inventories
+export const getUpdatedInventories = async (req, res) => {
+  try {
+    const { limit = 20, page = 1 } = req.query
+
+    // Convert to numbers
+    const pageSize = Number(limit)
+    const skip = (Number(page) - 1) * pageSize
+
+    // Find inventories that were updated after creation
+    const updatedInventories = await Inventory.find({
+      $expr: { $ne: ["$createdAt", "$updatedAt"] },
+    })
+      .sort({ updatedAt: -1 }) // newest updates first
+      .skip(skip)
+      .limit(pageSize)
+      .populate("warehouse")
+      .populate("warehouseLocation")
+      .populate({
+        path: "variant",
+        populate: {
+          path: "productId", // populate product inside variant
+          select: "productName SKU urlSlug", // select product fields you want
+        },
+      })
+      .populate("product")
+
+    const totalCount = await Inventory.countDocuments({
+      $expr: { $ne: ["$createdAt", "$updatedAt"] },
+    })
+
+    return res.status(200).json({
+      data: updatedInventories,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+    })
+  } catch (error) {
+    console.error("Error fetching updated inventories:", error)
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch updated inventories",
+      error: error.message,
+    })
+  }
+}
+
+
 export const getAllInventories = async (req, res) => {
   try {
     const { productId, variantId, page = 1, limit = 50 } = req.query;
-    const warehouseId = req.user.assignedWarehouses._id;
+    const warehouseId =
+      Array.isArray(req.user?.assignedWarehouses)
+        ? req.user.assignedWarehouses[0]?._id
+        : req.user?.assignedWarehouses?._id || warehouseFromBody;
 
     const query = {};
     if (warehouseId) query.warehouse = warehouseId;
@@ -455,7 +523,11 @@ export const getInventoryById = async (req, res) => {
 export const getInventoryLogs = async (req, res) => {
   try {
     const { productId, variantId } = req.query;
-    const warehouseId = req.user.assignedWarehouses._id;
+    const warehouseId =
+      Array.isArray(req.user?.assignedWarehouses)
+        ? req.user.assignedWarehouses[0]?._id
+        : req.user?.assignedWarehouses?._id || warehouseFromBody;
+
     const query = {};
     if (warehouseId) query.warehouse = warehouseId;
     if (productId) query.product = productId;
@@ -519,7 +591,8 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
       return res.status(400).json({ message: "Inventory log ID is required" });
     }
 
-    const log = await InventoryLog.findById(id);
+    // Fix: Make sure you import InventoryLog properly
+    const log = await inventoryLog.findById(id);
     if (!log) {
       return res.status(404).json({ message: "Inventory log not found" });
     }
@@ -529,7 +602,7 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
     await log.save();
 
     res.status(200).json({
-      message: `Inventory log ${log.isFavorite ? "favorited" : "unfavorited"} successfully`,
+      message: `Inventory log ${log.isFavorite ? "added to favorites" : "removed from favorites"} successfully`,
       isFavorite: log.isFavorite,
       inventoryLog: log,
     });
@@ -538,7 +611,6 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
     res.status(500).json({ message: "Server error toggling favorite inventory log" });
   }
 };
-
 
 export const createDamagedInventoryReport = async (req, res) => {
   try {
@@ -552,8 +624,10 @@ export const createDamagedInventoryReport = async (req, res) => {
       evidenceImages,
     } = req.body;
 
-    const warehouse = req.user.assignedWarehouses._id;
-
+    const warehouse =
+      Array.isArray(req.user?.assignedWarehouses)
+        ? req.user.assignedWarehouses[0]?._id
+        : req.user?.assignedWarehouses?._id || warehouseFromBody;
     // Validate required fields
     if (!warehouse) {
       return res.status(400).json({ message: "Warehouse ID is required" });
@@ -621,7 +695,10 @@ export const updateDamagedInventoryReport = async (req, res) => {
       evidenceImages,
     } = req.body;
 
-    const warehouseId = req.user.assignedWarehouses?._id;
+    const warehouseId =
+      Array.isArray(req.user?.assignedWarehouses)
+        ? req.user.assignedWarehouses[0]?._id
+        : req.user?.assignedWarehouses?._id || warehouseFromBody;
 
     if (!warehouseId) {
       return res.status(400).json({ message: "Warehouse ID is required" });
@@ -719,7 +796,10 @@ export const updateDamagedInventoryReport = async (req, res) => {
 export const getDamagedInventoryReports = async (req, res) => {
   try {
     const { productId, variantId } = req.query;
-    const warehouseId = req.user.assignedWarehouses._id;
+    const warehouseId =
+      Array.isArray(req.user?.assignedWarehouses)
+        ? req.user.assignedWarehouses[0]?._id
+        : req.user?.assignedWarehouses?._id || warehouseFromBody;
     const query = {};
     if (warehouseId) query.warehouse = warehouseId;
     if (productId) query.product = productId;
@@ -780,7 +860,10 @@ export const deleteDamagedInventoryReport = async (req, res) => {
       return res.status(400).json({ message: "Inventory ID is required" });
     }
 
-    const warehouseId = req.user.assignedWarehouses?._id;
+    const warehouseId =
+      Array.isArray(req.user?.assignedWarehouses)
+        ? req.user.assignedWarehouses[0]?._id
+        : req.user?.assignedWarehouses?._id || warehouseFromBody;
 
     const query = { _id: id };
     if (warehouseId) query.warehouse = warehouseId;
@@ -807,7 +890,11 @@ export const deleteDamagedInventoryReport = async (req, res) => {
 
 export const getLowStockProducts = async (req, res) => {
   try {
-    const warehouseId = req.user.assignedWarehouses?._id;
+    const warehouseId =
+      Array.isArray(req.user?.assignedWarehouses)
+        ? req.user.assignedWarehouses[0]?._id
+        : req.user?.assignedWarehouses?._id || warehouseFromBody;
+
     const query = {
       $expr: { $lt: ["$availableQuantity", "$minimumQuantity"] },
     };
@@ -869,15 +956,22 @@ export const createInboundJob = async (req, res) => {
       supplier,
       allocatedLocation,
       items,
+      warehouse: warehouseFromBody,
     } = req.body;
 
-    const warehouse = req.user.assignedWarehouses._id;
+    const warehouse =
+      Array.isArray(req.user?.assignedWarehouses)
+        ? req.user.assignedWarehouses[0]?._id
+        : req.user?.assignedWarehouses?._id || warehouseFromBody;
+
+    if (!warehouse) {
+      return res.status(400).json({ message: "Warehouse ID is required" });
+    }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Inbound items are required" });
     }
 
-    // Create inbound job document
     const inboundJob = await Inbound.create({
       jobType,
       jobNumber,
@@ -889,7 +983,6 @@ export const createInboundJob = async (req, res) => {
       warehouse,
     });
 
-    // Update inventory quantities for each item
     for (const item of items) {
       const productId = item.productId || null;
       const variantId = item.variantId || null;
@@ -933,12 +1026,21 @@ export const createInboundJob = async (req, res) => {
   }
 };
 
+
 export const getInboundJobs = async (req, res) => {
   try {
     const { status } = req.query;
-    const warehouseId = req.user.assignedWarehouses._id;
+    console.log("🔍 req.user.assignedWarehouses =", req.user.assignedWarehouses);
 
-    const query = { warehouse: warehouseId };
+    const warehouseId =
+      Array.isArray(req.user?.assignedWarehouses)
+        ? req.user.assignedWarehouses[0]?._id
+        : req.user?.assignedWarehouses?._id;
+
+    console.log("✅ warehouseId used =", warehouseId);
+
+    const query = {};
+    if (warehouseId) query.warehouse = warehouseId;
     if (status) query.status = status;
 
     const inboundJobs = await Inbound.find(query)
@@ -949,30 +1051,45 @@ export const getInboundJobs = async (req, res) => {
       .populate("items.variantId")
       .lean();
 
-    return res.status(200).json({
-      data: inboundJobs,
-    });
+    console.log("📦 Found inboundJobs:", inboundJobs.length);
+
+    return res.status(200).json({ data: inboundJobs });
   } catch (error) {
     console.error("Error fetching inbound jobs:", error);
-    return res
-      .status(500)
-      .json({ message: "Server error fetching inbound jobs" });
+    return res.status(500).json({ message: "Server error fetching inbound jobs" });
   }
 };
+
 
 export const getInboundJobById = async (req, res) => {
   try {
     const { id } = req.params; // inbound job id from route param
-    const warehouseId = req.user.assignedWarehouses._id;
 
     if (!id) {
       return res.status(400).json({ message: "Inbound job ID is required" });
     }
 
-    const inboundJob = await Inbound.findOne({
+    // Handle assignedWarehouses: could be object or array
+    let warehouseIds = [];
+    if (Array.isArray(req.user.assignedWarehouses)) {
+      warehouseIds = req.user.assignedWarehouses.map((w) => w._id?.toString());
+    } else if (req.user.assignedWarehouses?._id) {
+      warehouseIds = [req.user.assignedWarehouses._id.toString()];
+    }
+
+    console.log("🔍 Inbound ID:", id);
+    console.log("🏭 Warehouse IDs allowed:", warehouseIds);
+
+    // Build query
+    const query = {
       _id: id,
-      warehouse: warehouseId, // make sure user only accesses their warehouse
-    })
+    };
+
+    if (warehouseIds.length > 0) {
+      query.warehouse = { $in: warehouseIds };
+    }
+
+    const inboundJob = await Inbound.findOne(query)
       .populate("supplier")
       .populate("warehouse")
       .populate("allocatedLocation")
@@ -981,6 +1098,7 @@ export const getInboundJobById = async (req, res) => {
       .lean();
 
     if (!inboundJob) {
+      console.warn("⚠️ Inbound job not found for given warehouse/user");
       return res.status(404).json({ message: "Inbound job not found" });
     }
 
@@ -988,9 +1106,10 @@ export const getInboundJobById = async (req, res) => {
       data: inboundJob,
     });
   } catch (error) {
-    console.error("Error fetching inbound job by ID:", error);
+    console.error("❌ Error fetching inbound job by ID:", error);
     return res
       .status(500)
       .json({ message: "Server error fetching inbound job by ID" });
   }
 };
+

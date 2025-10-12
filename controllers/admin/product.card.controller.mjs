@@ -5,7 +5,7 @@ import ProductCard from "../../models/productCard.mjs";
 // Create a new ProductCard with linked products
 export const createProductCard = async (req, res) => {
   try {
-    const { title, buttonText, buttonLinkType, redirectLink, products } =
+    const { title, buttonText, buttonLinkType, redirectLink, products, active } =
       req.body;
 
     if (!title) {
@@ -25,6 +25,7 @@ export const createProductCard = async (req, res) => {
       buttonLinkType,
       redirectLink,
       products,
+      active
     });
 
     res
@@ -40,6 +41,20 @@ export const createProductCard = async (req, res) => {
 export const getAllProductCards = async (req, res) => {
   try {
     const cards = await ProductCard.find()
+      .populate("products")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({ success: true, data: cards });
+  } catch (error) {
+    console.error("Get All ProductCards Error:", error);
+    res.status(500).json({ message: "Failed to fetch product cards" });
+  }
+};
+
+export const getAllActiveProductCards = async (req, res) => {
+  try {
+    const cards = await ProductCard.find({ active: true })
       .populate("products")
       .sort({ createdAt: -1 })
       .lean();
@@ -76,7 +91,7 @@ export const getProductCardById = async (req, res) => {
 export const updateProductCard = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, buttonText, buttonLinkType, redirectLink, products } =
+    const { title, buttonText, buttonLinkType, redirectLink, products, active } =
       req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -92,6 +107,7 @@ export const updateProductCard = async (req, res) => {
     if (buttonText !== undefined) card.buttonText = buttonText;
     if (buttonLinkType !== undefined) card.buttonLinkType = buttonLinkType;
     if (redirectLink !== undefined) card.redirectLink = redirectLink;
+    if (active !== undefined) card.active = active;
     if (products !== undefined) {
       if (!Array.isArray(products)) {
         return res

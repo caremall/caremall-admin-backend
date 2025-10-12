@@ -1,3 +1,4 @@
+import DeliveryBoy from "../../models/DeliveryBoy.mjs";
 import Order from "../../models/Order.mjs";
 import mongoose from "mongoose";
 
@@ -123,12 +124,16 @@ export const deleteOrder = async (req, res) => {
 
 export const getAllocatedOrders = async (req, res) => {
   try {
-    const warehouseId = req.user.assignedWarehouses?._id;
+    const warehouseId =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
 
     if (!warehouseId) {
       return res
         .status(400)
-        .json({ message: "No warehouse assigned to this user" });
+        .json({ message: "No warehouse assigned to this warehouse" });
     }
 
     const { search = "", status, startDate, endDate } = req.query;
@@ -166,6 +171,8 @@ export const getAllocatedOrders = async (req, res) => {
     const orders = await Order.find(query)
       .populate("user")
       .populate("dispatches.driver")
+      .populate("dispatches.carrier")
+      .populate("allocatedWarehouse")
       .populate("items.product")
       .populate("items.variant")
       .sort({ createdAt: -1 });
@@ -224,10 +231,14 @@ export const updatePickedQuantities = async (req, res) => {
         });
       }
 
-      if (!pickerName || typeof pickerName !== "string" || pickerName.trim() === "") {
-        return res
-          .status(400)
-          .json({ message: `pickerName is required for product ${pickItemId}` });
+      if (
+        !pickerName ||
+        typeof pickerName !== "string" ||
+        pickerName.trim() === ""
+      ) {
+        return res.status(400).json({
+          message: `pickerName is required for product ${pickItemId}`,
+        });
       }
 
       const pickItem = order.pickings.find(
@@ -265,7 +276,6 @@ export const updatePickedQuantities = async (req, res) => {
     res.status(500).json({ message: "Failed to update picked quantities" });
   }
 };
-
 
 // export const updatePackingDetails = async (req, res) => {
 //   try {
@@ -377,6 +387,7 @@ export const markOrderDispatched = async (req, res) => {
       totalWeight,
       destinationHub,
       manifestStatus,
+      toLocation
     } = req.body;
 
     const order = await Order.findById(orderId);
@@ -384,13 +395,14 @@ export const markOrderDispatched = async (req, res) => {
 
     const newDispatch = {
       carrier,
-      driver,
+      driver: driver || null,
       vehicleNumber,
       dispatchDate: dispatchDate ? new Date(dispatchDate) : new Date(),
       dispatchTime,
       totalPackages,
       totalWeight,
       destinationHub,
+      toLocation,
       manifestStatus: manifestStatus || "Pending",
     };
 
@@ -441,5 +453,40 @@ export const markOrderCancelled = async (req, res) => {
   } catch (error) {
     console.error("Update Order Status Error:", error);
     res.status(500).json({ message: "Failed to update order status" });
+  }
+};
+
+export const assignOrderToDeliveryBoy = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { deliveryBoyId } = req.body;
+
+    if (!deliveryBoyId) {
+      return res.status(400).json({ message: "deliveryBoyId is required" });
+    }
+
+    // Check if delivery boy exists
+    const deliveryBoy = await DeliveryBoy.findById(deliveryBoyId);
+    if (!deliveryBoy) {
+      return res.status(404).json({ message: "Delivery boy not found" });
+    }
+
+    // Find order to assign
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    // Assign delivery boy
+    order.deliveryBoy = deliveryBoyId;
+
+    // Optionally update order status, e.g., assigned to delivery
+    order.orderStatus = "assigned";
+
+    await order.save();
+    res.status(200).json({ message: "Order assigned to delivery boy" });
+  } catch (error) {
+    console.error("Assign Order to Delivery Boy Error:", error);
+    res.status(500).json({ message: "Failed to assign order to delivery boy" });
   }
 };

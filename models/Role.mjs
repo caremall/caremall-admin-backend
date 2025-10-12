@@ -1,4 +1,3 @@
-// models/Role.mjs
 import mongoose from 'mongoose';
 
 const { Schema, model } = mongoose;
@@ -19,6 +18,11 @@ const roleSchema = new Schema(
             type: String,
             trim: true,
             default: '',
+        },
+        status: {
+            type: String,
+            enum: ['draft', 'published'],
+            default: 'draft',
         },
     },
     {
