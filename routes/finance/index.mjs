@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { verifyFinanceAdminToken as AdminToken } from "../../middlewares/verifyToken.mjs";
 
+import Auth from "../../routes/finance/auth.router.mjs";
 import chartRoutes from "../../routes/finance/chartOfAccounts.router.mjs";
 import bankRoutes from "../../routes/finance/bankMaster.router.mjs";
 import paymentRoutes from "../../routes/finance/payment.router.mjs";
@@ -11,13 +12,14 @@ import debitRoutes from "../../routes/finance/debitNote.routes.mjs";
 import creditRoutes from "../../routes/finance/creditNote.routes.mjs";
 
 const financeRouter = Router();
-financeRouter.use("/api/charts", AdminToken, chartRoutes);
-financeRouter.use("/api/banks", AdminToken, bankRoutes);
-financeRouter.use("/api/payments", AdminToken, paymentRoutes);
-financeRouter.use("/api/receipts", AdminToken, receiptRoutes);
-financeRouter.use("/api/transfers", AdminToken, transferRoutes);
-financeRouter.use("/api/journals", AdminToken, journalRoutes);
-financeRouter.use("/api/debit-notes", AdminToken, debitRoutes);
-financeRouter.use("/api/credit-notes", AdminToken, creditRoutes);
+financeRouter.use("/auth", Auth);
+financeRouter.use("/chart-of-accounts", AdminToken, chartRoutes);
+financeRouter.use("/bank-master", AdminToken, bankRoutes);
+financeRouter.use("/payments", AdminToken, paymentRoutes);
+financeRouter.use("/receipts", AdminToken, receiptRoutes);
+financeRouter.use("/bank-transfers", AdminToken, transferRoutes);
+financeRouter.use("/journals", AdminToken, journalRoutes);
+financeRouter.use("/debit-notes", AdminToken, debitRoutes);
+financeRouter.use("/credit-notes", AdminToken, creditRoutes);
 
 export default financeRouter;
