@@ -1,22 +1,36 @@
 import mongoose from "mongoose";
-const { Schema, model } = mongoose;
 
-const paymentSchema = new Schema(
+const paymentSchema = new mongoose.Schema(
   {
-    paymentCategory: { type: String, required: true, trim: true },
-    party: { type: Schema.Types.ObjectId, ref: "ChartOfAccount", required: true },
+    paymentCategory: { type: String, required: true },
+    party: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount", // Party is linked to CoA (e.g., vendor/customer account)
+      required: true,
+    },
     date: { type: Date, required: true },
-    bankName: { type: Schema.Types.ObjectId, ref: "BankMaster" },
-    paymentType: { type: String, trim: true }, // e.g., Cash, Bank Transfer
+    bank: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BankMaster",
+      required: true,
+    },
+    paymentType: { type: String, required: true },
     docAmount: { type: Number, required: true },
-    balAmount: { type: Number, default: 0 },
-    status: { type: String, trim: true, default: "Pending" },
+    balAmount: { type: Number, required: true },
+    status: {
+      type: String,
+      enum: ["Received", "Pending", "Cancelled"],
+      default: "Received",
+    },
     allocatedAmount: { type: Number, default: 0 },
     balanceAmount: { type: Number, default: 0 },
-    narration: { type: String, trim: true },
+    narration: { type: String },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   { timestamps: true }
 );
 
-const Payment = model("Payment", paymentSchema);
-export default Payment;
+export default mongoose.model("Payment", paymentSchema);

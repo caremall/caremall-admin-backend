@@ -1,18 +1,20 @@
 import mongoose from "mongoose";
-const { Schema, model } = mongoose;
 
-const bankMasterSchema = new Schema(
+const bankMasterSchema = new mongoose.Schema(
   {
-    code: { type: String, required: true, trim: true },
-    bankName: { type: String, required: true, trim: true },
-    ibanNo: { type: String, trim: true },
-    glAccount: { type: Schema.Types.ObjectId, ref: "ChartOfAccount", required: true },
-    accountNo: { type: String, trim: true },
-    accountType: { type: String, trim: true },
+    code: { type: String, required: true, unique: true },
+    bankName: { type: String, required: true },
+    ibanNo: { type: String },
+    glAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      required: true, // Bank must be linked to a GL account
+    },
+    accountNo: { type: String, required: true },
+    accountType: { type: String, required: true },
     isDefault: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
-const BankMaster = model("BankMaster", bankMasterSchema);
-export default BankMaster;
+export default mongoose.model("BankMaster", bankMasterSchema);

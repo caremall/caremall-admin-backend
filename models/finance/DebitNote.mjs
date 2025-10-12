@@ -1,20 +1,23 @@
 import mongoose from "mongoose";
-const { Schema, model } = mongoose;
 
-const debitNoteSchema = new Schema(
+const debitNoteSchema = new mongoose.Schema(
   {
     date: { type: Date, required: true },
-    reference: { type: String, trim: true },
-    customer: { type: Schema.Types.ObjectId, ref: "ChartOfAccount", required: true },
-    type: { type: String, trim: true },
-    narration: { type: String, trim: true },
+    reference: { type: String },
+    customer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount", // or a separate Customer model
+      required: true,
+    },
+    type: { type: String, required: true },
+    narration: { type: String },
     vat: { type: Number, default: 0 },
     amount: { type: Number, required: true },
     totalAmount: { type: Number, required: true },
-    status: { type: String, trim: true, default: "Pending" }, // for confirm action
+    status: { type: String, enum: ["Draft", "Confirmed"], default: "Draft" },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );
 
-const DebitNote = model("DebitNote", debitNoteSchema);
-export default DebitNote;
+export default mongoose.model("DebitNote", debitNoteSchema);

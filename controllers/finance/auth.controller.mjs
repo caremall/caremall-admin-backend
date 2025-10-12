@@ -4,7 +4,9 @@ import bcrypt from "bcryptjs";
 
 // Generate JWT
 const generateToken = (id, role) => {
-  return jwt.sign({ id, role }, process.env.FINANCE_JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ id, role }, process.env.FINANCE_JWT_SECRET, {
+    expiresIn: "7d",
+  });
 };
 
 // Signup
