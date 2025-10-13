@@ -14,57 +14,79 @@ export const createTransferRequest = async (req, res) => {
     }
 
     const assignedWarehouses = req.user.assignedWarehouses;
-
-    // If assignedWarehouses is an array, grab first warehouse's _id
-    const toWarehouse = Array.isArray(assignedWarehouses)
+    const fromWarehouse = Array.isArray(assignedWarehouses)
       ? assignedWarehouses[0]?._id
       : assignedWarehouses?._id;
 
-    if (!toWarehouse) {
-      return res.status(400).json({ message: "User does not have an assigned warehouse" });
+    if (!fromWarehouse) {
+      return res.status(400).json({ message: "User does not have an assigned warehouse to transfer from" });
     }
 
+    
     const {
-      fromWarehouse,
-      product,
+      toWarehouse,
+      items,
       carrier,
       dispatchTime,
       totalWeight,
-      quantityRequested,
+      driver 
     } = req.body;
 
-    if (!fromWarehouse || !product || !quantityRequested || quantityRequested <= 0) {
-      return res.status(400).json({ message: "Required fields missing or invalid" });
+    console.log('Dynamic From Warehouse:', fromWarehouse);
+    console.log('To Warehouse from request:', toWarehouse);
+
+    if (!toWarehouse) {
+      return res.status(400).json({ message: "toWarehouse is required" });
     }
 
-    if (!fromWarehouse) {
-      return res.status(400).json({ message: "fromWarehouse is required" });
+    
+    if (!driver) {
+      return res.status(400).json({ message: "Driver is required" });
     }
 
-    if (!product || !Array.isArray(product) || product.length === 0) {
-      return res.status(400).json({ message: "Product must be a non-empty array" });
+    
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Items must be a non-empty array" });
     }
 
-    if (!quantityRequested || quantityRequested <= 0) {
-      return res.status(400).json({ message: "quantityRequested must be greater than zero" });
+    
+    for (const item of items) {
+      if (!item.productId) {
+        return res.status(400).json({ message: "Each item must have a productId" });
+      }
+      if (!item.quantity || item.quantity <= 0) {
+        return res.status(400).json({ message: "Each item must have a quantity greater than zero" });
+      }
     }
+
+    if (fromWarehouse.toString() === toWarehouse.toString()) {
+      return res.status(400).json({ 
+        message: "Source and destination warehouses cannot be the same" 
+      });
+    }
+
     const transferRequest = await TransferRequest.create({
-      fromWarehouse,
-      toWarehouse,
-      product,
+      fromWarehouse, 
+      toWarehouse,   
+      items,         
       carrier,
       dispatchTime: dispatchTime ? new Date(dispatchTime) : null,
       totalWeight,
-      quantityRequested,
+      driver 
     });
 
-    res.status(201).json({ message: "Transfer request created", data: transferRequest });
+    res.status(201).json({ 
+      message: "Transfer request created successfully", 
+      data: transferRequest 
+    });
   } catch (err) {
     console.error("Create transfer request error:", err.message, err.stack);
-    res.status(500).json({ message: "Server error creating transfer request", error: err.message });
+    res.status(500).json({ 
+      message: "Server error creating transfer request", 
+      error: err.message 
+    });
   }
 };
-
 
 
 export const getTransferRequests = async (req, res) => {
@@ -83,7 +105,7 @@ export const getTransferRequests = async (req, res) => {
     if (status) query.status = status;
 
     const transferRequests = await TransferRequest.find(query)
-      .populate("fromWarehouse toWarehouse product driver") // ⬅️ Removed 'variant'
+      .populate("fromWarehouse toWarehouse driver")
       .sort({ requestedAt: -1 })
       .lean();
 
@@ -94,6 +116,126 @@ export const getTransferRequests = async (req, res) => {
     console.error("Get transfer requests error:", err);
     res.status(500).json({
       message: "Server error fetching transfer requests",
+    });
+  }
+};
+
+
+export const getTransactionByID = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Transaction ID is required",
+      });
+    }
+
+    const transaction = await TransferRequest.findById(id)
+      .populate("fromWarehouse toWarehouse driver items.productId items.variantId")
+      .lean();
+
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaction not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: transaction,
+    });
+  } catch (err) {
+    console.error("Get transaction by ID error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error fetching transaction",
+    });
+  }
+};
+export const getTransferRequestById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid transfer request ID"
+      });
+    }
+
+    const transferRequest = await TransferRequest.findById(id)
+      .populate("fromWarehouse toWarehouse driver items.productId items.variantId")
+      .lean();
+
+    if (!transferRequest) {
+      return res.status(404).json({
+        success: false,
+        message: "Transfer request not found"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: transferRequest
+    });
+  } catch (err) {
+    console.error("Get transfer request by ID error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error fetching transfer request",
+    });
+  }
+};
+
+export const updateTransferStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { manifestStatus, pickStatus, packStatus } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid transfer request ID"
+      });
+    }
+
+    const updateData = {};
+    if (manifestStatus) updateData.manifestStatus = manifestStatus;
+    if (pickStatus) updateData.pickStatus = pickStatus;
+    if (packStatus) updateData.packStatus = packStatus;
+
+    if (manifestStatus === 'in-transit') {
+      updateData.shippedAt = new Date();
+    } else if (manifestStatus === 'delivered') {
+      updateData.receivedAt = new Date();
+    }
+
+    const transferRequest = await TransferRequest.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true }
+    ).populate("fromWarehouse toWarehouse driver items.productId items.variantId");
+
+    if (!transferRequest) {
+      return res.status(404).json({
+        success: false,
+        message: "Transfer request not found"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Transfer status updated successfully",
+      data: transferRequest
+    });
+  } catch (err) {
+    console.error("Update transfer status error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error updating transfer status",
     });
   }
 };
