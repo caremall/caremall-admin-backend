@@ -2,6 +2,26 @@ import mongoose from "mongoose";
 
 const { Schema, model } = mongoose;
 
+const transfetItemSchema = new Schema({
+  quantity: Number,
+  productId: {
+    type: Schema.Types.ObjectId,
+    ref: "Product",
+    required: true
+  },
+   variantId: {
+    type: Schema.Types.ObjectId,
+    ref: "Variant", 
+    required: false,
+    default: null 
+  },
+  totalWeight: {
+    type: Number,
+  },
+}, {
+  timestamps: true
+});
+
 const transferRequestSchema = new Schema({
   fromWarehouse: {
     type: Schema.Types.ObjectId,
@@ -19,24 +39,6 @@ const transferRequestSchema = new Schema({
   dispatchTime: {
     type: Date,
   },
-  totalWeight: {
-    type: Number,
-  },
- product: [
-  {
-    type: Schema.Types.ObjectId,
-    ref: "Product",
-    required: true,
-  }
-],
-  quantityRequested: {
-    type: Number,
-    required: true,
-  },
-  quantityTransferred: {
-    type: Number,
-    default: 0,
-  },
   pickStatus: {
     type: String,
     enum: ["pending", "picked"],
@@ -50,7 +52,7 @@ const transferRequestSchema = new Schema({
   driver: {
     type: Schema.Types.ObjectId,
     ref: "Driver",
-    default: null,
+    required: true, // Made driver required
   },
   shippedAt: Date,
   receivedAt: Date,
@@ -63,12 +65,15 @@ const transferRequestSchema = new Schema({
     type: Date,
     default: Date.now,
   },
+  items: [transfetItemSchema],
+}, {
+  timestamps: true
 });
 
 // Custom validation: variant removed, so only product is required
 transferRequestSchema.pre("validate", function (next) {
-  if (!this.product) {
-    return next(new Error("Product must be specified in transfer request"));
+  if (!this.items || this.items.length === 0) {
+    return next(new Error("At least one item must be specified in transfer request"));
   }
   next();
 });
