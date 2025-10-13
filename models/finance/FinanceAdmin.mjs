@@ -24,7 +24,6 @@ const financeAdminSchema = new Schema(
     },
     role: {
       type: String,
-    //   enum: ["super_admin", "finance_admin"],
       default: "finance_admin",
     },
     isActive: {

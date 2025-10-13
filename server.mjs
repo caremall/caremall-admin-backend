@@ -1,6 +1,6 @@
 import express from "express";
-import connectDB from "./connections/mongoConnect.mjs";
 import { configDotenv } from "dotenv";
+import connectDB from "./connections/mongoConnect.mjs";
 import mongoose from "mongoose";
 import corsOptions from "./config/cors/corsOptions.mjs";
 import cors from "cors";
