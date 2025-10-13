@@ -1,0 +1,15 @@
+import express from "express";
+import {
+  registerFinanceAdmin,
+  loginFinanceAdmin,
+  getFinanceAdminProfile,
+} from "../../controllers/finance/auth.controller.mjs";
+import { verifyFinanceAdminToken as financeToken } from "../../middlewares/verifyToken.mjs";
+
+const router = express.Router();
+
+router.post("/signup", registerFinanceAdmin);
+router.post("/login", loginFinanceAdmin);
+router.get("/profile", financeToken, getFinanceAdminProfile);
+
+export default router;

@@ -1,17 +1,24 @@
 import mongoose from "mongoose";
-const { Schema, model } = mongoose;
 
-const bankTransferSchema = new Schema(
+const bankTransferSchema = new mongoose.Schema(
   {
     date: { type: Date, required: true },
-    fromBank: { type: Schema.Types.ObjectId, ref: "BankMaster", required: true },
-    paymentType: { type: String, trim: true },
-    toBank: { type: Schema.Types.ObjectId, ref: "BankMaster", required: true },
+    fromBank: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BankMaster",
+      required: true,
+    },
+    toBank: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BankMaster",
+      required: true,
+    },
+    paymentType: { type: String, required: true },
     docAmount: { type: Number, required: true },
-    narration: { type: String, trim: true },
+    narration: { type: String },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );
 
-const BankTransfer = model("BankTransfer", bankTransferSchema);
-export default BankTransfer;
+export default mongoose.model("BankTransfer", bankTransferSchema);
