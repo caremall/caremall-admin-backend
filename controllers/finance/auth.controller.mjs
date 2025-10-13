@@ -45,39 +45,44 @@ export const registerFinanceAdmin = async (req, res) => {
 export const loginFinanceAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await FinanceAdmin.findOne({ email });
 
+    const user = await FinanceAdmin.findOne({ email }).select("+password");
+
+    // Check if user exists
     if (!user) {
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
+    // Check if user is active
+    if (!user.isActive) {
+      return res.status(403).json({ success: false, message: "Account is inactive. Contact administrator." });
+    }
+
+    // Validate password
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid credentials" });
+      return res.status(400).json({ success: false, message: "Invalid credentials" });
     }
 
+    // Generate JWT
     const token = generateToken(user._id, user.role);
+
+    // Prepare admin object without password
+    const { _id, name, role, isActive } = user;
+    const admin = { _id, name, email: user.email, role, isActive };
 
     res.status(200).json({
       success: true,
       message: "Login successful",
-      data: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        token,
-      },
+      admin,
+      token
     });
   } catch (error) {
     console.error("Login Error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 // Get current logged-in admin
 export const getFinanceAdminProfile = async (req, res) => {
@@ -109,18 +114,19 @@ export const updateFinanceAdmin = async (req, res) => {
         .json({ success: false, message: "User not found" });
     }
 
-    // Update fields
+    // Update fields if provided
     if (name) user.name = name;
     if (email) user.email = email;
     if (role) user.role = role;
     if (typeof isActive === "boolean") user.isActive = isActive;
 
-    // If password is provided, hash it
-    if (password) {
+    // Only update password if explicitly provided
+    if (password && password.trim() !== "") {
       const salt = await bcrypt.genSalt(10);
       user.password = await bcrypt.hash(password, salt);
     }
 
+    // Save updated user
     await user.save();
 
     res.status(200).json({
@@ -139,6 +145,7 @@ export const updateFinanceAdmin = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 // Delete Finance Admin
 export const deleteFinanceAdmin = async (req, res) => {
@@ -175,6 +182,28 @@ export const getAllFinanceAdmins = async (req, res) => {
     });
   } catch (error) {
     console.error("Get All Error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Get Finance Admin by ID (includes password)
+export const getFinanceAdminById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await FinanceAdmin.findById(id)
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: user, // includes hashed password
+    });
+  } catch (error) {
+    console.error("Get By ID Error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
