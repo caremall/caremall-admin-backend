@@ -95,3 +95,86 @@ export const getFinanceAdminProfile = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+// Update Finance Admin
+export const updateFinanceAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, password, role, isActive } = req.body;
+
+    const user = await FinanceAdmin.findById(id);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    // Update fields
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (role) user.role = role;
+    if (typeof isActive === "boolean") user.isActive = isActive;
+
+    // If password is provided, hash it
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(password, salt);
+    }
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Finance admin updated successfully",
+      data: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+      },
+    });
+  } catch (error) {
+    console.error("Update Error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Delete Finance Admin
+export const deleteFinanceAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await FinanceAdmin.findById(id);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    await user.deleteOne();
+
+    res
+      .status(200)
+      .json({ success: true, message: "Finance admin deleted successfully" });
+  } catch (error) {
+    console.error("Delete Error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Get All Finance Admins
+export const getAllFinanceAdmins = async (req, res) => {
+  try {
+    const admins = await FinanceAdmin.find().select("-password");
+
+    res.status(200).json({
+      success: true,
+      count: admins.length,
+      data: admins,
+    });
+  } catch (error) {
+    console.error("Get All Error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
