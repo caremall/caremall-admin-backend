@@ -47,7 +47,10 @@ const variantSchema = new Schema(
 
     landingSellPrice: {
       type: Number,
-      required: false
+      required: false,
+      set: function (v) {
+        return Math.ceil(Number(v));
+      }
     },
 
     discountPercent: { type: Number },
