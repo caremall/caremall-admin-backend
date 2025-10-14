@@ -107,7 +107,7 @@ export const verifyFinanceAdminToken = async (req, res, next) => {
     const token = authHeader.split(" ")[1];
 
     // ✅ Verify using FINANCE_JWT_SECRET
-    const decoded = jwt.verify(token, process.env.FINANCE_JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
 
 
     req.user = await Admin.findById(decoded._id).select("-password"); // attach to request
