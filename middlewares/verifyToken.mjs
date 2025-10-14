@@ -109,20 +109,8 @@ export const verifyFinanceAdminToken = async (req, res, next) => {
     // ✅ Verify using FINANCE_JWT_SECRET
     const decoded = jwt.verify(token, process.env.FINANCE_JWT_SECRET);
 
-    // ✅ Check if finance admin exists (adjust if you have a separate FinanceAdmin model)
-    const financeAdmin = await Admin.findById(decoded._id).select("-password");
-    if (!financeAdmin) {
-      return res.status(403).json({ message: "Finance Admin not found" });
-    }
 
-    // ✅ Optional: block inactive admins
-    if (financeAdmin.status !== "active") {
-      return res
-        .status(403)
-        .json({ message: "Your account is disabled. Contact support." });
-    }
-
-    req.user = financeAdmin; // attach to request
+    req.user = await Admin.findById(decoded._id).select("-password"); // attach to request
     next();
   } catch (err) {
     console.error("Finance Token Error:", err.message);
