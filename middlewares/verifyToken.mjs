@@ -96,17 +96,32 @@ export const verifyDeliveryBoyToken = async (req, res, next) => {
   }
 };
 
-export const verifyFinanceAdminToken = (req, res, next) => {
-  const authHeader = req.headers.authorization || req.headers.Authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  const token = authHeader.split(" ")[1];
+export const verifyFinanceAdminToken = async (req, res, next) => {
   try {
-    const payload = jwt.verify(token, process.env.FINANCE_JWT_SECRET);
-    req.user = payload;
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Unauthorized: No token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    // ✅ Verify using FINANCE_JWT_SECRET
+    const decoded = jwt.verify(token, process.env.FINANCE_JWT_SECRET);
+
+
+    req.user = await Admin.findById(decoded._id).select("-password"); // attach to request
     next();
   } catch (err) {
-    return res.status(401).json({ message: "Invalid or expired token" });
+    console.error("Finance Token Error:", err.message);
+
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token expired", auth: false });
+    }
+    if (err.name === "JsonWebTokenError") {
+      return res.status(401).json({ message: "Invalid token", auth: false });
+    }
+
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
