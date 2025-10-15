@@ -179,9 +179,31 @@ export const getFilteredProducts = async (req, res) => {
       };
     }
 
+    // ENHANCED CATEGORY FILTERING - INCLUDES SUBCATEGORIES
     if (categories.length > 0) {
+      // Get all subcategories for the selected categories
+      const allCategoryIds = [...categories];
+      
+      for (const categoryId of categories) {
+        try {
+          const subcategories = await Category.find({ 
+            parentId: new mongoose.Types.ObjectId(String(categoryId)),
+            status: "active"
+          }).select("_id");
+          
+          subcategories.forEach(subcat => {
+            allCategoryIds.push(subcat._id.toString());
+          });
+        } catch (error) {
+          console.error(`Error fetching subcategories for category ${categoryId}:`, error);
+        }
+      }
+      
+      // Remove duplicates
+      const uniqueCategoryIds = [...new Set(allCategoryIds)];
+      
       productMatch.category = {
-        $in: categories.map((id) => new mongoose.Types.ObjectId(String(id))),
+        $in: uniqueCategoryIds.map((id) => new mongoose.Types.ObjectId(String(id))),
       };
     }
 
@@ -242,9 +264,30 @@ export const getFilteredProducts = async (req, res) => {
         $in: brands.map((id) => new mongoose.Types.ObjectId(String(id))),
       };
     }
+
+    // ENHANCED CATEGORY FILTERING FOR PRODUCT FILTER
     if (categories.length > 0) {
+      const allCategoryIds = [...categories];
+      
+      for (const categoryId of categories) {
+        try {
+          const subcategories = await Category.find({ 
+            parentId: new mongoose.Types.ObjectId(String(categoryId)),
+            status: "active"
+          }).select("_id");
+          
+          subcategories.forEach(subcat => {
+            allCategoryIds.push(subcat._id.toString());
+          });
+        } catch (error) {
+          console.error(`Error fetching subcategories for category ${categoryId}:`, error);
+        }
+      }
+      
+      const uniqueCategoryIds = [...new Set(allCategoryIds)];
+      
       productFilter.category = {
-        $in: categories.map((id) => new mongoose.Types.ObjectId(String(id))),
+        $in: uniqueCategoryIds.map((id) => new mongoose.Types.ObjectId(String(id))),
       };
     }
 
@@ -271,7 +314,7 @@ export const getFilteredProducts = async (req, res) => {
         return cond;
       });
     }
-    // const enrichedProducts = await enrichProductsWithDefaultVariants(products);
+
     // Fetch filtered products
     const products = await Product.find(productFilter)
       .select(
@@ -475,17 +518,36 @@ export const getFilteredProducts = async (req, res) => {
       status: "active",
     }).select("_id name image");
 
-    // Get category with subcategories (if single category)
-    let categoryWithSubcategories = null;
-    if (categories.length === 1) {
-      categoryWithSubcategories = await Category.findById(categories[0])
-        .select("_id type image name categoryCode status")
-        .populate({
-          path: "subcategories",
-          select: "_id type image name categoryCode status parentId",
-          match: { status: "active" },
-        });
-    }
+    // ENHANCED SUBCATEGORIES HANDLING - Get subcategories for all main categories
+    const mainCategories = await Category.find({
+      _id: { $in: availableCategoryIds },
+      type: "Main",
+      status: "active"
+    }).select("_id type image name categoryCode status");
+
+    const categoriesWithSubcategories = await Promise.all(
+      mainCategories.map(async (category) => {
+        const subcategories = await Category.find({
+          parentId: category._id,
+          status: "active"
+        }).select("_id type image name categoryCode status parentId");
+        
+        return {
+          ...category.toObject(),
+          subcategories
+        };
+      })
+    );
+
+    // Also get standalone subcategories (subcategories that are in availableCategoryIds but their parent isn't)
+    const subcategoryIds = availableCategoryIds.filter(id => 
+      !mainCategories.some(mainCat => mainCat._id.toString() === id)
+    );
+    
+    const standaloneSubcategories = await Category.find({
+      _id: { $in: subcategoryIds },
+      status: "active"
+    }).select("_id type image name categoryCode status parentId");
 
     res.status(200).json({
       products: flatProducts,
@@ -493,7 +555,8 @@ export const getFilteredProducts = async (req, res) => {
         variantAttributes: variantFilters,
         brands: availableBrands,
         categories: availableCategories,
-        subcategories: categoryWithSubcategories,
+        mainCategoriesWithSubcategories: categoriesWithSubcategories,
+        standaloneSubcategories: standaloneSubcategories,
         priceRange: { min: minPriceFinal, max: maxPriceFinal },
         discountRange: { min: minDiscountFinal, max: maxDiscountFinal },
       },

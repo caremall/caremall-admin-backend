@@ -13,6 +13,11 @@ const productSchema = new Schema(
     productDescription: { type: String, required: true },
     brand: { type: Schema.Types.ObjectId, ref: "Brand", required: true },
     category: { type: Schema.Types.ObjectId, ref: "Category", required: true },
+    subcategory: { 
+      type: Schema.Types.ObjectId, 
+      ref: "Category", 
+      required: false
+    },
     warrantyPolicy: {
       type: String,
     },
@@ -142,6 +147,7 @@ const productSchema = new Schema(
     warehouse: {
       type: Schema.Types.ObjectId,
       ref: "Warehouse",
+      required: "true",
     },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }

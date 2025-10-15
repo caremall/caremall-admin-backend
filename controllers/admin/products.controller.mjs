@@ -4,6 +4,7 @@ import Category from "../../models/Category.mjs";
 import Warehouse from "../../models/Warehouse.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 import Inventory from "../../models/inventory.mjs";
+import ProductType from "../../models/ProductType.mjs";
 
 export const createProduct = async (req, res) => {
   try {
@@ -14,6 +15,7 @@ export const createProduct = async (req, res) => {
       warrantyPolicy,
       brand,
       category,
+      subcategory,
       hasVariant,
       SKU,
       barcode,
@@ -147,11 +149,12 @@ export const createProduct = async (req, res) => {
       warrantyPolicy,
       brand,
       category,
+      subcategory, 
       hasVariant,
+      productType,
       SKU: hasVariant ? undefined : SKU ? SKU.trim() : undefined,
       barcode: hasVariant ? undefined : barcode ? barcode.trim() : undefined,
-      defaultVariant: defaultVariant || undefined,
-      productType: hasVariant ? productType : undefined,
+      defaultVariant: defaultVariant || undefined,  
       productImages: hasVariant ? undefined : uploadedImageUrls,
       tags: Array.isArray(tags) ? tags : [],
       costPrice: hasVariant ? undefined : costPrice,
@@ -368,9 +371,10 @@ export const getProductBySlug = async (req, res) => {
       urlSlug: req.params.slug,
     }).populate([
       { path: "brand" },
-      { path: "category" },
-      { path: "variants" },
       { path: "productType" },
+      { path: "category" },
+      { path: "subcategory" },
+      { path: "variants" },
     ]);
 
     if (!product) {
@@ -382,13 +386,33 @@ export const getProductBySlug = async (req, res) => {
       variants = await Variant.find({ productId: product._id });
     }
 
+    // Check if productType is populated or null
+    const productTypeStatus = product.productType ? "POPULATED" : "NULL/EMPTY";
+    
+    console.log("=== PRODUCT TYPE STATUS ===");
+    console.log("Product Type:", productTypeStatus);
+    if (product.productType) {
+      console.log("Product Type Data:", {
+        id: product.productType._id,
+        name: product.productType.name,
+        attributes: product.productType.attributes
+      });
+    } else {
+      console.log("No product type found for this product");
+    }
+    console.log("===========================");
+
     res.status(200).json({
       success: true,
       product,
       variants: product.hasVariant ? variants : [],
+      debug: {
+        productTypeStatus: productTypeStatus,
+        productType: product.productType
+      }
     });
   } catch (err) {
-    console.error(err);
+    console.error("Error fetching product by slug:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -402,6 +426,7 @@ export const updateProduct = async (req, res) => {
       warrantyPolicy,
       brand,
       category,
+      subcategory,
       hasVariant,
       SKU,
       barcode,
@@ -492,6 +517,14 @@ export const updateProduct = async (req, res) => {
           .json({ message: "This Barcode is already in use" });
     }
 
+    // Validate productType if provided
+    if (productType) {
+      const existingProductType = await ProductType.findById(productType);
+      if (!existingProductType) {
+        return res.status(400).json({ message: "Invalid product type" });
+      }
+    }
+
     // Process images
     let finalProductImages = existingProduct.productImages || [];
     if (productImages && productImages.length > 0 && hasVariant === false) {
@@ -520,11 +553,16 @@ export const updateProduct = async (req, res) => {
       updateFields.warrantyPolicy = warrantyPolicy;
     if (brand !== undefined) updateFields.brand = brand;
     if (category !== undefined) updateFields.category = category;
+    if (subcategory !== undefined) updateFields.subcategory = subcategory;
     if (hasVariant !== undefined) updateFields.hasVariant = hasVariant;
 
+    // Handle productType for both variant and non-variant products
+    if (productType !== undefined) {
+      updateFields.productType = productType;
+    }
+
     if (hasVariant === false) {
-      updateFields.productType = null;
-      updateFields.defaultVariant = null;
+      // For non-variant products, keep productType and handle other fields
       if (SKU !== undefined) updateFields.SKU = SKU.trim();
       if (barcode !== undefined)
         updateFields.barcode = barcode ? barcode.trim() : null;
@@ -536,6 +574,9 @@ export const updateProduct = async (req, res) => {
         updateFields.sellingPrice = Number(sellingPrice);
       if (mrpPrice !== undefined && mrpPrice !== null)
         updateFields.mrpPrice = Number(mrpPrice);
+
+      // Clear variant-specific fields
+      updateFields.defaultVariant = null;
 
       // Calculate landingSellPrice only if sellingPrice is a valid number
       const base =
@@ -562,6 +603,7 @@ export const updateProduct = async (req, res) => {
         }
       }
     } else if (hasVariant === true) {
+      // For variant products, clear non-variant fields but keep productType
       updateFields.SKU = null;
       updateFields.barcode = null;
       updateFields.productImages = [];
@@ -569,7 +611,7 @@ export const updateProduct = async (req, res) => {
       updateFields.sellingPrice = null;
       updateFields.mrpPrice = null;
       updateFields.landingSellPrice = null;
-      if (productType !== undefined) updateFields.productType = productType;
+      
       if (defaultVariant !== undefined)
         updateFields.defaultVariant = defaultVariant;
     }
@@ -620,7 +662,7 @@ export const updateProduct = async (req, res) => {
 
     Object.assign(existingProduct, updateFields);
 
-    // Wipe non-variant fields if variant product
+    // Wipe non-variant fields if variant product (but keep productType)
     if (hasVariant === true) {
       existingProduct.SKU = undefined;
       existingProduct.barcode = undefined;
@@ -629,6 +671,7 @@ export const updateProduct = async (req, res) => {
       existingProduct.sellingPrice = undefined;
       existingProduct.mrpPrice = undefined;
       existingProduct.landingSellPrice = undefined;
+      // Note: productType is NOT cleared here
     }
 
     // Recalculate landingSellPrice if variant mode unchanged & non-variant product
@@ -656,11 +699,11 @@ export const updateProduct = async (req, res) => {
 
     await existingProduct.save();
 
-    // Variant handling...
+    // Variant handling
     if (hasVariant === true && Array.isArray(variants)) {
       const variantIds = variants.map((v) => v._id).filter(Boolean);
 
-      await Variant.deleteMany({ productId, _id: { $nin: variantIds } });
+      await Variant.deleteMany({ productId: productId, _id: { $nin: variantIds } });
 
       for (const variant of variants) {
         if (!variant.SKU || variant.SKU.trim() === "") {
@@ -718,7 +761,7 @@ export const updateProduct = async (req, res) => {
         }
 
         const variantData = {
-          productId,
+          productId: productId,
           variantAttributes: variant.variantAttributes || [],
           SKU: variant.SKU.trim(),
           barcode: variant.barcode ? variant.barcode.trim() : undefined,
@@ -800,7 +843,7 @@ export const updateProduct = async (req, res) => {
         }
       }
 
-      const allVariants = await Variant.find({ productId });
+      const allVariants = await Variant.find({ productId: productId });
       if (defaultVariant) {
         existingProduct.defaultVariant = defaultVariant;
         await existingProduct.save();
@@ -811,18 +854,20 @@ export const updateProduct = async (req, res) => {
         await existingProduct.save();
       }
     } else if (hasVariant === false) {
-      await Variant.deleteMany({ productId });
+      await Variant.deleteMany({ productId: productId });
     }
 
     const updatedProduct = await Product.findById(productId)
       .populate("brand")
       .populate("category")
+      .populate("subcategory")
       .populate("productType")
-      .populate("warehouse");
+      .populate("warehouse")
+      .populate("variants");
 
     return res.status(200).json({
       success: true,
-      message: "Product updated",
+      message: "Product updated successfully",
       product: updatedProduct,
     });
   } catch (err) {
@@ -840,7 +885,6 @@ export const updateProduct = async (req, res) => {
       .json({ message: "Update failed", error: err.message });
   }
 };
-
 export const deleteProduct = async (req, res) => {
   try {
     const deleted = await Product.findByIdAndDelete(req.params.id);
