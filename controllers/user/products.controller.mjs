@@ -131,29 +131,31 @@ export const getFilteredProducts = async (req, res) => {
         ? req.query.brands
         : req.query.brands.split(",")
       : [];
+    
+    // SEPARATE CATEGORIES AND SUBCATEGORIES
     const categories = req.query.categories
       ? Array.isArray(req.query.categories)
         ? req.query.categories
         : req.query.categories.split(",")
       : [];
-    const minPrice = req.query.minPrice
-      ? Number(req.query.minPrice)
-      : undefined;
-    const maxPrice = req.query.maxPrice
-      ? Number(req.query.maxPrice)
-      : undefined;
-    const minDiscount = req.query.minDiscount
-      ? Number(req.query.minDiscount)
-      : undefined;
-    const maxDiscount = req.query.maxDiscount
-      ? Number(req.query.maxDiscount)
-      : undefined;
+    
+    const subcategories = req.query.subcategories
+      ? Array.isArray(req.query.subcategories)
+        ? req.query.subcategories
+        : req.query.subcategories.split(",")
+      : [];
+
+    const minPrice = req.query.minPrice ? Number(req.query.minPrice) : undefined;
+    const maxPrice = req.query.maxPrice ? Number(req.query.maxPrice) : undefined;
+    const minDiscount = req.query.minDiscount ? Number(req.query.minDiscount) : undefined;
+    const maxDiscount = req.query.maxDiscount ? Number(req.query.maxDiscount) : undefined;
     const status = req.query.status || "published";
 
     // Extract variant attribute filters from query params (excluding reserved fields)
     const reservedFields = [
       "brands",
       "categories",
+      "subcategories",
       "minPrice",
       "maxPrice",
       "minDiscount",
@@ -170,7 +172,7 @@ export const getFilteredProducts = async (req, res) => {
       }
     });
 
-    // Build base product match
+    // Build base product match - FIXED CATEGORY/SUBCATEGORY LOGIC
     let productMatch = { productStatus: status };
 
     if (brands.length > 0) {
@@ -179,34 +181,33 @@ export const getFilteredProducts = async (req, res) => {
       };
     }
 
-    // ENHANCED CATEGORY FILTERING - INCLUDES SUBCATEGORIES
+    // CORRECTED: SIMPLIFIED CATEGORY FILTERING LOGIC
+    const categoryConditions = [];
+    
+    // If categories are selected, filter by main categories
     if (categories.length > 0) {
-      // Get all subcategories for the selected categories
-      const allCategoryIds = [...categories];
-      
-      for (const categoryId of categories) {
-        try {
-          const subcategories = await Category.find({ 
-            parentId: new mongoose.Types.ObjectId(String(categoryId)),
-            status: "active"
-          }).select("_id");
-          
-          subcategories.forEach(subcat => {
-            allCategoryIds.push(subcat._id.toString());
-          });
-        } catch (error) {
-          console.error(`Error fetching subcategories for category ${categoryId}:`, error);
-        }
-      }
-      
-      // Remove duplicates
-      const uniqueCategoryIds = [...new Set(allCategoryIds)];
-      
-      productMatch.category = {
-        $in: uniqueCategoryIds.map((id) => new mongoose.Types.ObjectId(String(id))),
-      };
+      categoryConditions.push({
+        category: {
+          $in: categories.map((id) => new mongoose.Types.ObjectId(String(id))),
+        },
+      });
     }
 
+    // If subcategories are selected, filter by subcategories
+    if (subcategories.length > 0) {
+      categoryConditions.push({
+        subcategory: {
+          $in: subcategories.map((id) => new mongoose.Types.ObjectId(String(id))),
+        },
+      });
+    }
+
+    // Apply category conditions with OR logic for initial matching
+    if (categoryConditions.length > 0) {
+      productMatch.$or = categoryConditions;
+    }
+
+    // Get product IDs that match the initial filters
     const productIds = await Product.find(productMatch).distinct("_id");
 
     // Build variant attribute filters
@@ -244,7 +245,7 @@ export const getFilteredProducts = async (req, res) => {
       ...new Set(filteredVariants.map((v) => v.productId.toString())),
     ];
 
-    // Build product filter
+    // CORRECTED: Build final product filter with PROPER CATEGORY/SUBCATEGORY HANDLING
     let productFilter = {
       productStatus: status,
       $or: [
@@ -265,30 +266,37 @@ export const getFilteredProducts = async (req, res) => {
       };
     }
 
-    // ENHANCED CATEGORY FILTERING FOR PRODUCT FILTER
+    // CORRECTED: FINAL CATEGORY FILTERING - APPLY BOTH CATEGORY AND SUBCATEGORY FILTERS
+    const finalCategoryConditions = [];
+    
+    // Apply category filter if categories are selected
     if (categories.length > 0) {
-      const allCategoryIds = [...categories];
-      
-      for (const categoryId of categories) {
-        try {
-          const subcategories = await Category.find({ 
-            parentId: new mongoose.Types.ObjectId(String(categoryId)),
-            status: "active"
-          }).select("_id");
-          
-          subcategories.forEach(subcat => {
-            allCategoryIds.push(subcat._id.toString());
-          });
-        } catch (error) {
-          console.error(`Error fetching subcategories for category ${categoryId}:`, error);
-        }
+      finalCategoryConditions.push({
+        category: {
+          $in: categories.map((id) => new mongoose.Types.ObjectId(String(id))),
+        },
+      });
+    }
+
+    // Apply subcategory filter if subcategories are selected
+    if (subcategories.length > 0) {
+      finalCategoryConditions.push({
+        subcategory: {
+          $in: subcategories.map((id) => new mongoose.Types.ObjectId(String(id))),
+        },
+      });
+    }
+
+    // CORRECTED: Apply the final category conditions
+    if (finalCategoryConditions.length > 0) {
+      // If we have multiple conditions, use AND logic to ensure both are satisfied
+      if (finalCategoryConditions.length > 1) {
+        productFilter.$and = productFilter.$and || [];
+        productFilter.$and.push(...finalCategoryConditions);
+      } else {
+        // If only one condition, apply it directly
+        Object.assign(productFilter, finalCategoryConditions[0]);
       }
-      
-      const uniqueCategoryIds = [...new Set(allCategoryIds)];
-      
-      productFilter.category = {
-        $in: uniqueCategoryIds.map((id) => new mongoose.Types.ObjectId(String(id))),
-      };
     }
 
     // Filter products without variants by price and discount
@@ -315,13 +323,14 @@ export const getFilteredProducts = async (req, res) => {
       });
     }
 
-    // Fetch filtered products
+    // Fetch filtered products with proper population
     const products = await Product.find(productFilter)
       .select(
-        "_id productName brand category urlSlug productStatus hasVariant sellingPrice defaultVariant productImages mrpPrice SKU barcode costPrice discountPercent taxRate landingSellPrice"
+        "_id productName brand category subcategory urlSlug productStatus hasVariant sellingPrice defaultVariant productImages mrpPrice SKU barcode costPrice discountPercent taxRate landingSellPrice"
       )
       .populate("brand", "_id brandName imageUrl")
       .populate("category", "_id name image")
+      .populate("subcategory", "_id name image")
       .sort({ sellingPrice: 1 })
       .lean();
 
@@ -337,8 +346,7 @@ export const getFilteredProducts = async (req, res) => {
     for (const product of products) {
       if (product.hasVariant) {
         // Get matching variants for this product
-        const matchingVariants =
-          variantsByProductId[product._id.toString()] || [];
+        const matchingVariants = variantsByProductId[product._id.toString()] || [];
 
         // Add each variant as a separate product entry
         matchingVariants.forEach((variant) => {
@@ -349,6 +357,7 @@ export const getFilteredProducts = async (req, res) => {
             productName: product.productName,
             brand: product.brand,
             category: product.category,
+            subcategory: product.subcategory,
             urlSlug: product.urlSlug,
             productStatus: product.productStatus,
             hasVariant: true,
@@ -377,6 +386,7 @@ export const getFilteredProducts = async (req, res) => {
           productName: product.productName,
           brand: product.brand,
           category: product.category,
+          subcategory: product.subcategory,
           urlSlug: product.urlSlug,
           productStatus: product.productStatus,
           hasVariant: false,
@@ -393,41 +403,70 @@ export const getFilteredProducts = async (req, res) => {
       }
     }
 
-    // Aggregate variant attributes for filter options
-    const variantAttributesAggregation = await Variant.aggregate([
-      { $match: { productId: { $in: productIds } } },
-      { $unwind: "$variantAttributes" },
-      {
-        $group: {
-          _id: {
-            name: "$variantAttributes.name",
-            value: "$variantAttributes.value",
-          },
-        },
-      },
-      {
-        $group: {
-          _id: "$_id.name",
-          values: { $addToSet: "$_id.value" },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
+    // CORRECTED: Filter options should only show available options based on current selection
+    // Get available brands from filtered products
+    const availableBrandIds = [
+      ...new Set(flatProducts.map((p) => p.brand._id.toString())),
+    ];
+    const availableBrands = await Brand.find({
+      _id: { $in: availableBrandIds },
+      status: "active",
+    }).select("_id brandName imageUrl");
 
-    const variantFilters = {};
-    variantAttributesAggregation.forEach((attr) => {
-      variantFilters[attr._id] = attr.values
-        .filter((v) => v != null && v !== "")
-        .sort();
-    });
+    // Get available categories and subcategories from filtered products
+    const availableCategoryIds = [
+      ...new Set(
+        flatProducts.map((p) =>
+          p.category._id ? p.category._id.toString() : p.category.toString()
+        )
+      ),
+    ];
+    
+    const availableSubcategoryIds = [
+      ...new Set(
+        flatProducts
+          .filter(p => p.subcategory)
+          .map((p) =>
+            p.subcategory._id ? p.subcategory._id.toString() : p.subcategory.toString()
+          )
+      ),
+    ];
 
-    // Aggregate price and discount ranges
+    const availableCategories = await Category.find({
+      _id: { $in: availableCategoryIds },
+      status: "active",
+    }).select("_id name image type parentId");
+
+    // Get all subcategories for the available main categories
+    const mainCategories = availableCategories.filter(cat => cat.type === "Main");
+    const mainCategoryIds = mainCategories.map(cat => cat._id);
+
+    const allSubcategories = await Category.find({
+      $or: [
+        { parentId: { $in: mainCategoryIds } },
+        { _id: { $in: availableSubcategoryIds } }
+      ],
+      status: "active"
+    }).select("_id name image parentId type");
+
+    // Create the subcategories response
+    const subcategoriesResponse = {
+      subcategories: allSubcategories.map(subcat => ({
+        _id: subcat._id,
+        name: subcat.name,
+        image: subcat.image,
+        parentId: subcat.parentId,
+        type: subcat.type
+      }))
+    };
+
+    // CORRECTED: Aggregate price and discount ranges from FILTERED products
     const productPriceRange = await Product.aggregate([
       {
         $match: {
+          _id: { $in: products.map(p => p._id) },
           productStatus: status,
           sellingPrice: { $exists: true, $gt: 0 },
-          discountPercent: { $exists: true, $gte: 0 },
         },
       },
       {
@@ -441,15 +480,11 @@ export const getFilteredProducts = async (req, res) => {
       },
     ]);
 
-    const variantProductIds = products
-      .filter((p) => p.hasVariant)
-      .map((p) => p._id);
     const variantPriceRange = await Variant.aggregate([
       {
         $match: {
-          productId: { $in: variantProductIds },
+          productId: { $in: products.filter(p => p.hasVariant).map(p => p._id) },
           sellingPrice: { $exists: true, $gt: 0 },
-          discountPercent: { $exists: true, $gte: 0 },
         },
       },
       {
@@ -480,83 +515,46 @@ export const getFilteredProducts = async (req, res) => {
       variantPriceRange[0]?.maxDiscount ?? 0
     );
 
-    const minPriceFinal =
-      Number.isFinite(combinedMinPrice) && combinedMinPrice !== Infinity
-        ? combinedMinPrice
-        : 0;
-    const maxPriceFinal =
-      Number.isFinite(combinedMaxPrice) && combinedMaxPrice !== 0
-        ? combinedMaxPrice
-        : minPriceFinal;
-    const minDiscountFinal =
-      Number.isFinite(combinedMinDiscount) && combinedMinDiscount !== Infinity
-        ? combinedMinDiscount
-        : 0;
-    const maxDiscountFinal = Number.isFinite(combinedMaxDiscount)
-      ? combinedMaxDiscount
-      : minDiscountFinal;
+    const minPriceFinal = Number.isFinite(combinedMinPrice) && combinedMinPrice !== Infinity ? combinedMinPrice : 0;
+    const maxPriceFinal = Number.isFinite(combinedMaxPrice) && combinedMaxPrice !== 0 ? combinedMaxPrice : minPriceFinal;
+    const minDiscountFinal = Number.isFinite(combinedMinDiscount) && combinedMinDiscount !== Infinity ? combinedMinDiscount : 0;
+    const maxDiscountFinal = Number.isFinite(combinedMaxDiscount) ? combinedMaxDiscount : minDiscountFinal;
 
-    // Get available brands
-    const availableBrandIds = [
-      ...new Set(products.map((p) => p.brand._id.toString())),
-    ];
-    const availableBrands = await Brand.find({
-      _id: { $in: availableBrandIds },
-      status: "active",
-    }).select("_id brandName imageUrl");
+    // Aggregate variant attributes for filter options from filtered products
+    const variantAttributesAggregation = await Variant.aggregate([
+      { $match: { productId: { $in: products.filter(p => p.hasVariant).map(p => p._id) } } },
+      { $unwind: "$variantAttributes" },
+      {
+        $group: {
+          _id: {
+            name: "$variantAttributes.name",
+            value: "$variantAttributes.value",
+          },
+        },
+      },
+      {
+        $group: {
+          _id: "$_id.name",
+          values: { $addToSet: "$_id.value" },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
 
-    // Get available categories
-    const availableCategoryIds = [
-      ...new Set(
-        products.map((p) =>
-          p.category._id ? p.category._id.toString() : p.category.toString()
-        )
-      ),
-    ];
-    const availableCategories = await Category.find({
-      _id: { $in: availableCategoryIds },
-      status: "active",
-    }).select("_id name image");
-
-    // ENHANCED SUBCATEGORIES HANDLING - Get subcategories for all main categories
-    const mainCategories = await Category.find({
-      _id: { $in: availableCategoryIds },
-      type: "Main",
-      status: "active"
-    }).select("_id type image name categoryCode status");
-
-    const categoriesWithSubcategories = await Promise.all(
-      mainCategories.map(async (category) => {
-        const subcategories = await Category.find({
-          parentId: category._id,
-          status: "active"
-        }).select("_id type image name categoryCode status parentId");
-        
-        return {
-          ...category.toObject(),
-          subcategories
-        };
-      })
-    );
-
-    // Also get standalone subcategories (subcategories that are in availableCategoryIds but their parent isn't)
-    const subcategoryIds = availableCategoryIds.filter(id => 
-      !mainCategories.some(mainCat => mainCat._id.toString() === id)
-    );
-    
-    const standaloneSubcategories = await Category.find({
-      _id: { $in: subcategoryIds },
-      status: "active"
-    }).select("_id type image name categoryCode status parentId");
+    const variantFilters = {};
+    variantAttributesAggregation.forEach((attr) => {
+      variantFilters[attr._id] = attr.values
+        .filter((v) => v != null && v !== "")
+        .sort();
+    });
 
     res.status(200).json({
       products: flatProducts,
       filterOptions: {
         variantAttributes: variantFilters,
         brands: availableBrands,
-        categories: availableCategories,
-        mainCategoriesWithSubcategories: categoriesWithSubcategories,
-        standaloneSubcategories: standaloneSubcategories,
+        categories: availableCategories.filter(cat => cat.type === "Main"),
+        subcategories: subcategoriesResponse,
         priceRange: { min: minPriceFinal, max: maxPriceFinal },
         discountRange: { min: minDiscountFinal, max: maxDiscountFinal },
       },
@@ -564,6 +562,7 @@ export const getFilteredProducts = async (req, res) => {
         filters,
         brands,
         categories,
+        subcategories,
         priceRange: { min: minPrice ?? 0, max: maxPrice ?? maxPriceFinal },
         discountRange: {
           min: minDiscount ?? 0,
