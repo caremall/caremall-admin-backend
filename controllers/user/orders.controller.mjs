@@ -18,7 +18,7 @@ export const createOrder = async (req, res) => {
     const {
       items,
       shippingAddressId,
-      billingAddressId,
+      billingAddressId, 
       paymentMethod,
       totalAmount,
       couponCode,

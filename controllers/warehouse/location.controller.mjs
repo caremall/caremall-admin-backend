@@ -3,29 +3,88 @@ import WarehouseLocation from "../../models/WarehouseLocation.mjs";
 export const createWarehouseLocation = async (req, res) => {
   try {
     const { code, name, capacity } = req.body;
+    
+    // Validate required fields
+    if (!code) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Location code is required." 
+      });
+    }
+
+    // Get warehouse from user
     const warehouse =
       req.user.assignedWarehouses?._id ||
       (Array.isArray(req.user.assignedWarehouses) &&
         req.user.assignedWarehouses.length > 0 &&
         req.user.assignedWarehouses[0]._id);
 
-    if (!warehouse || !code) {
-      return res
-        .status(400)
-        .json({ message: "Warehouse and code are required." });
+    if (!warehouse) {
+      return res.status(400).json({ 
+        success: false,
+        message: "User is not assigned to any warehouse." 
+      });
     }
 
-    const location = await WarehouseLocation.create({
+    // Check if location code already exists in this warehouse
+    const existingLocation = await WarehouseLocation.findOne({
       warehouse,
-      code,
-      name,
-      capacity,
+      code: code.trim().toUpperCase()
     });
 
-    res.status(201).json({ message: "Warehouse location created", location });
+    if (existingLocation) {
+      return res.status(409).json({
+        success: false,
+        message: `Location code '${code}' already exists in this warehouse. Please use a different code.`,
+        existingLocation: {
+          code: existingLocation.code,
+          name: existingLocation.name,
+          status: existingLocation.status
+        }
+      });
+    }
+
+    // Create new location
+    const location = await WarehouseLocation.create({
+      warehouse,
+      code: code.trim().toUpperCase(), // Normalize code to uppercase
+      name: name?.trim(),
+      capacity: capacity || 0,
+    });
+
+    res.status(201).json({ 
+      success: true,
+      message: "Warehouse location created successfully", 
+      data: location 
+    });
+
   } catch (err) {
     console.error("Create WarehouseLocation Error:", err);
-    res.status(500).json({ message: "Failed to create warehouse location" });
+    
+    // Handle MongoDB duplicate key error
+    if (err.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "Location code already exists in this warehouse.",
+        error: "DUPLICATE_CODE"
+      });
+    }
+
+    // Handle validation errors
+    if (err.name === 'ValidationError') {
+      const errors = Object.values(err.errors).map(error => error.message);
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: errors
+      });
+    }
+
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to create warehouse location",
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 

@@ -237,7 +237,7 @@ export const updatePickedQuantities = async (req, res) => {
         pickerName.trim() === ""
       ) {
         return res.status(400).json({
-          message: `pickerName is required for product ${pickItemId}`,
+          message: `pickerName is required`,
         });
       }
 
