@@ -1,10 +1,9 @@
-
-import jwt from "jsonwebtoken"
-import Admin from "../models/Admin.mjs"
-import User from "../models/User.mjs"
+import jwt from "jsonwebtoken";
+import Admin from "../models/Admin.mjs";
+import User from "../models/User.mjs";
 import DeliveryBoy from "../models/DeliveryBoy.mjs";
 
-const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET
+const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
 
 export const verifyToken = (req, res, next) => {
   try {
@@ -21,9 +20,10 @@ export const verifyToken = (req, res, next) => {
         return res.status(403).json({ message: "Forbidden", auth: false });
       }
 
-      const admin = await Admin.findById(decoded._id).populate("role").populate("assignedWarehouses").select(
-        "-password -encryptedPassword"
-      );
+      const admin = await Admin.findById(decoded._id)
+        .populate("role")
+        .populate("assignedWarehouses")
+        .select("-password -encryptedPassword");
 
       if (!admin) {
         return res
@@ -38,8 +38,8 @@ export const verifyToken = (req, res, next) => {
       }
 
       req.user = admin;
-console.log("Populated admin in middleware:", admin);
-console.log("req.user in getAllocatedOrders:", req.user);
+      console.log("Populated admin in middleware:", admin);
+      console.log("req.user in getAllocatedOrders:", req.user);
 
       next();
     });
@@ -50,7 +50,6 @@ console.log("req.user in getAllocatedOrders:", req.user);
       .json({ success: false, error_msg: "Internal server error" });
   }
 };
-
 
 export const verifyUserToken = async (req, res, next) => {
   try {
@@ -94,5 +93,35 @@ export const verifyDeliveryBoyToken = async (req, res, next) => {
     next();
   } catch (err) {
     return res.status(401).json({ message: "Token expired or invalid" });
+  }
+};
+
+export const verifyFinanceAdminToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Unauthorized: No token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    // ✅ Verify using FINANCE_JWT_SECRET
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+
+
+    req.user = await Admin.findById(decoded._id).select("-password"); // attach to request
+    next();
+  } catch (err) {
+    console.error("Finance Token Error:", err.message);
+
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token expired", auth: false });
+    }
+    if (err.name === "JsonWebTokenError") {
+      return res.status(401).json({ message: "Invalid token", auth: false });
+    }
+
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
