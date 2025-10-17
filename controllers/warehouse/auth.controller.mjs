@@ -110,29 +110,77 @@ export const logout = async (req, res) => {
     res.send({ success: false, message: "Internal server error" });
   }
 };
-
 export const getLoggedInAdmin = async (req, res) => {
   try {
     const userId = req.user._id; // Assuming authentication middleware sets req.user
 
-    // Fetch user excluding sensitive fields
+    // Fetch user excluding sensitive fields and populate role with permissions
     const user = await Admin.findById(userId)
-      .select(
-        "-password -otp -otpExpires")
-      .populate("role", "name");
-      
+      .select("-password -encryptedPassword -otp -otpExpires")
+      .populate({
+        path: "role",
+        select: "name permissions description status", 
+      })
+      .populate({
+        path: "assignedWarehouses",
+        select: "name code address status", // Select only necessary warehouse fields
+      });
+
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found" 
+      });
     }
 
+    // Check if user role exists and is published
+    if (!user.role || user.role.status !== 'published') {
+      return res.status(403).json({
+        success: false,
+        message: "User role is not active or not found"
+      });
+    }
+
+    // Transform the response to include permissions at the user level for easier access
+    const userResponse = {
+      _id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      mobileNumber: user.mobileNumber,
+      role: {
+        _id: user.role._id,
+        name: user.role.name,
+        description: user.role.description,
+        status: user.role.status
+      },
+      permissions: user.role.permissions || {}, // Extract permissions from role for easier frontend access
+      assignedWarehouses: user.assignedWarehouses || [], // Include assigned warehouses
+      notes: user.notes,
+      status: user.status,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
 
     res.status(200).json({
       success: true,
-      user,
+      data: userResponse, // Changed from 'user' to 'data' for better API consistency
     });
   } catch (error) {
     console.error("Get Logged In User Details Error:", error);
-    res.status(500).json({ message: "Failed to get user details" });
+    
+    // More specific error handling
+    if (error.name === 'CastError') {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid user ID format" 
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to get user details",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+    });
   }
 };
 
