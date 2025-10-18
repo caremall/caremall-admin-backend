@@ -9,7 +9,7 @@ export const createProduct = async (req, res) => {
   console.log(req.body.subcategory, 'this is the subcategory');
   
   try {
-    // Get warehouse ID correctly - FIXED VERSION
+    // Get warehouse ID correctly
     const warehouse =
       req.user.assignedWarehouses?._id ||
       (Array.isArray(req.user.assignedWarehouses) &&
@@ -24,7 +24,7 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    const warehouseId = warehouse._id || warehouse; // Handle both object and direct ID
+    const warehouseId = warehouse._id || warehouse;
 
     console.log(warehouseId, 'this is the warehouse ID');
 
@@ -51,7 +51,7 @@ export const createProduct = async (req, res) => {
       productStatus,
       visibility,
       isFeatured,
-      isPreOrder,
+      isPreorder, 
       availableQuantity,
       minimumQuantity,
       reorderQuantity,
@@ -189,7 +189,7 @@ export const createProduct = async (req, res) => {
       }
     }
 
-    // Prepare product data
+    // Prepare product data - MAKE SURE WAREHOUSE IS INCLUDED
     const productData = {
       productName: productName.trim(),
       shortDescription: shortDescription.trim(),
@@ -213,34 +213,42 @@ export const createProduct = async (req, res) => {
       productStatus: productStatus || "draft",
       visibility: visibility || "visible",
       isFeatured: Boolean(isFeatured),
-      isPreOrder: Boolean(isPreOrder),
-      availableQuantity,
-      minimumQuantity,
-      reorderQuantity,
-      maximumQuantity,
-      weight,
-      dimensions,
-      isFragile,
-      shippingClass,
-      packageType,
-      quantityPerBox,
-      supplierId,
-      affiliateId,
+      isPreOrder: Boolean(isPreorder),
+      availableQuantity: availableQuantity || 0,
+      minimumQuantity: minimumQuantity || 0,
+      reorderQuantity: reorderQuantity || 0,
+      maximumQuantity: maximumQuantity || 0,
+      weight: weight || undefined,
+      dimensions: dimensions || undefined,
+      isFragile: Boolean(isFragile),
+      shippingClass: shippingClass || undefined,
+      packageType: packageType || undefined,
+      quantityPerBox: quantityPerBox || undefined,
+      supplierId: supplierId || undefined,
+      affiliateId: affiliateId || undefined,
       externalLinks: Array.isArray(externalLinks) ? externalLinks : [],
-      metaTitle,
-      metaDescription,
+      metaTitle: metaTitle || undefined,
+      metaDescription: metaDescription || undefined,
       urlSlug: urlSlug.trim(),
       viewsCount: viewsCount || 0,
       addedToCartCount: addedToCartCount || 0,
       wishlistCount: wishlistCount || 0,
       orderCount: orderCount || 0,
-      warehouse: warehouseId,
+      warehouse: warehouseId, // THIS IS THE KEY FIX - SAVE WAREHOUSE IN PRODUCT
     };
+
+    // Remove undefined fields
+    Object.keys(productData).forEach(key => {
+      if (productData[key] === undefined) {
+        delete productData[key];
+      }
+    });
 
     // Create product
     const newProduct = await Product.create(productData);
 
     let createdVariants = [];
+    let inventoryRecords = [];
 
     // Handle variants if exists
     if (hasVariant && Array.isArray(variants) && variants.length > 0) {
@@ -255,17 +263,47 @@ export const createProduct = async (req, res) => {
               );
             }
             
-            return {
-              ...variant,
+            const variantData = {
+              productId: newProduct._id,
               SKU: variant.SKU?.trim(),
               barcode: variant.barcode?.trim(),
+              costPrice: variant.costPrice || 0,
+              sellingPrice: variant.sellingPrice || 0,
+              mrpPrice: variant.mrpPrice || 0,
+              discountPercent: variant.discountPercent, 
+              taxRate: variant.taxRate,
               images: uploadedVariantImages,
-              productId: newProduct._id,
+              isDefault: Boolean(variant.isDefault),
+              variantAttributes: Array.isArray(variant.variantAttributes) ? variant.variantAttributes : [],
             };
+
+            // Remove undefined fields
+            Object.keys(variantData).forEach(key => {
+              if (variantData[key] === undefined) {
+                delete variantData[key];
+              }
+            });
+
+            return variantData;
           })
         );
 
         createdVariants = await Variant.insertMany(variantDocs);
+
+        // Create inventory records for each variant
+        const variantInventoryDocs = createdVariants.map(variant => ({
+          warehouse: warehouseId,
+          variant: variant._id,
+          availableQuantity: variant.availableQuantity || 0,
+          minimumQuantity: variant.minimumQuantity || 0,
+          reorderQuantity: variant.reorderQuantity || 0,
+          maximumQuantity: variant.maximumQuantity || 0,
+          updatedAt: new Date()
+        }));
+
+        if (variantInventoryDocs.length > 0) {
+          inventoryRecords = await Inventory.insertMany(variantInventoryDocs);
+        }
 
         // Set default variant if exists
         const defaultVariantDoc = createdVariants.find((v) => v.isDefault);
@@ -274,21 +312,59 @@ export const createProduct = async (req, res) => {
           await newProduct.save();
         }
       } catch (variantError) {
-        // If variant creation fails, delete the created product
         await Product.findByIdAndDelete(newProduct._id);
+        if (createdVariants.length > 0) {
+          await Variant.deleteMany({ _id: { $in: createdVariants.map(v => v._id) } });
+        }
+        if (inventoryRecords.length > 0) {
+          await Inventory.deleteMany({ _id: { $in: inventoryRecords.map(i => i._id) } });
+        }
         console.error("Variant creation error:", variantError);
         return res.status(500).json({ 
           message: "Failed to create variants", 
           error: variantError.message 
         });
       }
+    } else {
+      // Create inventory for non-variant product
+      try {
+        const inventoryData = {
+          warehouse: warehouseId,
+          product: newProduct._id, 
+          availableQuantity: availableQuantity || 0,
+          minimumQuantity: minimumQuantity || 0,
+          reorderQuantity: reorderQuantity || 0,
+          maximumQuantity: maximumQuantity || 0,
+          updatedAt: new Date()
+        };
+
+        const inventoryRecord = await Inventory.create(inventoryData);
+        inventoryRecords.push(inventoryRecord);
+      } catch (inventoryError) {
+        await Product.findByIdAndDelete(newProduct._id);
+        console.error("Inventory creation error:", inventoryError);
+        return res.status(500).json({ 
+          message: "Failed to create inventory record", 
+          error: inventoryError.message 
+        });
+      }
     }
+
+    // Populate the response with necessary data - INCLUDE WAREHOUSE POPULATION
+    const populatedProduct = await Product.findById(newProduct._id)
+      .populate('brand')
+      .populate('category')
+      .populate('subcategory')
+      .populate('productType')
+      .populate('defaultVariant')
+      .populate('warehouse'); // ADD THIS LINE TO POPULATE WAREHOUSE
 
     res.status(201).json({
       success: true,
       message: "Product created successfully",
-      product: newProduct,
+      product: populatedProduct,
       variants: createdVariants.length > 0 ? createdVariants : undefined,
+      inventory: inventoryRecords.length > 0 ? inventoryRecords : undefined,
     });
   } catch (err) {
     console.error("Create product error:", err);
@@ -298,8 +374,6 @@ export const createProduct = async (req, res) => {
     });
   }
 };
-
-
 
 
 export const getAllProducts = async (req, res) => {
