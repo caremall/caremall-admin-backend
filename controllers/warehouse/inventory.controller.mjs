@@ -5,6 +5,134 @@ import inventoryLog from "../../models/inventoryLog.mjs";
 import TransferRequest from "../../models/TransferRequest.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 
+
+export const getTransactionByID = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Transaction ID is required",
+      });
+    }
+
+    const transaction = await TransferRequest.findById(id)
+      .populate({
+        path: "fromWarehouse toWarehouse driver",
+        select: "name address contactPerson phoneNumber email"
+      })
+      .populate({
+        path: "items.productId",
+        select: "productName shortDescription SKU barcode costPrice mrpPrice sellingPrice discountPercent weight dimensions productImages productStatus availableQuantity hasVariant brand category subCategory",
+        populate: [
+          {
+            path: "brand",
+            select: "name"
+          },
+          {
+            path: "category", 
+            select: "name"
+          },
+          {
+            path: "subCategory",
+            select: "name"
+          }
+        ]
+      })
+      .populate({
+        path: "items.variantId",
+        select: "SKU barcode costPrice mrpPrice sellingPrice discountPercent weight dimensions images stockQuantity variantAttributes productId",
+        populate: {
+          path: "productId",
+          select: "productName brand category subCategory",
+          populate: [
+            {
+              path: "brand",
+              select: "name"
+            },
+            {
+              path: "category",
+              select: "name"
+            },
+            {
+              path: "subCategory",
+              select: "name"
+            }
+          ]
+        }
+      })
+      .lean();
+
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaction not found",
+      });
+    }
+
+    // Transform the data to match frontend expectations
+    const transformedData = {
+      ...transaction,
+      items: transaction.items?.map(item => ({
+        ...item,
+        productId: item.productId ? {
+          _id: item.productId._id,
+          productName: item.productId.productName || 'Unknown Product',
+          shortDescription: item.productId.shortDescription || '',
+          SKU: item.productId.SKU || '',
+          barcode: item.productId.barcode || '',
+          costPrice: item.productId.costPrice || 0,
+          mrpPrice: item.productId.mrpPrice || 0,
+          sellingPrice: item.productId.sellingPrice || 0,
+          discountPercent: item.productId.discountPercent || 0,
+          weight: item.productId.weight || 0,
+          dimensions: item.productId.dimensions || {},
+          productImages: item.productId.productImages || [],
+          productStatus: item.productId.productStatus || 'unknown',
+          availableQuantity: item.productId.availableQuantity || 0,
+          hasVariant: item.productId.hasVariant || false,
+          brand: item.productId.brand?.name || item.productId.brand || 'N/A',
+          category: item.productId.category?.name || item.productId.category || 'N/A',
+          subCategory: item.productId.subCategory?.name || item.productId.subCategory || 'N/A'
+        } : null,
+        variantId: item.variantId ? {
+          _id: item.variantId._id,
+          SKU: item.variantId.SKU || '',
+          barcode: item.variantId.barcode || '',
+          costPrice: item.variantId.costPrice || 0,
+          mrpPrice: item.variantId.mrpPrice || 0,
+          sellingPrice: item.variantId.sellingPrice || 0,
+          discountPercent: item.variantId.discountPercent || 0,
+          weight: item.variantId.weight || 0,
+          dimensions: item.variantId.dimensions || {},
+          images: item.variantId.images || [],
+          stockQuantity: item.variantId.stockQuantity || 0,
+          variantAttributes: item.variantId.variantAttributes || [],
+          productId: item.variantId.productId ? {
+            productName: item.variantId.productId.productName || 'Unknown Product',
+            brand: item.variantId.productId.brand?.name || item.variantId.productId.brand || 'N/A',
+            category: item.variantId.productId.category?.name || item.variantId.productId.category || 'N/A',
+            subCategory: item.variantId.productId.subCategory?.name || item.variantId.productId.subCategory || 'N/A'
+          } : null
+        } : null
+      }))
+    };
+
+    res.status(200).json({
+      success: true,
+      data: transformedData,
+    });
+  } catch (err) {
+    console.error("Get transaction by ID error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error fetching transaction",
+      error: err.message
+    });
+  }
+};
+
 export const createTransferRequest = async (req, res) => {
   try {
     console.log("Create Transfer Request - User:", req.user);
@@ -121,40 +249,19 @@ export const getTransferRequests = async (req, res) => {
 };
 
 
-export const getTransactionByID = async (req, res) => {
-  try {
-    const { id } = req.params;
 
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Transaction ID is required",
-      });
-    }
 
-    const transaction = await TransferRequest.findById(id)
-      .populate("fromWarehouse toWarehouse driver items.productId items.variantId")
-      .lean();
 
-    if (!transaction) {
-      return res.status(404).json({
-        success: false,
-        message: "Transaction not found",
-      });
-    }
 
-    res.status(200).json({
-      success: true,
-      data: transaction,
-    });
-  } catch (err) {
-    console.error("Get transaction by ID error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Server error fetching transaction",
-    });
-  }
-};
+
+
+
+
+
+
+
+
+
 export const getTransferRequestById = async (req, res) => {
   try {
     const { id } = req.params;

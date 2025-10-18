@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
   assignDriverToTransferRequest,
-    createDamagedInventoryReport,
+  createDamagedInventoryReport,
   createInboundJob,
   createTransferRequest,
   decrementInventory,
@@ -29,6 +29,7 @@ const inventoryRouter = Router();
 inventoryRouter.post("/inbound",createInboundJob )
 inventoryRouter.get("/inbound",getInboundJobs )
 inventoryRouter.get("/inbound/:id",getInboundJobById )
+
 //transfer
 inventoryRouter.post("/transfer/create",createTransferRequest)
 inventoryRouter.put("/transfer/:id",updateTransferRequestStatus)
