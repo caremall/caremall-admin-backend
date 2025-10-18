@@ -5,29 +5,12 @@ import Warehouse from "../../models/Warehouse.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 import Inventory from "../../models/inventory.mjs";
 
+;
+
 export const createProduct = async (req, res) => {
   console.log(req.body.subcategory, 'this is the subcategory');
   
   try {
-    // Get warehouse ID correctly
-    const warehouse =
-      req.user.assignedWarehouses?._id ||
-      (Array.isArray(req.user.assignedWarehouses) &&
-        req.user.assignedWarehouses.length > 0 &&
-        req.user.assignedWarehouses[0]._id) ||
-      req.user.assignedWarehouses?._id;
-
-    // Validate that we have a warehouse
-    if (!warehouse) {
-      return res.status(400).json({
-        message: "No warehouse assigned to user or warehouse ID not found"
-      });
-    }
-
-    const warehouseId = warehouse._id || warehouse;
-
-    console.log(warehouseId, 'this is the warehouse ID');
-
     const {
       productName,
       shortDescription,
@@ -52,10 +35,6 @@ export const createProduct = async (req, res) => {
       visibility,
       isFeatured,
       isPreorder, 
-      availableQuantity,
-      minimumQuantity,
-      reorderQuantity,
-      maximumQuantity,
       weight,
       dimensions,
       isFragile,
@@ -72,6 +51,10 @@ export const createProduct = async (req, res) => {
       addedToCartCount,
       wishlistCount,
       orderCount,
+      // Quantity fields
+      minimumQuantity,
+      reorderQuantity,
+      maximumQuantity,
       variants = [],
     } = req.body;
 
@@ -189,52 +172,51 @@ export const createProduct = async (req, res) => {
       }
     }
 
-    // Prepare product data - MAKE SURE WAREHOUSE IS INCLUDED
+    // Prepare product data - ensure no null values
     const productData = {
       productName: productName.trim(),
       shortDescription: shortDescription.trim(),
       productDescription: productDescription.trim(),
-      warrantyPolicy,
+      warrantyPolicy: warrantyPolicy || "",
       brand,
       category,
-      subcategory,
+      subcategory: subcategory || undefined,
       hasVariant,
-      productType,
-      SKU: hasVariant ? undefined : SKU?.trim(),
-      barcode: hasVariant ? undefined : barcode?.trim(),
+      productType: productType || undefined,
+      SKU: hasVariant ? undefined : (SKU?.trim() || ""),
+      barcode: hasVariant ? undefined : (barcode?.trim() || ""),
       defaultVariant: defaultVariant || undefined,
       productImages: hasVariant ? undefined : uploadedImageUrls,
       tags: Array.isArray(tags) ? tags : [],
-      costPrice: hasVariant ? undefined : costPrice,
-      sellingPrice: hasVariant ? undefined : sellingPrice,
-      mrpPrice: hasVariant ? undefined : mrpPrice,
-      discountPercent,
-      taxRate,
+      costPrice: hasVariant ? undefined : (costPrice || 0),
+      sellingPrice: hasVariant ? undefined : (sellingPrice || 0),
+      mrpPrice: hasVariant ? undefined : (mrpPrice || 0),
+      discountPercent: discountPercent || 0,
+      taxRate: taxRate || 0,
       productStatus: productStatus || "draft",
       visibility: visibility || "visible",
       isFeatured: Boolean(isFeatured),
       isPreOrder: Boolean(isPreorder),
-      availableQuantity: availableQuantity || 0,
-      minimumQuantity: minimumQuantity || 0,
-      reorderQuantity: reorderQuantity || 0,
-      maximumQuantity: maximumQuantity || 0,
-      weight: weight || undefined,
-      dimensions: dimensions || undefined,
+      weight: weight || 0,
+      dimensions: dimensions || { length: 0, width: 0, height: 0 },
       isFragile: Boolean(isFragile),
-      shippingClass: shippingClass || undefined,
-      packageType: packageType || undefined,
-      quantityPerBox: quantityPerBox || undefined,
-      supplierId: supplierId || undefined,
-      affiliateId: affiliateId || undefined,
+      shippingClass: shippingClass || "",
+      packageType: packageType || "",
+      quantityPerBox: quantityPerBox || 0,
+      supplierId: supplierId || "",
+      affiliateId: affiliateId || "",
       externalLinks: Array.isArray(externalLinks) ? externalLinks : [],
-      metaTitle: metaTitle || undefined,
-      metaDescription: metaDescription || undefined,
+      metaTitle: metaTitle || "",
+      metaDescription: metaDescription || "",
       urlSlug: urlSlug.trim(),
       viewsCount: viewsCount || 0,
       addedToCartCount: addedToCartCount || 0,
       wishlistCount: wishlistCount || 0,
       orderCount: orderCount || 0,
-      warehouse: warehouseId, // THIS IS THE KEY FIX - SAVE WAREHOUSE IN PRODUCT
+      // Quantity fields
+      minimumQuantity: minimumQuantity || 0,
+      reorderQuantity: reorderQuantity || 0,
+      maximumQuantity: maximumQuantity || 0,
     };
 
     // Remove undefined fields
@@ -248,7 +230,6 @@ export const createProduct = async (req, res) => {
     const newProduct = await Product.create(productData);
 
     let createdVariants = [];
-    let inventoryRecords = [];
 
     // Handle variants if exists
     if (hasVariant && Array.isArray(variants) && variants.length > 0) {
@@ -265,15 +246,19 @@ export const createProduct = async (req, res) => {
             
             const variantData = {
               productId: newProduct._id,
-              SKU: variant.SKU?.trim(),
-              barcode: variant.barcode?.trim(),
+              SKU: variant.SKU?.trim() || "",
+              barcode: variant.barcode?.trim() || "",
               costPrice: variant.costPrice || 0,
               sellingPrice: variant.sellingPrice || 0,
               mrpPrice: variant.mrpPrice || 0,
-              discountPercent: variant.discountPercent, 
-              taxRate: variant.taxRate,
+              discountPercent: variant.discountPercent || 0,
+              taxRate: variant.taxRate || 0,
               images: uploadedVariantImages,
               isDefault: Boolean(variant.isDefault),
+              // Variant quantity fields
+              minimumQuantity: variant.minimumQuantity || 0,
+              reorderQuantity: variant.reorderQuantity || 0,
+              maximumQuantity: variant.maximumQuantity || 0,
               variantAttributes: Array.isArray(variant.variantAttributes) ? variant.variantAttributes : [],
             };
 
@@ -290,21 +275,6 @@ export const createProduct = async (req, res) => {
 
         createdVariants = await Variant.insertMany(variantDocs);
 
-        // Create inventory records for each variant
-        const variantInventoryDocs = createdVariants.map(variant => ({
-          warehouse: warehouseId,
-          variant: variant._id,
-          availableQuantity: variant.availableQuantity || 0,
-          minimumQuantity: variant.minimumQuantity || 0,
-          reorderQuantity: variant.reorderQuantity || 0,
-          maximumQuantity: variant.maximumQuantity || 0,
-          updatedAt: new Date()
-        }));
-
-        if (variantInventoryDocs.length > 0) {
-          inventoryRecords = await Inventory.insertMany(variantInventoryDocs);
-        }
-
         // Set default variant if exists
         const defaultVariantDoc = createdVariants.find((v) => v.isDefault);
         if (defaultVariantDoc) {
@@ -316,55 +286,27 @@ export const createProduct = async (req, res) => {
         if (createdVariants.length > 0) {
           await Variant.deleteMany({ _id: { $in: createdVariants.map(v => v._id) } });
         }
-        if (inventoryRecords.length > 0) {
-          await Inventory.deleteMany({ _id: { $in: inventoryRecords.map(i => i._id) } });
-        }
         console.error("Variant creation error:", variantError);
         return res.status(500).json({ 
           message: "Failed to create variants", 
           error: variantError.message 
         });
       }
-    } else {
-      // Create inventory for non-variant product
-      try {
-        const inventoryData = {
-          warehouse: warehouseId,
-          product: newProduct._id, 
-          availableQuantity: availableQuantity || 0,
-          minimumQuantity: minimumQuantity || 0,
-          reorderQuantity: reorderQuantity || 0,
-          maximumQuantity: maximumQuantity || 0,
-          updatedAt: new Date()
-        };
-
-        const inventoryRecord = await Inventory.create(inventoryData);
-        inventoryRecords.push(inventoryRecord);
-      } catch (inventoryError) {
-        await Product.findByIdAndDelete(newProduct._id);
-        console.error("Inventory creation error:", inventoryError);
-        return res.status(500).json({ 
-          message: "Failed to create inventory record", 
-          error: inventoryError.message 
-        });
-      }
     }
 
-    // Populate the response with necessary data - INCLUDE WAREHOUSE POPULATION
+    // Populate the response with necessary data
     const populatedProduct = await Product.findById(newProduct._id)
       .populate('brand')
       .populate('category')
       .populate('subcategory')
       .populate('productType')
       .populate('defaultVariant')
-      .populate('warehouse'); // ADD THIS LINE TO POPULATE WAREHOUSE
 
     res.status(201).json({
       success: true,
       message: "Product created successfully",
       product: populatedProduct,
       variants: createdVariants.length > 0 ? createdVariants : undefined,
-      inventory: inventoryRecords.length > 0 ? inventoryRecords : undefined,
     });
   } catch (err) {
     console.error("Create product error:", err);
@@ -376,14 +318,8 @@ export const createProduct = async (req, res) => {
 };
 
 
-export const getAllProducts = async (req, res) => {
 
-  const warehouse =
-      req.user.assignedWarehouses?._id ||
-      (Array.isArray(req.user.assignedWarehouses) &&
-        req.user.assignedWarehouses.length > 0 &&
-        req.user.assignedWarehouses[0]._id) ||
-      req.user.assignedWarehouses?._id;
+export const getAllProducts = async (req, res) => {
   try {
     const {
       search,
@@ -396,8 +332,8 @@ export const getAllProducts = async (req, res) => {
       sort,
     } = req.query;
    
-   
-    const query = { warehouse };
+    // Remove warehouse from query - just create empty query object
+    const query = {};
 
     if (search) {
       query.$or = [
@@ -426,34 +362,10 @@ export const getAllProducts = async (req, res) => {
     }
 
     const products = await Product.find(query)
-      .populate("brand category defaultVariant")
+      .populate("brand category subcategory defaultVariant productType")
       .populate({
         path: "variants",
-        select: "SKU images urlSlug",
-        populate: {
-          path: "inventory",
-          select:
-            "availableQuantity minimumQuantity reorderQuantity maximumQuantity warehouse warehouseLocation",
-          populate: [
-            {
-              path: "warehouse",
-              select: "name address city state country postalCode",
-            },
-            { path: "warehouseLocation", select: "code name capacity status" },
-          ],
-        },
-      })
-      .populate({
-        path: "inventory",
-        select:
-          "availableQuantity minimumQuantity reorderQuantity maximumQuantity warehouse warehouseLocation",
-        populate: [
-          {
-            path: "warehouse",
-            select: "name address city state country postalCode",
-          },
-          { path: "warehouseLocation", select: "code name capacity status" },
-        ],
+        select: "SKU barcode images costPrice sellingPrice mrpPrice discountPercent taxRate isDefault variantAttributes",
       })
       .sort(sortBy)
       .lean();
@@ -464,7 +376,6 @@ export const getAllProducts = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-
 
 
 

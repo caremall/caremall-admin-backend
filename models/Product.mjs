@@ -30,6 +30,22 @@ const productSchema = new Schema(
       },
     },
 
+     minimumQuantity: { 
+      type: Number, 
+      required: true, 
+      default: 0 
+    },
+    reorderQuantity: { 
+      type: Number, 
+      required: true, 
+      default: 0 
+    },
+    maximumQuantity: { 
+      type: Number, 
+      required: true, 
+      default: 0 
+    },
+
     barcode: {
       type: String,
     },
@@ -98,11 +114,7 @@ const productSchema = new Schema(
     isFeatured: { type: Boolean, default: false },
     isPreOrder: { type: Boolean, default: false },
 
-    availableQuantity: { type: Number, default: 0 },
-    minimumQuantity: { type: Number, default: 0 },
-    reorderQuantity: { type: Number, default: 0 },
-    maximumQuantity: { type: Number, default: 0 },
-
+  
     weight: Number,
     dimensions: {
       length: Number,
@@ -144,11 +156,7 @@ const productSchema = new Schema(
       type: Number,
       default: 0,
     },
-    warehouse: {
-      type: Schema.Types.ObjectId,
-      ref: "Warehouse",
-      required: "true",
-    },
+   
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );

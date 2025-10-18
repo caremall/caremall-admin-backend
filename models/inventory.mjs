@@ -1,52 +1,50 @@
-import mongoose from "mongoose";
-
-const { Schema, model } = mongoose;
+import { model, Schema } from "mongoose";
 
 const inventorySchema = new Schema(
   {
     warehouse: {
       type: Schema.Types.ObjectId,
       ref: "Warehouse",
-      required: true,
+      required: false,
+      default: null, 
     },
- product: {  
+    product: {  
       type: Schema.Types.ObjectId,
       ref: "Product",
+      required: true
     },
-    variant: { type: Schema.Types.ObjectId, ref: "Variant" },
-    availableQuantity: { type: Number, required: true, default: 0 },
-    minimumQuantity: { type: Number, required: true, default: 0 },
-    reorderQuantity: { type: Number, required: true, default: 0 },
-    maximumQuantity: { type: Number, required: true, default: 0 },
+    variant: { 
+      type: Schema.Types.ObjectId, 
+      ref: "Variant",
+      default: null
+    },
+    AvailableQuantity: { 
+      type: Number, 
+      required: true, 
+      default: 0 
+    },
     warehouseLocation: {
       type: Schema.Types.ObjectId,
       ref: "WarehouseLocation",
       default: null,
     },
-    updatedAt: { type: Date, default: Date.now },
+    updatedAt: { 
+      type: Date, 
+      default: Date.now 
+    },
   },
-  { timestamps: true }
-);
-
-// Custom validation to ensure either product or variant is present
-inventorySchema.pre("validate", function (next) {
-  if (!this.product && !this.variant) {
-    next(new Error("Either product or variant must be specified"));
-  } else {
-    next();
+  { 
+    timestamps: true
   }
-});
-
-// Unique indexes to prevent duplicates per warehouse-product or warehouse-variant
-inventorySchema.index(
-  { warehouse: 1, product: 1 },
-  { unique: true, partialFilterExpression: { product: { $exists: true } } }
-);
-inventorySchema.index(
-  { warehouse: 1, variant: 1 },
-  { unique: true, partialFilterExpression: { variant: { $exists: true } } }
 );
 
-const Inventory = model("Inventory", inventorySchema);
 
-export default Inventory;
+inventorySchema.index(
+  { warehouse: 1, product: 1, variant: 1 }, 
+  { 
+    unique: true,
+    name: 'unique_warehouse_product_variant'
+  }
+);
+
+export default model("Inventory", inventorySchema);

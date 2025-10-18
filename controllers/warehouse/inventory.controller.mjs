@@ -693,6 +693,7 @@ export const getUpdatedInventories = async (req, res) => {
 
 
 export const getAllInventories = async (req, res) => {
+  console.log('hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii')
   try {
     const { productId, variantId, page = 1, limit = 50 } = req.query;
     const warehouseId =
@@ -737,6 +738,8 @@ export const getAllInventories = async (req, res) => {
     res.status(500).json({ message: "Server error fetching inventories" });
   }
 };
+
+
 
 export const getInventoryById = async (req, res) => {
   try {
