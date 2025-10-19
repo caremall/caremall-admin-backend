@@ -375,3 +375,151 @@ export const getDamagedInventoryReports = async (req, res) => {
       .json({ message: "Server error fetching damaged inventory reports" });
   }
 };
+
+//report
+
+export const getStockReport = async (req, res) => {
+  try {
+    const { warehouseId } = req.query;
+
+    if (!warehouseId) {
+      return res.status(400).json({ message: "Warehouse ID is required" });
+    }
+
+    // Fetch all inventory for the warehouse without pagination
+    const inventories = await Inventory.find({ warehouse: warehouseId })
+      .populate({
+        path: "product",
+        select: "productName SKU urlSlug productImages category subcategory",
+        populate: [
+          {
+            path: "category",
+            select: "name type categoryCode image parentId",
+            populate: { path: "parentId", select: "name" }, // optional parent category
+          },
+          {
+            path: "subcategory",
+            select: "name type categoryCode image parentId",
+            populate: { path: "parentId", select: "name" }, // optional parent category
+          },
+        ],
+      })
+      .populate({
+        path: "variant",
+        select: "variantName SKU attributes images productId",
+        populate: {
+          path: "productId",
+          select: "productName SKU category subcategory",
+          populate: [
+            {
+              path: "category",
+              select: "name type categoryCode image parentId",
+              populate: { path: "parentId", select: "name" },
+            },
+            {
+              path: "subcategory",
+              select: "name type categoryCode image parentId",
+              populate: { path: "parentId", select: "name" },
+            },
+          ],
+        },
+      })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    if (inventories.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No inventory found for this warehouse" });
+    }
+
+    res.status(200).json({
+      data: inventories,
+    });
+  } catch (error) {
+    console.error("Error generating stock report with category:", error);
+    res.status(500).json({ message: "Server error generating stock report" });
+  }
+};
+
+export const getProductReport = async (req, res) => {
+  try {
+    const { productId, variantId, warehouseId, fromDate, toDate } = req.query;
+
+    if (!productId && !variantId) {
+      return res
+        .status(400)
+        .json({ message: "Product ID or Variant ID is required" });
+    }
+
+    const query = {};
+    if (productId) query.product = productId;
+    if (variantId) query.variant = variantId;
+    if (warehouseId) query.warehouse = warehouseId;
+
+    // Date range filter on createdAt
+    if (fromDate || toDate) {
+      query.createdAt = {};
+      if (fromDate) query.createdAt.$gte = new Date(fromDate);
+      if (toDate) {
+        const to = new Date(toDate);
+        to.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = to;
+      }
+    }
+
+    const logs = await inventoryLog
+      .find(query)
+      .populate(
+        "inventory warehouse product variant updatedBy",
+        "name email SKU"
+      )
+      .populate({
+        path: "variant",
+        populate: {
+          path: "productId",
+          select: "productName SKU urlSlug",
+        },
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (logs.length === 0) {
+      return res.status(404).json({ message: "No transaction logs found" });
+    }
+
+    // Add transactionType ("in" or "out") to each log
+    const logsWithType = logs.map((log) => {
+      let transactionType = "none";
+      if (log.newQuantity > log.previousQuantity) transactionType = "in";
+      else if (log.newQuantity < log.previousQuantity) transactionType = "out";
+
+      return {
+        ...log,
+        transactionType,
+        quantityChange: Math.abs(log.quantityChange),
+      };
+    });
+
+    // Calculate total in/out quantities
+    let totalInQuantity = 0;
+    let totalOutQuantity = 0;
+    logsWithType.forEach((log) => {
+      if (log.transactionType === "in") totalInQuantity += log.quantityChange;
+      else if (log.transactionType === "out")
+        totalOutQuantity += log.quantityChange;
+    });
+
+    res.status(200).json({
+      data: logsWithType,
+      totalLogs: logsWithType.length,
+      totalInQuantity,
+      totalOutQuantity,
+    });
+  } catch (error) {
+    console.error("Error fetching product transaction history:", error);
+    res
+      .status(500)
+      .json({ message: "Server error fetching product transaction history" });
+  }
+};

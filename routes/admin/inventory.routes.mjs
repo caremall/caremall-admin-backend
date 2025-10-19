@@ -1,12 +1,26 @@
 import { Router } from "express";
-import { createDamagedInventoryReport, getAllInventories, getDamagedInventoryReports, getInventoryById, getInventoryLogs, toggleFavoriteInventoryLog, updateInventory } from "../../controllers/admin/inventory.controller.mjs";
+import {
+  createDamagedInventoryReport,
+  getAllInventories,
+  getDamagedInventoryReports,
+  getInventoryById,
+  getInventoryLogs,
+  getProductReport,
+  getStockReport,
+  toggleFavoriteInventoryLog,
+  updateInventory,
+} from "../../controllers/admin/inventory.controller.mjs";
 
 const router = Router();
 
+//report
+router.get("/stock-report", getStockReport);
+router.get("/product-report", getProductReport);
+
 router.put("/", updateInventory);
 router.get("/", getAllInventories);
-router.get("/:id", getInventoryById);
 router.get("/log", getInventoryLogs);
+router.get("/:id", getInventoryById);
 router.put("/:id/favourite", toggleFavoriteInventoryLog);
 
 //damaged inventory report
