@@ -5,8 +5,7 @@ const inventorySchema = new Schema(
     warehouse: {
       type: Schema.Types.ObjectId,
       ref: "Warehouse",
-      required: false,
-      default: null, 
+      required: true,
     },
     product: {  
       type: Schema.Types.ObjectId,
@@ -38,13 +37,16 @@ const inventorySchema = new Schema(
   }
 );
 
-
-inventorySchema.index(
-  { warehouse: 1, product: 1, variant: 1 }, 
-  { 
-    unique: true,
-    name: 'unique_warehouse_product_variant'
-  }
-);
+// // This index allows:
+// // - Same product + different variants in same warehouse ✅
+// // - Same product + no variant in same warehouse ✅
+// // - Different products in same warehouse ✅
+// inventorySchema.index(
+//   { warehouse: 1, product: 1, variant: 1 }, 
+//   { 
+//     unique: true,
+//     name: 'unique_warehouse_product_variant'
+//   }
+// );
 
 export default model("Inventory", inventorySchema);
