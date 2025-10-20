@@ -4,7 +4,6 @@ import Category from "../../models/Category.mjs";
 import Warehouse from "../../models/Warehouse.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 import Inventory from "../../models/inventory.mjs";
-import Variant from "../../models/Variant.mjs";
 
 export const createProduct = async (req, res) => {
   console.log(req.body.subcategory, 'this is the subcategory');

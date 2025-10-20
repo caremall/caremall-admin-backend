@@ -41,12 +41,12 @@ const inventorySchema = new Schema(
 // // - Same product + different variants in same warehouse ✅
 // // - Same product + no variant in same warehouse ✅
 // // - Different products in same warehouse ✅
-// inventorySchema.index(
-//   { warehouse: 1, product: 1, variant: 1 }, 
-//   { 
-//     unique: true,
-//     name: 'unique_warehouse_product_variant'
-//   }
-// );
+inventorySchema.index(
+  { warehouse: 1, product: 1, variant: 1 }, 
+  { 
+    unique: true,
+    name: 'unique_warehouse_product_variant'
+  }
+);
 
 export default model("Inventory", inventorySchema);
