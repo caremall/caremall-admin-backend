@@ -105,7 +105,7 @@ export const getReturnsByProduct = async (req, res) => {
     const { productId } = req.params;
     const userId = req.user._id;
 
-    const returns = await Return.find({
+    const returns = await Return.findOne({
       user: userId,
       "item.product": productId,
     })
@@ -127,6 +127,36 @@ export const getReturnsByProduct = async (req, res) => {
       .json({ success: false, message: "Failed to get returns by product" });
   }
 };
+
+export const getReturnByOrderAndProduct = async (req, res) => {
+  try {
+    const { orderId, productId } = req.params;
+    const userId = req.user._id; // ensures logged-in user only
+
+    const returnDoc = await Return.findOne({
+      user: userId,
+      order: orderId,
+      "item.product": productId,
+    })
+      .populate("order", "orderStatus paymentStatus totalAmount")
+      .populate("item.product", "productName")
+      .populate("item.variant", "variantAttributes");
+
+    if (!returnDoc) {
+      return res
+        .status(404)
+        .json({ success: false, message: "No return found for this order & product" });
+    }
+
+    res.json({ success: true, return: returnDoc });
+  } catch (err) {
+    console.error("Error fetching return by order & product:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to get return by order & product" });
+  }
+};
+
 
 export const cancelReturnRequest = async (req, res) => {
   try {
