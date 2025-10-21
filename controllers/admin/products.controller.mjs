@@ -676,11 +676,27 @@ export const updateProduct = async (req, res) => {
 
 export const deleteProduct = async (req, res) => {
   try {
-    const deleted = await Product.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ message: "Product not found" });
-    res.status(200).json({ message: "Product deleted successfully" });
+    const productId = req.params.id;
+    
+    // First check if product exists
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+    
+    // Delete all variants associated with this product
+    const deleteVariantsResult = await Variant.deleteMany({ productId: productId });
+    
+    // Then delete the product
+    await Product.findByIdAndDelete(productId);
+    
+    res.status(200).json({ 
+      message: "Product and its variants deleted successfully",
+      deletedVariantsCount: deleteVariantsResult.deletedCount
+    });
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    console.error("Error deleting product:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
