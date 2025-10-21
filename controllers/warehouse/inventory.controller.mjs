@@ -848,7 +848,7 @@ export const getUpdatedInventories = async (req, res) => {
         path: "variant",
         populate: {
           path: "productId", // populate product inside variant
-          select: "productName SKU urlSlug", // select product fields you want
+          select: "productName SKU urlSlug images", // select product fields you want
         },
       })
       .populate("product")
