@@ -360,10 +360,10 @@ export const getAllProducts = async (req, res) => {
     }
 
     const products = await Product.find(query)
-      .populate("brand category subcategory defaultVariant productType")
+      .populate("brand category subcategory defaultVariant productType minimumQuantity reorderQuantity maximumQuantity")
       .populate({
         path: "variants",
-        select: "SKU barcode images costPrice sellingPrice mrpPrice discountPercent taxRate isDefault variantAttributes",
+        select: "SKU barcode images costPrice sellingPrice mrpPrice discountPercent taxRate isDefault variantAttributes minimumQuantity reorderQuantity maximumQuantity",
       })
       .sort(sortBy)
       .lean();
@@ -956,5 +956,163 @@ export const getSearchSuggestions = async (req, res) => {
   } catch (err) {
     console.error("Error in getSearchSuggestions:", err);
     res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+
+// controllers/productController.js - Add this method
+// controllers/productController.js
+// controllers/productController.js
+export const getProductWithInventory = async (req, res) => {
+  console.log('HIIIIIIIIIIIIIIIIIIII')
+  try {
+    const { productId, variantId } = req.params;
+
+    console.log("Received request for:", { productId, variantId });
+    console.log("🔍 DEBUG - Received request:");
+    console.log("Product ID:", productId);
+    console.log("Variant ID:", variantId);
+    console.log("User:", req.user ? "Authenticated" : "Not authenticated");
+
+    // Get user's assigned warehouse
+    const assignedWarehouses = req.user.assignedWarehouses;
+    const fromWarehouse = Array.isArray(assignedWarehouses)
+      ? assignedWarehouses[0]?._id
+      : assignedWarehouses?._id;
+
+    console.log("User warehouse:", fromWarehouse);
+
+    if (!productId) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID is required"
+      });
+    }
+
+    if (!fromWarehouse) {
+      return res.status(400).json({
+        success: false,
+        message: "No warehouse assigned to user"
+      });
+    }
+
+    // Get product details
+    const product = await Product.findById(productId)
+      .populate("brand", "name")
+      .populate("category", "name")
+      .populate("variants")
+      .lean();
+
+    console.log("Product found:", !!product);
+    
+    if (!product) {
+      console.log("Product not found with ID:", productId);
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
+
+    let variantData = null;
+    let inventoryData = null;
+
+    // If variantId is provided and it's not "undefined", get variant details
+    if (variantId && variantId !== "undefined" && variantId !== "null") {
+      console.log("Looking for variant:", variantId);
+      variantData = await Variant.findById(variantId).lean();
+      console.log("Variant found:", !!variantData);
+      
+      if (!variantData) {
+        console.log("Variant not found with ID:", variantId);
+        return res.status(404).json({
+          success: false,
+          message: "Variant not found"
+        });
+      }
+
+      // Get inventory for this specific variant in user's warehouse
+      inventoryData = await Inventory.findOne({
+        product: productId,
+        variant: variantId,
+        warehouse: fromWarehouse
+      }).lean();
+      console.log("Inventory data found:", !!inventoryData);
+    } else {
+      // Get inventory for product without variant in user's warehouse
+      inventoryData = await Inventory.findOne({
+        product: productId,
+        variant: { $in: [null, undefined] },
+        warehouse: fromWarehouse
+      }).lean();
+      console.log("Inventory data found (no variant):", !!inventoryData);
+    }
+
+    // Get warehouse details
+    const warehouse = await Warehouse.findById(fromWarehouse)
+      .select("name address")
+      .lean();
+    console.log("Warehouse found:", !!warehouse);
+
+    // Format response
+    const responseData = {
+      id: productId,
+      availableQuantity: inventoryData?.AvailableQuantity || 0,
+      minimumQuantity: variantData?.minimumQuantity || product.minimumQuantity || 0,
+      reorderQuantity: variantData?.reorderQuantity || product.reorderQuantity || 0,
+      maximumQuantity: variantData?.maximumQuantity || product.maximumQuantity || 0,
+      warehouse: warehouse || {
+        id: fromWarehouse,
+        name: "Unknown Warehouse",
+        address: {
+          street: "Unknown",
+          city: "Unknown", 
+          state: "Unknown",
+          pinCode: "000000"
+        }
+      },
+      variant: variantData ? {
+        id: variantData._id,
+        SKU: variantData.SKU,
+        barcode: variantData.barcode,
+        images: variantData.images,
+        variantAttributes: variantData.variantAttributes,
+        productId: {
+          productName: product.productName,
+          productStatus: product.productStatus,
+          productDescription: product.productDescription,
+          shortDescription: product.shortDescription,
+          visibility: product.visibility,
+          sellingPrice: variantData.sellingPrice,
+          mrpPrice: variantData.mrpPrice
+        }
+      } : null,
+      product: [{
+        productName: product.productName,
+        productStatus: product.productStatus,
+        productImages: product.productImages,
+        SKU: product.SKU,
+        productDescription: product.productDescription,
+        shortDescription: product.shortDescription,
+        visibility: product.visibility,
+        sellingPrice: product.sellingPrice,
+        mrpPrice: product.mrpPrice,
+        barcode: product.barcode
+      }]
+    };
+
+    console.log("Sending response data");
+    res.status(200).json({
+      success: true,
+      data: responseData
+    });
+  } catch (error) {
+    console.error("Error fetching product with inventory:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
   }
 };

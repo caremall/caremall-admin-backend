@@ -6,6 +6,7 @@ import {
   getProductBySlug,
   updateProduct,
   getSearchSuggestions,
+  getProductWithInventory
 } from "../../controllers/warehouse/products.controller.mjs";
 import { catchAsyncErrors } from "../../utils/catchAsyncErrors.mjs";
 
@@ -20,8 +21,14 @@ router
   .route("/get-by-slug/:slug")
   .get(getProductBySlug)
 
-router.route("/:id")
-  .put(updateProduct)
-  .delete(deleteProduct);
+
+router
+  .route("/get-by-id/:id")
+  .get(getProductWithInventory)
+
+router.get("/inventory-detail/:productId/:variantId", getProductWithInventory);
+
+
+router.get("/inventory-detail/:productId", getProductWithInventory);
 
 export default router;
