@@ -4,6 +4,7 @@ import Inventory from "../../models/inventory.mjs";
 import inventoryLog from "../../models/inventoryLog.mjs";
 import TransferRequest from "../../models/TransferRequest.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
+import Product from "../../models/Product.mjs";
 
 
 export const getTransactionByID = async (req, res) => {
@@ -579,65 +580,163 @@ export const updateInventory = async (req, res) => {
   }
 };
 
-// Increment inventory quantity by 1
+
+
+
+
 export const incrementInventory = async (req, res) => {
   try {
-    const inventoryId = req.params.id;
+    const { productId, variantId, quantity = 1, warehouseId } = req.body;
 
-    if (!inventoryId) {
-      return res.status(400).json({ message: "Inventory ID is required" });
+    if (!warehouseId || !productId) {
+      return res.status(400).json({
+        success: false,
+        message: "Warehouse ID and Product ID are required",
+      });
     }
 
-    const inventory = await Inventory.findById(inventoryId);
-    if (!inventory) {
-      return res.status(404).json({ message: "Inventory not found" });
+    // Standardized query for variant null/undefined
+    const query = {
+      warehouse: warehouseId,
+      product: productId,
+      variant: variantId || null
+    };
+
+    let inventory = await Inventory.findOne(query);
+
+    if (inventory) {
+      // Just increment and save
+      inventory.AvailableQuantity += quantity;
+      inventory.updatedAt = new Date();
+      await inventory.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Inventory updated successfully",
+        data: inventory,
+      });
+    } else {
+      // Create new document
+      const newInventory = new Inventory({
+        warehouse: warehouseId,
+        product: productId,
+        variant: variantId || null,
+        AvailableQuantity: quantity,
+        updatedAt: new Date(),
+      });
+
+      await newInventory.save();
+
+      return res.status(201).json({
+        success: true,
+        message: "Inventory created successfully",
+        data: newInventory,
+      });
     }
-
-    inventory.availableQuantity += 1;
-    inventory.updatedAt = new Date();
-    await inventory.save();
-
-    res.status(200).json({
-      message: "Inventory incremented successfully",
-      availableQuantity: inventory.availableQuantity,
-    });
   } catch (error) {
-    console.error("Error incrementing inventory:", error);
-    res.status(500).json({ message: "Server error incrementing inventory" });
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 };
 
-// Decrement inventory quantity by 1
+
+
 export const decrementInventory = async (req, res) => {
   try {
-    const inventoryId = req.params.id;
+    const { productId, variantId, quantity = 1 } = req.body;
 
-    if (!inventoryId) {
-      return res.status(400).json({ message: "Inventory ID is required" });
+    const warehouseId = Array.isArray(req.user?.assignedWarehouses)
+      ? req.user.assignedWarehouses[0]?._id
+      : req.user?.assignedWarehouses?._id;
+
+    if (!warehouseId) {
+      return res.status(400).json({
+        success: false,
+        message: "No warehouse assigned to user"
+      });
     }
 
-    const inventory = await Inventory.findById(inventoryId);
+    if (!productId) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID is required"
+      });
+    }
+
+    const inventory = await Inventory.findOne({
+      warehouse: warehouseId,
+      product: productId,
+      variant: variantId || null
+    });
+
     if (!inventory) {
-      return res.status(404).json({ message: "Inventory not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Inventory record not found for this warehouse"
+      });
     }
 
-    if (inventory.availableQuantity <= 0) {
-      return res
-        .status(400)
-        .json({ message: "Inventory cannot go below zero" });
+    if (inventory.AvailableQuantity < quantity) {
+      return res.status(400).json({
+        success: false,
+        message: "Insufficient inventory quantity"
+      });
     }
 
-    inventory.availableQuantity -= 1;
+    inventory.AvailableQuantity -= quantity;
     inventory.updatedAt = new Date();
     await inventory.save();
 
     res.status(200).json({
+      success: true,
       message: "Inventory decremented successfully",
-      availableQuantity: inventory.availableQuantity,
+      data: inventory
     });
+
   } catch (error) {
     console.error("Error decrementing inventory:", error);
-    res.status(500).json({ message: "Server error decrementing inventory" });
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+};
+// Get inventory for user's assigned warehouse
+export const getInventory = async (req, res) => {
+  try {
+    // Get warehouse ID from user's assigned warehouses
+    const warehouseId = Array.isArray(req.user?.assignedWarehouses)
+      ? req.user.assignedWarehouses[0]?._id
+      : req.user?.assignedWarehouses?._id;
+
+    if (!warehouseId) {
+      return res.status(400).json({
+        success: false,
+        message: "No warehouse assigned to user"
+      });
+    }
+
+    const inventory = await Inventory.find({ warehouse: warehouseId })
+      .populate('warehouse', 'name code')
+      .populate('product', 'productName SKU productImages hasVariant variants')
+      .populate('variant', 'variantAttributes SKU barcode images')
+      .sort({ updatedAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: inventory
+    });
+  } catch (error) {
+    console.error("Error fetching inventory:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
   }
 };
 
@@ -695,48 +794,46 @@ export const getUpdatedInventories = async (req, res) => {
 export const getAllInventories = async (req, res) => {
   try {
     const { productId, variantId, page = 1, limit = 50 } = req.query;
-    const warehouseId =
+
+    let warehouseId =
       Array.isArray(req.user?.assignedWarehouses)
         ? req.user.assignedWarehouses[0]?._id
-        : req.user?.assignedWarehouses?._id || warehouseFromBody;
+        : req.user?.assignedWarehouses?._id;
 
+    // ✅ Build dynamic query
     const query = {};
     if (warehouseId) query.warehouse = warehouseId;
     if (productId) query.product = productId;
     if (variantId) query.variant = variantId;
 
+    const skip = (page - 1) * limit;
+
     const inventories = await Inventory.find(query)
-      .populate("warehouse")
-      .populate("warehouseLocation")
-      .populate({
-        path: "variant",
-        populate: {
-          path: "productId", // populate product inside variant
-          select: "productName SKU urlSlug", // select product fields you want
-        },
-      })
-      .populate("product") // also populate product directly (for inventories related to product without variant)
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
-      .sort({ updatedAt: -1 })
-      .lean();
+      .populate("warehouse", "name address")     // ✅ bring warehouse name and address
+      .populate("product", "name sku basePrice") // ✅ bring product details
+      .populate("variant", "name sku mrp")       // ✅ bring variant details
+      .populate("warehouseLocation", "name code") // ✅ location
+      .skip(skip)
+      .limit(limit)
+      .sort({ updatedAt: -1 });
 
     const total = await Inventory.countDocuments(query);
 
     res.status(200).json({
+      success: true,
+      total,
+      page,
+      limit,
       data: inventories,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
     });
+
   } catch (error) {
     console.error("Error fetching inventories:", error);
-    res.status(500).json({ message: "Server error fetching inventories" });
+    res.status(500).json({ success: false, message: "Server error fetching inventories" });
   }
 };
+
+
 
 export const getInventoryById = async (req, res) => {
   try {

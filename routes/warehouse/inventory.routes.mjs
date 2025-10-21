@@ -45,8 +45,8 @@ inventoryRouter.get("/damaged", getDamagedInventoryReports);
 inventoryRouter.get("/damaged/:id", getDamagedInventoryReportsById);
 inventoryRouter.delete("/damaged/:id", deleteDamagedInventoryReport);
 
-inventoryRouter.put("/increment/:id",incrementInventory)
-inventoryRouter.put("/decrement/:id",decrementInventory)
+inventoryRouter.put("/increment",incrementInventory)
+inventoryRouter.put("/decrement",decrementInventory)
 inventoryRouter.put("/", updateInventory);
 inventoryRouter.get("/updated-inventory", getUpdatedInventories);
 inventoryRouter.get("/", getAllInventories);

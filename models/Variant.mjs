@@ -55,6 +55,22 @@ const variantSchema = new Schema(
 
     discountPercent: { type: Number },
 
+     minimumQuantity: { 
+      type: Number, 
+      required: true, 
+      default: 0 
+    },
+    reorderQuantity: { 
+      type: Number, 
+      required: true, 
+      default: 0 
+    },
+    maximumQuantity: { 
+      type: Number, 
+      required: true, 
+      default: 0 
+    },
+
     taxRate: Number,
 
     images: [String],
