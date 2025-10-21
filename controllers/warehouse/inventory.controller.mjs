@@ -463,120 +463,206 @@ export const assignDriverToTransferRequest = async (req, res) => {
 };
 
 // Update inventory quantity (add or remove stock)
+// Bulk update inventory quantities
 export const updateInventory = async (req, res) => {
   try {
-    const {
-      productId, // optional if variantId given
-      variantId, // optional if productId given
-      quantityChange, // positive to add, negative to remove
-      reasonForUpdate,
-      note,
-      warehouseLocation,
-      reOrderQuantity,
-      maximumQuantity,
-      minimumQuantity,
-    } = req.body;
-    const warehouseId =
-      Array.isArray(req.user?.assignedWarehouses)
-        ? req.user.assignedWarehouses[0]?._id
-        : req.user?.assignedWarehouses?._id || warehouseFromBody;
+    const assignedWarehouses = req.user.assignedWarehouses;
+    const warehouseId = Array.isArray(assignedWarehouses)
+      ? assignedWarehouses[0]?._id
+      : assignedWarehouses?._id;
 
-    if (!warehouseId) {
-      return res.status(400).json({ message: "Warehouse is required" });
-    }
+    const { updates, productId, variantId, quantityChange, note, reasonForUpdate, warehouseLocation } = req.body;
 
-    if (!productId && !variantId) {
-      return res
-        .status(400)
-        .json({ message: "Product ID or Variant ID is required" });
-    }
+    // If updates array exists, process as bulk update
+    if (updates && Array.isArray(updates)) {
+      // Bulk update logic
+      const results = [];
+      const errors = [];
 
-    // if (typeof quantityChange !== "number" || quantityChange === 0) {
-    //   return res
-    //     .status(400)
-    //     .json({ message: "Quantity change must be a non-zero number" });
-    // }
+      for (const update of updates) {
+        try {
+          const { productId, variantId, quantityChange, note, reasonForUpdate, warehouseLocation } = update;
 
-    if (!reasonForUpdate || reasonForUpdate.trim() === "") {
-      return res.status(400).json({ message: "Reason for update is required" });
-    }
+          // Input validation for each update
+          if (!productId || quantityChange === undefined || quantityChange === null) {
+            errors.push({
+              productId,
+              variantId,
+              error: "Product ID and quantity change are required"
+            });
+            continue;
+          }
 
-    // Find existing inventory record or create new one
-    const query = {
-      warehouse: warehouseId,
-      ...(productId ? { product: productId } : { variant: variantId }),
-    };
+          const query = {
+            warehouse: warehouseId,
+            product: productId,
+            variant: variantId || null
+          };
 
-    let inventory = await Inventory.findOne(query);
+          let inventory = await Inventory.findOne(query);
 
-    if (!inventory) {
-      // Create new inventory doc with initial quantity 0
-      inventory = new Inventory({
+          if (inventory) {
+            const newQuantity = inventory.AvailableQuantity + quantityChange;
+            
+            if (newQuantity < 0) {
+              errors.push({
+                productId,
+                variantId,
+                error: "Insufficient stock",
+                currentQuantity: inventory.AvailableQuantity,
+                attemptedChange: quantityChange
+              });
+              continue;
+            }
+
+            inventory.AvailableQuantity = newQuantity;
+            inventory.updatedAt = new Date();
+            
+            if (warehouseLocation) {
+              inventory.warehouseLocation = warehouseLocation;
+            }
+            
+            await inventory.save();
+            results.push(inventory);
+          } else {
+            if (quantityChange < 0) {
+              errors.push({
+                productId,
+                variantId,
+                error: "Cannot create with negative quantity",
+                attemptedQuantity: quantityChange
+              });
+              continue;
+            }
+
+            const newInventory = new Inventory({
+              warehouse: warehouseId,
+              product: productId,
+              variant: variantId || null,
+              AvailableQuantity: quantityChange,
+              warehouseLocation: warehouseLocation || null,
+              updatedAt: new Date(),
+            });
+
+            await newInventory.save();
+            results.push(newInventory);
+          }
+        } catch (error) {
+          errors.push({
+            productId: update.productId,
+            variantId: update.variantId,
+            error: error.message
+          });
+        }
+      }
+
+      return res.status(errors.length > 0 ? 207 : 200).json({
+        success: errors.length === 0,
+        message: `Processed ${results.length} successfully, ${errors.length} failed`,
+        data: results,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    } 
+    // Single update logic
+    else {
+      // Input validation for single update
+      if (!productId || quantityChange === undefined || quantityChange === null) {
+        return res.status(400).json({
+          success: false,
+          message: "Product ID and quantity change are required"
+        });
+      }
+
+      const query = {
         warehouse: warehouseId,
-        product: productId || undefined,
-        variant: variantId || undefined,
-        availableQuantity: 0,
-        minimumQuantity: 0,
-        reorderQuantity: 0,
-        maximumQuantity: 0,
-        warehouseLocation: warehouseLocation || "",
-      });
+        product: productId,
+        variant: variantId || null
+      };
+
+      let inventory = await Inventory.findOne(query);
+
+      if (inventory) {
+        const newQuantity = inventory.AvailableQuantity + quantityChange;
+        
+        // Prevent negative inventory if needed (optional)
+        if (newQuantity < 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Insufficient stock available",
+            currentQuantity: inventory.AvailableQuantity,
+            attemptedChange: quantityChange
+          });
+        }
+
+        inventory.AvailableQuantity = newQuantity;
+        inventory.updatedAt = new Date();
+        
+        // Update warehouseLocation if provided
+        if (warehouseLocation) {
+          inventory.warehouseLocation = warehouseLocation;
+        }
+        
+        await inventory.save();
+
+        return res.status(200).json({
+          success: true,
+          message: "Inventory updated successfully",
+          data: inventory,
+        });
+      } else {
+        // Prevent creating inventory with negative quantity
+        if (quantityChange < 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Cannot create new inventory with negative quantity",
+            attemptedQuantity: quantityChange
+          });
+        }
+
+        // Create new inventory document
+        const newInventory = new Inventory({
+          warehouse: warehouseId,
+          product: productId,
+          variant: variantId || null,
+          AvailableQuantity: quantityChange,
+          warehouseLocation: warehouseLocation || null,
+          updatedAt: new Date(),
+        });
+
+        await newInventory.save();
+
+        return res.status(201).json({
+          success: true,
+          message: "Inventory created successfully",
+          data: newInventory,
+        });
+      }
     }
-
-    const previousQuantity = inventory.availableQuantity;
-    const newQuantity = previousQuantity + quantityChange;
-
-    // if (newQuantity < 0) {
-    //   return res
-    //     .status(400)
-    //     .json({ message: "Resulting quantity cannot be negative" });
+  } catch (error) {
+    console.error("Inventory update error:", error);
+    
+    // Handle duplicate key error (due to unique index)
+    // if (error.code === 11000) {
+    //   return res.status(409).json({
+    //     success: false,
+    //     message: "Inventory record already exists for this product/variant in warehouse"
+    //   });
     // }
-    if (
-      inventory.maximumQuantity > 0 &&
-      newQuantity > inventory.maximumQuantity
-    ) {
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
       return res.status(400).json({
-        message: `Resulting quantity exceeds maximum limit of ${inventory.maximumQuantity}`,
+        success: false,
+        message: "Validation error",
+        error: error.message
       });
     }
 
-    // Update all fields you want to modify
-    if (warehouseLocation !== undefined)
-      inventory.warehouseLocation = warehouseLocation;
-    if (minimumQuantity !== undefined)
-      inventory.minimumQuantity = minimumQuantity;
-    if (reOrderQuantity !== undefined)
-      inventory.reorderQuantity = reOrderQuantity;
-    if (maximumQuantity !== undefined)
-      inventory.maximumQuantity = maximumQuantity;
-
-    inventory.availableQuantity = newQuantity;
-    inventory.updatedAt = new Date();
-
-    await inventory.save();
-
-    // Log the update
-    await inventoryLog.create({
-      inventory: inventory._id,
-      product: productId || undefined,
-      variant: variantId || undefined,
-      warehouse: warehouseId,
-      previousQuantity,
-      quantityChange,
-      newQuantity,
-      reasonForUpdate,
-      note,
-      warehouseLocation: warehouseLocation || "",
-      updatedBy: req.user ? req.user._id : null,
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
     });
-
-    res.status(200).json({
-      message: "Inventory updated successfully",
-      inventory,
-    });
-  } catch (err) {
-    console.error("Error updating inventory:", err);
-    res.status(500).json({ message: "Server error updating inventory" });
   }
 };
 
@@ -762,7 +848,7 @@ export const getUpdatedInventories = async (req, res) => {
         path: "variant",
         populate: {
           path: "productId", // populate product inside variant
-          select: "productName SKU urlSlug", // select product fields you want
+          select: "productName SKU urlSlug images", // select product fields you want
         },
       })
       .populate("product")
