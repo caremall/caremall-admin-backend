@@ -9,7 +9,7 @@ import { enrichProductsWithDefaultVariants } from "../utils/enrichedProducts.mjs
 // Create a new OfferCard
 export const createOfferCard = async (req, res) => {
   try {
-    const { title, offerPreviewType, offers, carouselSettings, image } = req.body;
+    const { title, offerPreviewType, offers, carouselSettings, image, active } = req.body;
 
     if (!title) {
       return res.status(400).json({ message: "Title is required" });
@@ -34,6 +34,7 @@ export const createOfferCard = async (req, res) => {
       offerPreviewType,
       offers,
       carouselSettings,
+      active,
       image: imageUrl
     });
 
@@ -115,15 +116,15 @@ export const getOfferCardById = async (req, res) => {
               select: "name"
             },
             {
-  path: "defaultVariant",
-  model: "Variant",
-  select: "variantId images sellingPrice mrpPrice SKU barcode isDefault"
-},
-{
-  path: "variants",
-  model: "Variant",
-  select: "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault"
-}
+              path: "defaultVariant",
+              model: "Variant",
+              select: "variantId images sellingPrice mrpPrice SKU barcode isDefault"
+            },
+            {
+              path: "variants",
+              model: "Variant",
+              select: "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault"
+            }
           ]
         }
       })
@@ -134,15 +135,15 @@ export const getOfferCardById = async (req, res) => {
     }
 
     // Process products to handle variants
-   if (card.offers && card.offers.length) {
-     for (const offer of card.offers) {
-       if (offer.offerEligibleItems && offer.offerEligibleItems.length) {
-         offer.offerEligibleItems = await enrichProductsWithDefaultVariants(
-           offer.offerEligibleItems
-         );
-       }
-     }
-   }
+    if (card.offers && card.offers.length) {
+      for (const offer of card.offers) {
+        if (offer.offerEligibleItems && offer.offerEligibleItems.length) {
+          offer.offerEligibleItems = await enrichProductsWithDefaultVariants(
+            offer.offerEligibleItems
+          );
+        }
+      }
+    }
 
 
     res.status(200).json({
@@ -163,7 +164,7 @@ export const getOfferCardById = async (req, res) => {
 export const updateOfferCard = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, offerPreviewType, offers, carouselSettings, image } = req.body;
+    const { title, offerPreviewType, offers, carouselSettings, image, active } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid OfferCard ID" });
@@ -175,6 +176,7 @@ export const updateOfferCard = async (req, res) => {
     }
 
     if (title !== undefined) card.title = title;
+    if (active !== undefined) card.active = active;
     if (offerPreviewType !== undefined)
       card.offerPreviewType = offerPreviewType;
     if (offers !== undefined) {
