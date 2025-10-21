@@ -810,9 +810,9 @@ export const getAllInventories = async (req, res) => {
 
     const inventories = await Inventory.find(query)
       .populate("warehouse", "name address")     // ✅ bring warehouse name and address
-      .populate("product", "name sku basePrice") // ✅ bring product details
-      .populate("variant", "name sku mrp")       // ✅ bring variant details
-      .populate("warehouseLocation", "name code") // ✅ location
+      .populate("product", "productName SKU barcode productType productImages minimumQuantity reorderQuantity maximumQuantity shortDescription productDescription brand category subcategory costPrice sellingPrice mrpPrice landingSellPrice productStatus") // ✅ bring product details
+      .populate("variant", "variantId productId variantAttributes SKU barcode costPrice sellingPrice mrpPrice landingSellPrice minimumQuantity reorderQuantity maximumQuantity images")       // ✅ bring variant details
+      // .populate("warehouseLocation", "name code") // ✅ location
       .skip(skip)
       .limit(limit)
       .sort({ updatedAt: -1 });
