@@ -48,7 +48,7 @@ const inventoryLogSchema = new Schema(
     },
     updatedBy: {
       type: Schema.Types.ObjectId,
-      ref: "Admin", // or Admin model, whoever modifies inventory
+      ref: "Admin", 
     },
     isFavorite: {
       type: Boolean,
