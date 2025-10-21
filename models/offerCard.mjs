@@ -20,7 +20,7 @@ const offerCardSchema = new Schema(
     offers: [
       {
         type: Schema.Types.ObjectId,
-        ref: "Offer", 
+        ref: "Offer",
         required: true,
       },
     ],
@@ -29,6 +29,10 @@ const offerCardSchema = new Schema(
       slideDurationSeconds: { type: Number, default: 5 }, // Example setting
       autoplay: { type: Boolean, default: true },
       // Add any other carousel config fields as needed
+    },
+     active: {
+      type: Boolean,
+      default: true,
     },
   },
   { timestamps: true }
