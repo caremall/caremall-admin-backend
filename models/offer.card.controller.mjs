@@ -87,6 +87,50 @@ export const getAllOfferCards = async (req, res) => {
   }
 };
 
+// Get all active OfferCards with populated offers
+export const getAllActiveOfferCards = async (req, res) => {
+  try {
+    // Fetch only active offer cards
+    const cards = await OfferCard.find({ active: true })
+      .populate({
+        path: "offers",
+        match: { active: true }, // fetch only active offers
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    for (const card of cards) {
+      for (const offer of card.offers || []) {
+        if (
+          !offer.offerEligibleItems ||
+          offer.offerEligibleItems.length === 0
+        ) {
+          offer.products = [];
+          continue;
+        }
+
+        const ids = offer.offerEligibleItems.filter((id) =>
+          mongoose.Types.ObjectId.isValid(id)
+        );
+
+        // Fetch products and variants in parallel by all IDs
+        const [products, variants] = await Promise.all([
+          Product.find({ _id: { $in: ids }, active: true }).lean(),
+          Variant.find({ _id: { $in: ids }, active: true }).lean(),
+        ]);
+
+        // Combine both arrays into one
+        offer.products = [...products, ...variants];
+      }
+    }
+
+    res.status(200).json({ success: true, data: cards });
+  } catch (error) {
+    console.error("Get All OfferCards Error:", error);
+    res.status(500).json({ message: "Failed to fetch offer cards" });
+  }
+};
+
 
 // Get a single OfferCard by ID with populated offers
 export const getOfferCardById = async (req, res) => {
