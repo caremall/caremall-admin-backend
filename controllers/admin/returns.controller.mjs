@@ -16,8 +16,8 @@ export const getAllReturns = async (req, res) => {
       Return.find(query)
         .populate("user", "name email")
         .populate("order", "orderStatus createdAt")
-        .populate("item.product", "productName")
-        .populate("item.variant", "variantAttributes")
+        .populate("item.product", "productName productImages SKU barcode")
+        .populate("item.variant", "variantAttributes images SKU barcode")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(limit)),
