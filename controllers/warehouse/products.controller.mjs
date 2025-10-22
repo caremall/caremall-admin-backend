@@ -452,6 +452,7 @@ export const getProductBySlug = async (req, res) => {
 
 
 
+// Assumes Product and Variant models are already imported, and uploadBase64Images util exists
 export const updateProduct = async (req, res) => {
   try {
     const {
@@ -500,8 +501,30 @@ export const updateProduct = async (req, res) => {
       variants = [],
     } = req.body;
 
-    const warehouse = req.user.assignedWarehouses._id;
+    const warehouse = req.user?.assignedWarehouses?._id;
     const productId = req.params.id;
+
+    // Early validation for numeric fields
+    if (
+      (sellingPrice !== undefined && isNaN(Number(sellingPrice))) ||
+      (taxRate !== undefined && isNaN(Number(taxRate))) ||
+      (costPrice !== undefined && isNaN(Number(costPrice))) ||
+      (mrpPrice !== undefined && isNaN(Number(mrpPrice)))
+    ) {
+      return res.status(400).json({ message: "Invalid numeric values provided for pricing fields" });
+    }
+
+    // Helper to compute landing price safely
+    const calcLandingPrice = (baseVal, taxVal) => {
+      const baseNum = Number(baseVal);
+      const taxNum = Number(taxVal || 0);
+      if (isNaN(baseNum) || isNaN(taxNum) || !isFinite(baseNum) || !isFinite(taxNum)) {
+        return undefined;
+      }
+      const taxAmount = (baseNum * taxNum) / 100;
+      const landing = Math.ceil(baseNum + taxAmount);
+      return isFinite(landing) ? landing : undefined;
+    };
 
     // Find product
     const existingProduct = await Product.findById(productId);
@@ -509,56 +532,52 @@ export const updateProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // Uniqueness checks (name, slug, SKU, barcode)
+    // --- Uniqueness checks ---
     if (productName && productName.trim() !== existingProduct.productName) {
       const dup = await Product.findOne({
         productName: productName.trim(),
         _id: { $ne: productId },
       });
-      if (dup)
-        return res
-          .status(400)
-          .json({ message: "Product name is already taken" });
+      if (dup) {
+        return res.status(400).json({ message: "Product name is already taken" });
+      }
     }
+
     if (urlSlug && urlSlug.trim().toLowerCase() !== existingProduct.urlSlug) {
       const dup = await Product.findOne({
         urlSlug: urlSlug.trim().toLowerCase(),
         _id: { $ne: productId },
       });
-      if (dup)
+      if (dup) {
         return res.status(400).json({ message: "URL slug is already taken" });
+      }
     }
+
     if (hasVariant === false && SKU && SKU.trim() !== existingProduct.SKU) {
       const dup = await Product.findOne({
         SKU: SKU.trim(),
         _id: { $ne: productId },
       });
-      if (dup)
+      if (dup) {
         return res.status(400).json({ message: "This SKU is already in use" });
+      }
     }
-    if (
-      hasVariant === false &&
-      barcode &&
-      barcode.trim() !== existingProduct.barcode
-    ) {
+
+    if (hasVariant === false && barcode && barcode.trim() !== existingProduct.barcode) {
       const dup = await Product.findOne({
         barcode: barcode.trim(),
         _id: { $ne: productId },
       });
-      if (dup)
-        return res
-          .status(400)
-          .json({ message: "This Barcode is already in use" });
+      if (dup) {
+        return res.status(400).json({ message: "This Barcode is already in use" });
+      }
     }
 
-    // Process images
+    // --- Process images for non-variant product ---
     let finalProductImages = existingProduct.productImages || [];
-    if (productImages && productImages.length > 0 && hasVariant === false) {
+    if (productImages && Array.isArray(productImages) && productImages.length > 0 && hasVariant === false) {
       const promises = productImages.map(async (img) => {
-        if (
-          typeof img === "string" &&
-          /^data:image\/[a-zA-Z]+;base64,/.test(img)
-        ) {
+        if (typeof img === "string" && /^data:image\/[a-zA-Z]+;base64,/.test(img)) {
           const uploaded = await uploadBase64Images([img], "products/");
           return uploaded[0];
         }
@@ -567,161 +586,134 @@ export const updateProduct = async (req, res) => {
       finalProductImages = (await Promise.all(promises)).flat().filter(Boolean);
     }
 
-    // Build update fields
+    // --- Build updateFields safely ---
     const updateFields = {};
-    if (productName !== undefined)
-      updateFields.productName = productName.trim();
-    if (shortDescription !== undefined)
-      updateFields.shortDescription = shortDescription.trim();
-    if (productDescription !== undefined)
-      updateFields.productDescription = productDescription.trim();
-    if (warrantyPolicy !== undefined)
-      updateFields.warrantyPolicy = warrantyPolicy;
+
+    if (productName !== undefined) updateFields.productName = productName?.trim();
+    if (shortDescription !== undefined) updateFields.shortDescription = shortDescription?.trim();
+    if (productDescription !== undefined) updateFields.productDescription = productDescription?.trim();
+    if (warrantyPolicy !== undefined) updateFields.warrantyPolicy = warrantyPolicy;
     if (brand !== undefined) updateFields.brand = brand;
     if (category !== undefined) updateFields.category = category;
-    if (hasVariant !== undefined) updateFields.hasVariant = hasVariant;
+    if (hasVariant !== undefined) updateFields.hasVariant = Boolean(hasVariant);
 
+    // Non-variant product fields
     if (hasVariant === false) {
       updateFields.productType = null;
       updateFields.defaultVariant = null;
-      if (SKU !== undefined) updateFields.SKU = SKU.trim();
-      if (barcode !== undefined)
-        updateFields.barcode = barcode ? barcode.trim() : null;
-      if (finalProductImages.length > 0)
-        updateFields.productImages = finalProductImages;
-      if (costPrice !== undefined && costPrice !== null)
-        updateFields.costPrice = Number(costPrice);
-      if (sellingPrice !== undefined && sellingPrice !== null)
-        updateFields.sellingPrice = Number(sellingPrice);
-      if (mrpPrice !== undefined && mrpPrice !== null)
-        updateFields.mrpPrice = Number(mrpPrice);
 
-      // Calculate landingSellPrice only if sellingPrice is a valid number
-      const base =
-        sellingPrice !== undefined && sellingPrice !== null
-          ? Number(sellingPrice)
-          : existingProduct.sellingPrice !== undefined &&
-            existingProduct.sellingPrice !== null
-          ? Number(existingProduct.sellingPrice)
-          : null;
+      if (SKU !== undefined) updateFields.SKU = SKU ? SKU.trim() : null;
+      if (barcode !== undefined) updateFields.barcode = barcode ? barcode.trim() : null;
+      if (finalProductImages.length > 0) updateFields.productImages = finalProductImages;
+
+      if (costPrice !== undefined && costPrice !== null) updateFields.costPrice = Number(costPrice);
+      if (sellingPrice !== undefined && sellingPrice !== null) updateFields.sellingPrice = Number(sellingPrice);
+      if (mrpPrice !== undefined && mrpPrice !== null) updateFields.mrpPrice = Number(mrpPrice);
+
+      // Determine taxVal
       const taxVal =
-        taxRate !== undefined && taxRate !== null
+        taxRate !== undefined && taxRate !== null && !isNaN(Number(taxRate))
           ? Number(taxRate)
           : existingProduct.taxRate !== undefined &&
-            existingProduct.taxRate !== null
+            existingProduct.taxRate !== null &&
+            !isNaN(Number(existingProduct.taxRate))
           ? Number(existingProduct.taxRate)
           : 0;
+      if (!isNaN(taxVal)) updateFields.taxRate = taxVal;
 
-      // Only calculate if base is a valid number
-      if (base !== null && !isNaN(base) && !isNaN(taxVal)) {
-        const taxAmount = (base * taxVal) / 100;
-        const landing = Math.ceil(base + taxAmount);
-        if (!isNaN(landing) && isFinite(landing)) {
-          updateFields.landingSellPrice = landing;
-        }
-      }
+      // Determine base for landing price
+      const base =
+        sellingPrice !== undefined && sellingPrice !== null && !isNaN(Number(sellingPrice))
+          ? Number(sellingPrice)
+          : existingProduct.sellingPrice !== undefined &&
+            existingProduct.sellingPrice !== null &&
+            !isNaN(Number(existingProduct.sellingPrice))
+          ? Number(existingProduct.sellingPrice)
+          : undefined;
+
+      // Compute landing price
+      const landing = calcLandingPrice(base, taxVal);
+      if (landing !== undefined) updateFields.landingSellPrice = landing;
+      // If landing is undefined, do not set landingSellPrice to preserve existing value
     } else if (hasVariant === true) {
-      updateFields.SKU = null;
-      updateFields.barcode = null;
+      // When product has variants, clear product-level pricing fields
+      updateFields.SKU = undefined;
+      updateFields.barcode = undefined;
       updateFields.productImages = [];
-      updateFields.costPrice = null;
-      updateFields.sellingPrice = null;
-      updateFields.mrpPrice = null;
-      updateFields.landingSellPrice = null;
+      updateFields.costPrice = undefined;
+      updateFields.sellingPrice = undefined;
+      updateFields.mrpPrice = undefined;
+      updateFields.landingSellPrice = undefined;
       if (productType !== undefined) updateFields.productType = productType;
-      if (defaultVariant !== undefined)
-        updateFields.defaultVariant = defaultVariant;
+      if (defaultVariant !== undefined) updateFields.defaultVariant = defaultVariant;
     }
 
     if (tags !== undefined) updateFields.tags = Array.isArray(tags) ? tags : [];
-    if (discountPercent !== undefined)
-      updateFields.discountPercent =
-        discountPercent === null ? null : Number(discountPercent);
-    if (taxRate !== undefined)
-      updateFields.taxRate = taxRate === null ? null : Number(taxRate);
+    if (discountPercent !== undefined) updateFields.discountPercent = discountPercent === null ? null : Number(discountPercent);
+    if (taxRate !== undefined) updateFields.taxRate = taxRate === null ? null : Number(taxRate);
     if (productStatus !== undefined) updateFields.productStatus = productStatus;
     if (visibility !== undefined) updateFields.visibility = visibility;
     if (isFeatured !== undefined) updateFields.isFeatured = Boolean(isFeatured);
     if (isPreOrder !== undefined) updateFields.isPreOrder = Boolean(isPreOrder);
-    if (availableQuantity !== undefined)
-      updateFields.availableQuantity = Number(availableQuantity);
-    if (minimumQuantity !== undefined)
-      updateFields.minimumQuantity = Number(minimumQuantity);
-    if (reorderQuantity !== undefined)
-      updateFields.reorderQuantity = Number(reorderQuantity);
-    if (maximumQuantity !== undefined)
-      updateFields.maximumQuantity = Number(maximumQuantity);
+    if (availableQuantity !== undefined) updateFields.availableQuantity = Number(availableQuantity);
+    if (minimumQuantity !== undefined) updateFields.minimumQuantity = Number(minimumQuantity);
+    if (reorderQuantity !== undefined) updateFields.reorderQuantity = Number(reorderQuantity);
+    if (maximumQuantity !== undefined) updateFields.maximumQuantity = Number(maximumQuantity);
     if (weight !== undefined) updateFields.weight = Number(weight);
     if (dimensions !== undefined) updateFields.dimensions = dimensions;
     if (isFragile !== undefined) updateFields.isFragile = Boolean(isFragile);
     if (shippingClass !== undefined) updateFields.shippingClass = shippingClass;
     if (packageType !== undefined) updateFields.packageType = packageType;
-    if (quantityPerBox !== undefined)
-      updateFields.quantityPerBox = Number(quantityPerBox);
+    if (quantityPerBox !== undefined) updateFields.quantityPerBox = Number(quantityPerBox);
     if (supplierId !== undefined) updateFields.supplierId = supplierId;
     if (affiliateId !== undefined) updateFields.affiliateId = affiliateId;
-    if (externalLinks !== undefined)
-      updateFields.externalLinks = Array.isArray(externalLinks)
-        ? externalLinks
-        : [];
+    if (externalLinks !== undefined) updateFields.externalLinks = Array.isArray(externalLinks) ? externalLinks : [];
     if (metaTitle !== undefined) updateFields.metaTitle = metaTitle;
-    if (metaDescription !== undefined)
-      updateFields.metaDescription = metaDescription;
-    if (urlSlug !== undefined)
-      updateFields.urlSlug = urlSlug.trim().toLowerCase();
+    if (metaDescription !== undefined) updateFields.metaDescription = metaDescription;
+    if (urlSlug !== undefined) updateFields.urlSlug = urlSlug ? urlSlug.trim().toLowerCase() : undefined;
     if (viewsCount !== undefined) updateFields.viewsCount = Number(viewsCount);
-    if (addedToCartCount !== undefined)
-      updateFields.addedToCartCount = Number(addedToCartCount);
-    if (wishlistCount !== undefined)
-      updateFields.wishlistCount = Number(wishlistCount);
+    if (addedToCartCount !== undefined) updateFields.addedToCartCount = Number(addedToCartCount);
+    if (wishlistCount !== undefined) updateFields.wishlistCount = Number(wishlistCount);
     if (orderCount !== undefined) updateFields.orderCount = Number(orderCount);
     if (warehouse !== undefined) updateFields.warehouse = warehouse;
 
-    Object.assign(existingProduct, updateFields);
-
-    // Wipe non-variant fields if variant product
-    if (hasVariant === true) {
-      existingProduct.SKU = undefined;
-      existingProduct.barcode = undefined;
-      existingProduct.productImages = undefined;
-      existingProduct.costPrice = undefined;
-      existingProduct.sellingPrice = undefined;
-      existingProduct.mrpPrice = undefined;
-      existingProduct.landingSellPrice = undefined;
-    }
-
-    // Recalculate landingSellPrice if variant mode unchanged & non-variant product
+    // Handle case when hasVariant is undefined and product has no variants
     if (hasVariant === undefined && existingProduct.hasVariant === false) {
-      const base = existingProduct.sellingPrice;
-      const taxVal = existingProduct.taxRate || 0;
-
-      // Ensure base is a valid number before calculation
-      if (
-        base !== null &&
-        base !== undefined &&
-        !isNaN(base) &&
-        !isNaN(taxVal)
-      ) {
-        const baseNum = Number(base);
-        const taxNum = Number(taxVal);
-        const taxAmount = (baseNum * taxNum) / 100;
-        const landing = Math.ceil(baseNum + taxAmount);
-
-        if (!isNaN(landing) && isFinite(landing)) {
-          existingProduct.landingSellPrice = landing;
-        }
+      const base =
+        existingProduct.sellingPrice !== undefined &&
+        existingProduct.sellingPrice !== null &&
+        !isNaN(Number(existingProduct.sellingPrice))
+          ? Number(existingProduct.sellingPrice)
+          : undefined;
+      const tax =
+        existingProduct.taxRate !== undefined &&
+        existingProduct.taxRate !== null &&
+        !isNaN(Number(existingProduct.taxRate))
+          ? Number(existingProduct.taxRate)
+          : 0;
+      const landing = calcLandingPrice(base, tax);
+      if (landing !== undefined) {
+        updateFields.landingSellPrice = landing;
       }
     }
 
+    // Apply updates to existingProduct instance
+    Object.assign(existingProduct, updateFields);
+
+    // Save product first
     await existingProduct.save();
 
-    // Variant handling...
+    // --- Variant handling ---
     if (hasVariant === true && Array.isArray(variants)) {
+      // variantIds included in body: keep, others delete
       const variantIds = variants.map((v) => v._id).filter(Boolean);
 
+      // Remove variants that were deleted client-side
       await Variant.deleteMany({ productId, _id: { $nin: variantIds } });
 
+      // Process each variant
       for (const variant of variants) {
+        // Basic validations
         if (!variant.SKU || variant.SKU.trim() === "") {
           return res.status(400).json({ message: "Variant SKU is required" });
         }
@@ -729,52 +721,33 @@ export const updateProduct = async (req, res) => {
         const cost = Number(variant.costPrice);
         const sell = Number(variant.sellingPrice);
         const mrp = Number(variant.mrpPrice);
+
         if ([cost, sell, mrp].some((val) => isNaN(val))) {
-          return res
-            .status(400)
-            .json({ message: `Invalid price fields in SKU '${variant.SKU}'` });
+          return res.status(400).json({ message: `Invalid price fields in SKU '${variant.SKU}'` });
         }
 
-        if (
-          variants.filter((v) => v.SKU && v.SKU.trim() === variant.SKU.trim())
-            .length > 1
-        ) {
-          return res
-            .status(400)
-            .json({ message: `Duplicate SKU '${variant.SKU.trim()}'` });
+        // Ensure unique SKU in payload
+        if (variants.filter((v) => v.SKU && v.SKU.trim() === variant.SKU.trim()).length > 1) {
+          return res.status(400).json({ message: `Duplicate SKU '${variant.SKU.trim()}' in payload` });
         }
 
+        // Process variant images
         let processedImages = [];
-        if (variant.images && variant.images.length > 0) {
-          processedImages = await Promise.all(
+        if (variant.images && Array.isArray(variant.images) && variant.images.length > 0) {
+          const imgs = await Promise.all(
             variant.images.map(async (img) => {
-              if (
-                typeof img === "string" &&
-                /^data:image\/[a-zA-Z]+;base64,/.test(img)
-              ) {
-                const uploaded = await uploadBase64Images(
-                  [img],
-                  "variant-images/"
-                );
+              if (typeof img === "string" && /^data:image\/[a-zA-Z]+;base64,/.test(img)) {
+                const uploaded = await uploadBase64Images([img], "variant-images/");
                 return uploaded[0];
               }
               return img;
             })
           );
-          processedImages = processedImages.flat().filter(Boolean);
+          processedImages = imgs.flat().filter(Boolean);
         }
 
-        const base = Number(variant.sellingPrice);
-        const tax = Number(variant.taxRate) || 0;
-        let landingPrice;
-        if (!isNaN(base) && !isNaN(tax) && isFinite(base) && isFinite(tax)) {
-          const taxAmount = (base * tax) / 100;
-          landingPrice = Math.ceil(base + taxAmount);
-          // Validate the result
-          if (isNaN(landingPrice) || !isFinite(landingPrice)) {
-            landingPrice = undefined;
-          }
-        }
+        const tax = variant.taxRate !== undefined && variant.taxRate !== null ? Number(variant.taxRate) : 0;
+        const landingPrice = calcLandingPrice(sell, tax);
 
         const variantData = {
           productId,
@@ -784,46 +757,35 @@ export const updateProduct = async (req, res) => {
           costPrice: cost,
           sellingPrice: sell,
           mrpPrice: mrp,
-          landingSellPrice: landingPrice,
-          discountPercent: variant.discountPercent
-            ? Number(variant.discountPercent)
-            : undefined,
-          taxRate: variant.taxRate ? Number(variant.taxRate) : undefined,
-          images:
-            processedImages.length > 0 ? processedImages : variant.images || [],
-          isDefault: variant.isDefault || false,
+          landingSellPrice: landingPrice !== undefined ? landingPrice : undefined,
+          discountPercent: variant.discountPercent !== undefined ? Number(variant.discountPercent) : undefined,
+          taxRate: !isNaN(tax) ? tax : undefined,
+          images: processedImages.length > 0 ? processedImages : variant.images || [],
+          isDefault: Boolean(variant.isDefault),
+          minimumQuantity: variant.minimumQuantity !== undefined ? Number(variant.minimumQuantity) : undefined,
+          reorderQuantity: variant.reorderQuantity !== undefined ? Number(variant.reorderQuantity) : undefined,
+          maximumQuantity: variant.maximumQuantity !== undefined ? Number(variant.maximumQuantity) : undefined,
         };
 
         if (variant._id) {
+          // Updating existing variant
           const existingVariant = await Variant.findById(variant._id);
-          if (!existingVariant)
-            return res
-              .status(404)
-              .json({ message: `Variant ID ${variant._id} not found` });
-
-          if (variant.SKU.trim() !== existingVariant.SKU) {
-            const dupeSKU = await Variant.findOne({
-              SKU: variant.SKU.trim(),
-              _id: { $ne: variant._id },
-            });
-            if (dupeSKU)
-              return res
-                .status(400)
-                .json({ message: `Duplicate SKU ${variant.SKU.trim()}` });
+          if (!existingVariant) {
+            return res.status(404).json({ message: `Variant ID ${variant._id} not found` });
           }
 
-          if (
-            variant.barcode &&
-            variant.barcode.trim() !== existingVariant.barcode
-          ) {
-            const dupeBarcode = await Variant.findOne({
-              barcode: variant.barcode.trim(),
-              _id: { $ne: variant._id },
-            });
-            if (dupeBarcode)
-              return res.status(400).json({
-                message: `Duplicate Barcode ${variant.barcode.trim()}`,
-              });
+          if (variant.SKU.trim() !== existingVariant.SKU) {
+            const dupeSKU = await Variant.findOne({ SKU: variant.SKU.trim(), _id: { $ne: variant._id } });
+            if (dupeSKU) {
+              return res.status(400).json({ message: `Duplicate SKU ${variant.SKU.trim()}` });
+            }
+          }
+
+          if (variant.barcode && variant.barcode.trim() !== existingVariant.barcode) {
+            const dupeBarcode = await Variant.findOne({ barcode: variant.barcode.trim(), _id: { $ne: variant._id } });
+            if (dupeBarcode) {
+              return res.status(400).json({ message: `Duplicate Barcode ${variant.barcode.trim()}` });
+            }
           }
 
           await Variant.findByIdAndUpdate(variant._id, variantData, {
@@ -831,53 +793,50 @@ export const updateProduct = async (req, res) => {
             runValidators: true,
           });
         } else {
-          if (
-            !variant.variantAttributes ||
-            variant.variantAttributes.length === 0
-          ) {
-            return res.status(400).json({
-              message: `Variant ${variant.SKU} requires variantAttributes`,
-            });
+          // Creating new variant
+          if (!variant.variantAttributes || variant.variantAttributes.length === 0) {
+            return res.status(400).json({ message: `Variant ${variant.SKU} requires variantAttributes` });
           }
-          const dupeSKU = await Variant.findOne({
-            SKU: variantData.SKU,
-          });
-          if (dupeSKU)
-            return res.status(400).json({
-              message: `SKU '${variantData.SKU}' already exists`,
-            });
+
+          // Global SKU/barcode uniqueness checks
+          const dupeSKU = await Variant.findOne({ SKU: variantData.SKU });
+          if (dupeSKU) {
+            return res.status(400).json({ message: `SKU '${variantData.SKU}' already exists` });
+          }
+
           if (variantData.barcode) {
-            const dupeBarcode = await Variant.findOne({
-              barcode: variantData.barcode,
-            });
-            if (dupeBarcode)
-              return res.status(400).json({
-                message: `Barcode '${variantData.barcode}' already exists`,
-              });
+            const dupeBarcode = await Variant.findOne({ barcode: variantData.barcode });
+            if (dupeBarcode) {
+              return res.status(400).json({ message: `Barcode '${variantData.barcode}' already exists` });
+            }
           }
+
           await Variant.create(variantData);
         }
       }
 
+      // Ensure defaultVariant is set
       const allVariants = await Variant.find({ productId });
       if (defaultVariant) {
         existingProduct.defaultVariant = defaultVariant;
         await existingProduct.save();
-      } else if (allVariants.length > 0 && !existingProduct.defaultVariant) {
-        const defaultVar =
-          allVariants.find((v) => v.isDefault) || allVariants[0];
+      } else if (allVariants.length > 0) {
+        const defaultVar = allVariants.find((v) => v.isDefault) || allVariants[0];
         existingProduct.defaultVariant = defaultVar._id;
         await existingProduct.save();
       }
     } else if (hasVariant === false) {
+      // Remove variants if product is switched to non-variant
       await Variant.deleteMany({ productId });
     }
 
+    // Return updated product with populates
     const updatedProduct = await Product.findById(productId)
       .populate("brand")
       .populate("category")
       .populate("productType")
-      .populate("warehouse");
+      .populate("defaultVariant")
+      .populate({ path: "variants" });
 
     return res.status(200).json({
       success: true,
@@ -886,19 +845,22 @@ export const updateProduct = async (req, res) => {
     });
   } catch (err) {
     console.error("Update product error:", err);
+
     if (err.code === 11000) {
-      const field = Object.keys(err.keyPattern)[0];
+      const field = Object.keys(err.keyPattern || {})[0] || "unknown";
       return res.status(400).json({ message: `Duplicate ${field} found.` });
     }
     if (err.name === "ValidationError") {
       const errors = Object.values(err.errors).map((e) => e.message);
       return res.status(400).json({ message: "Validation failed", errors });
     }
-    return res
-      .status(500)
-      .json({ message: "Update failed", error: err.message });
+    return res.status(500).json({ message: "Update failed", error: err.message });
   }
 };
+
+
+
+
 
 export const deleteProduct = async (req, res) => {
   try {

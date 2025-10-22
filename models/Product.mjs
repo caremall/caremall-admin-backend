@@ -32,18 +32,21 @@ const productSchema = new Schema(
 
      minimumQuantity: { 
       type: Number, 
-      required: true, 
-      default: 0 
+       required: function () {
+        return this.hasVariant === false;
+      },
     },
     reorderQuantity: { 
       type: Number, 
-      required: true, 
-      default: 0 
+      required: function () {
+        return this.hasVariant === false;
+      },
     },
     maximumQuantity: { 
-      type: Number, 
-      required: true, 
-      default: 0 
+      type: Number,       
+      required: function () {
+        return this.hasVariant === false;
+      },
     },
 
     barcode: {
