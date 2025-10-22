@@ -28,6 +28,7 @@ router
 
 router.get("/inventory-detail/:productId/:variantId", getProductWithInventory);
 
+router.put("/:id", updateProduct);
 
 router.get("/inventory-detail/:productId", getProductWithInventory);
 
