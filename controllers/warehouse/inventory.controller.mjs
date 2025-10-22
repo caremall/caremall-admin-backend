@@ -671,15 +671,14 @@ export const updateInventory = async (req, res) => {
 
 
 export const incrementInventory = async (req, res) => {
+   const assignedWarehouses = req.user.assignedWarehouses;
+    const warehouseId = Array.isArray(assignedWarehouses)
+      ? assignedWarehouses[0]?._id
+      : assignedWarehouses?._id;
   try {
-    const { productId, variantId, quantity = 1, warehouseId } = req.body;
+    const { productId, variantId, quantity = 1 } = req.body;
 
-    if (!warehouseId || !productId) {
-      return res.status(400).json({
-        success: false,
-        message: "Warehouse ID and Product ID are required",
-      });
-    }
+   
 
     // Standardized query for variant null/undefined
     const query = {
