@@ -141,7 +141,7 @@ export const getOfferByID = async (req, res) => {
         .populate({
           path: "defaultVariant",
           model: "Variant",
-          select: "variantId images sellingPrice mrpPrice SKU barcode isDefault",
+          select: "variantId productImages images sellingPrice mrpPrice SKU barcode isDefault",
         })
         .populate({
           path: "variants",
