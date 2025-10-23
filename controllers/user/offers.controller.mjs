@@ -1,5 +1,7 @@
 import Offer from '../../models/offerManagement.mjs';
 import mongoose from "mongoose";
+import Product from '../../models/Product.mjs';
+import Variant from '../../models/Variant.mjs';
 
 // Get active published offers with a valid duration
 export const getPublishedOffersWithDuration = async (req, res) => {
