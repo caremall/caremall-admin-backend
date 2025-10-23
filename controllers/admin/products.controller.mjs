@@ -651,7 +651,7 @@ export const updateProduct = async (req, res) => {
       .populate("category")
       .populate("subcategory")
       .populate("productType")
-      .populate("warehouse")
+      // .populate("warehouse")
       .populate("variants");
 
     return res.status(200).json({
