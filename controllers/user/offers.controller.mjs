@@ -100,40 +100,61 @@ export const getOfferByID = async (req, res) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Offer ID is required",
-      });
+      return res.status(400).json({ success: false, message: "Offer ID is required" });
     }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid offer ID format",
-      });
+      return res.status(400).json({ success: false, message: "Invalid offer ID format" });
     }
 
     const offer = await Offer.findById(id).lean();
 
     if (!offer) {
-      return res.status(404).json({
-        success: false,
-        message: "Offer not found",
-      });
+      return res.status(404).json({ success: false, message: "Offer not found" });
     }
 
-    // 🟩 Fetch eligible products and variants (same logic as in getAllActiveOfferCards)
+    // 🟩 Fetch eligible products and variants (with defaultVariant populated)
     let offerEligibleProducts = [];
-    if (offer.offerEligibleItems && offer.offerEligibleItems.length > 0) {
-      const validIds = offer.offerEligibleItems.filter((id) =>
+    if (offer.offerEligibleItems?.length) {
+      const ids = offer.offerEligibleItems.filter((id) =>
         mongoose.Types.ObjectId.isValid(id)
       );
 
-      // Fetch products & variants in parallel
-      const [products, variants] = await Promise.all([
-        Product.find({ _id: { $in: validIds }, active: true }).lean(),
-        Variant.find({ _id: { $in: validIds }, active: true }).lean(),
-      ]);
+      console.log("Valid offerEligibleItem IDs:", ids);
+
+      // Fetch products with populated relationships
+      const products = await Product.find({
+        _id: { $in: ids },
+        productStatus: "published",
+        visibility: "visible",
+      })
+        .populate({
+          path: "brand",
+          model: "Brand",
+          select: "name",
+        })
+        .populate({
+          path: "category",
+          model: "Category",
+          select: "name",
+        })
+        .populate({
+          path: "defaultVariant",
+          model: "Variant",
+          select: "variantId images sellingPrice mrpPrice SKU barcode isDefault",
+        })
+        .populate({
+          path: "variants",
+          model: "Variant",
+          select:
+            "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault",
+        })
+        .lean();
+
+      // Fetch variants separately (if directly referenced)
+      const variants = await Variant.find({
+        _id: { $in: ids },
+      }).lean();
 
       offerEligibleProducts = [...products, ...variants];
     }
@@ -151,7 +172,7 @@ export const getOfferByID = async (req, res) => {
         offerImageUrl: offer.offerImageUrl,
         offerRedeemTimePeriod: offer.offerRedeemTimePeriod,
         offerEligibleItems: offer.offerEligibleItems,
-        offerEligibleProducts, // 🟢 newly added combined list
+        offerEligibleProducts,
         isOfferFeatured: offer.isOfferFeatured,
         offerStatus: offer.offerStatus,
         offerAuthor: offer.offerAuthor,
@@ -168,3 +189,4 @@ export const getOfferByID = async (req, res) => {
     });
   }
 };
+
