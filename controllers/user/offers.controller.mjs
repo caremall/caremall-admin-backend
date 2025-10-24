@@ -4,6 +4,7 @@ import Product from '../../models/Product.mjs';
 import Brand from '../../models/Brand.mjs';
 import Category from '../../models/Category.mjs';
 import Variant from '../../models/Variant.mjs';
+import { enrichProductsWithDefaultVariants } from '../../utils/enrichedProducts.mjs';
 
 // Get active published offers with a valid duration
 export const getPublishedOffersWithDuration = async (req, res) => {
@@ -96,7 +97,6 @@ export const applyCouponCode = async (req, res) => {
 };
 
 
-
 export const getOfferByID = async (req, res) => {
   try {
     const { id } = req.params;
@@ -116,49 +116,58 @@ export const getOfferByID = async (req, res) => {
     }
 
     let populatedItems = [];
-    
-    // Handle different offer types
+
+    // ✅ Populate eligible items based on offer type
     if (offer.offerEligibleItems?.length) {
       switch (offer.offerType) {
         case "product":
-          // Populate products with brands and categories
-          populatedItems = await Product.find({
-            _id: { $in: offer.offerEligibleItems },
-            productStatus: "published",
-            visibility: "visible"
-          })
-          .select("productId productName shortDescription productDescription brand category sellingPrice mrpPrice productImages urlSlug hasVariant defaultVariant")
-          .populate("brand", "name")
-          .populate("category", "name")
-          .populate("defaultVariant", "variantId images sellingPrice mrpPrice SKU barcode isDefault")
-          .populate("variants", "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault")
-          .lean();
+          {
+            const products = await Product.find({
+              _id: { $in: offer.offerEligibleItems },
+              productStatus: "published",
+              visibility: "visible",
+            })
+              .select(
+                "productId productName shortDescription productDescription brand category sellingPrice mrpPrice productImages urlSlug hasVariant defaultVariant variants"
+              )
+              .populate("brand", "name")
+              .populate("category", "name")
+              .populate(
+                "defaultVariant",
+                "variantId images sellingPrice mrpPrice SKU barcode isDefault"
+              )
+              .populate(
+                "variants",
+                "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault"
+              )
+              .lean();
+
+            // 🟩 Merge default variant data (like getMostWantedProducts)
+            populatedItems = await enrichProductsWithDefaultVariants(products);
+          }
           break;
 
         case "brand":
-          // Populate brands
           populatedItems = await Brand.find({
             _id: { $in: offer.offerEligibleItems },
-            status: "active"
+            status: "active",
           })
-          .select("brandName tagline description termsAndConditions status imageUrl")
-          .lean();
+            .select("brandName tagline description termsAndConditions status imageUrl")
+            .lean();
           break;
 
         case "category":
-          // Populate categories
           populatedItems = await Category.find({
             _id: { $in: offer.offerEligibleItems },
-            status: "active"
+            status: "active",
           })
-          .select("type image name description parentId categoryCode status isPopular")
-          .populate("parentId", "name")
-          .lean();
+            .select("type image name description parentId categoryCode status isPopular")
+            .populate("parentId", "name")
+            .lean();
           break;
 
         case "cart":
-          // For cart offers, eligible items might be empty or contain specific rules
-          populatedItems = offer.offerEligibleItems; // Use as-is or process based on your cart logic
+          populatedItems = offer.offerEligibleItems;
           break;
 
         default:
@@ -166,14 +175,14 @@ export const getOfferByID = async (req, res) => {
       }
     }
 
-    // Filter out any null items
-    populatedItems = populatedItems.filter(item => item !== null);
+    // 🧹 Remove any null/undefined items
+    populatedItems = populatedItems.filter(Boolean);
 
     res.status(200).json({
       success: true,
       data: {
         ...offer,
-        offerEligibleItems: populatedItems
+        offerEligibleItems: populatedItems,
       },
     });
   } catch (error) {
@@ -185,4 +194,5 @@ export const getOfferByID = async (req, res) => {
     });
   }
 };
+
 
