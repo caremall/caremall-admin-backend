@@ -1,6 +1,8 @@
 import Offer from '../../models/offerManagement.mjs';
 import mongoose from "mongoose";
 import Product from '../../models/Product.mjs';
+import Brand from '../../models/Brand.mjs';
+import Category from '../../models/Category.mjs';
 import Variant from '../../models/Variant.mjs';
 
 // Get active published offers with a valid duration
@@ -113,71 +115,65 @@ export const getOfferByID = async (req, res) => {
       return res.status(404).json({ success: false, message: "Offer not found" });
     }
 
-    // 🟩 Fetch eligible products and variants (with defaultVariant populated)
-    let offerEligibleProducts = [];
+    let populatedItems = [];
+    
+    // Handle different offer types
     if (offer.offerEligibleItems?.length) {
-      const ids = offer.offerEligibleItems.filter((id) =>
-        mongoose.Types.ObjectId.isValid(id)
-      );
+      switch (offer.offerType) {
+        case "product":
+          // Populate products with brands and categories
+          populatedItems = await Product.find({
+            _id: { $in: offer.offerEligibleItems },
+            productStatus: "published",
+            visibility: "visible"
+          })
+          .select("productId productName shortDescription productDescription brand category sellingPrice mrpPrice productImages urlSlug hasVariant defaultVariant")
+          .populate("brand", "name")
+          .populate("category", "name")
+          .populate("defaultVariant", "variantId images sellingPrice mrpPrice SKU barcode isDefault")
+          .populate("variants", "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault")
+          .lean();
+          break;
 
-      console.log("Valid offerEligibleItem IDs:", ids);
+        case "brand":
+          // Populate brands
+          populatedItems = await Brand.find({
+            _id: { $in: offer.offerEligibleItems },
+            status: "active"
+          })
+          .select("brandName tagline description termsAndConditions status imageUrl")
+          .lean();
+          break;
 
-      // Fetch products with populated relationships
-      const products = await Product.find({
-        _id: { $in: ids },
-        productStatus: "published",
-        visibility: "visible",
-      })
-        .populate({
-          path: "brand",
-          model: "Brand",
-          select: "name",
-        })
-        .populate({
-          path: "category",
-          model: "Category",
-          select: "name",
-        })
-        .populate({
-          path: "defaultVariant",
-          model: "Variant",
-          select: "variantId productImages images sellingPrice mrpPrice SKU barcode isDefault",
-        })
-        .populate({
-          path: "variants",
-          model: "Variant",
-          select:
-            "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault",
-        })
-        .lean();
+        case "category":
+          // Populate categories
+          populatedItems = await Category.find({
+            _id: { $in: offer.offerEligibleItems },
+            status: "active"
+          })
+          .select("type image name description parentId categoryCode status isPopular")
+          .populate("parentId", "name")
+          .lean();
+          break;
 
-      // Fetch variants separately (if directly referenced)
-      const variants = await Variant.find({
-        _id: { $in: ids },
-      }).lean();
+        case "cart":
+          // For cart offers, eligible items might be empty or contain specific rules
+          populatedItems = offer.offerEligibleItems; // Use as-is or process based on your cart logic
+          break;
 
-      offerEligibleProducts = [...products, ...variants];
+        default:
+          populatedItems = offer.offerEligibleItems;
+      }
     }
+
+    // Filter out any null items
+    populatedItems = populatedItems.filter(item => item !== null);
 
     res.status(200).json({
       success: true,
       data: {
-        _id: offer._id,
-        offerTitle: offer.offerTitle,
-        offerDescription: offer.offerDescription,
-        offerType: offer.offerType,
-        offerDiscountUnit: offer.offerDiscountUnit,
-        offerDiscountValue: offer.offerDiscountValue,
-        offerMinimumOrderValue: offer.offerMinimumOrderValue,
-        offerImageUrl: offer.offerImageUrl,
-        offerRedeemTimePeriod: offer.offerRedeemTimePeriod,
-        offerEligibleItems: offer.offerEligibleItems,
-        offerEligibleProducts,
-        isOfferFeatured: offer.isOfferFeatured,
-        offerStatus: offer.offerStatus,
-        offerAuthor: offer.offerAuthor,
-        createdAt: offer.createdAt,
-        updatedAt: offer.updatedAt,
+        ...offer,
+        offerEligibleItems: populatedItems
       },
     });
   } catch (error) {
