@@ -183,6 +183,7 @@ export const getOfferByID = async (req, res) => {
       data: {
         ...offer,
         offerEligibleItems: populatedItems,
+        offerEligibleProducts: populatedItems,
       },
     });
   } catch (error) {
