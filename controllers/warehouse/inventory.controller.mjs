@@ -1095,22 +1095,22 @@ export const getInventoryLogs = async (req, res) => {
           createdAt: log.createdAt,
           isFavorite: log.isFavorite,
           _id: log._id,
-          type: "inventory_update" // Add type to identify regular updates
+          type: "inventory_update" 
         };
       }
     });
 
-    // Filter for favorites
+   
     const favoriteLogs = logsWithMessages.filter((log) => log.isFavorite);
 
-    // Filter for damaged logs only (if needed)
+  
     const damagedLogs = logsWithMessages.filter((log) => log.type === "damaged");
 
     res.status(200).json({
       data: logsWithMessages,
       logs: logs,
       favorites: favoriteLogs,
-      damaged: damagedLogs // Add separate damaged logs array
+      damaged: damagedLogs
     });
   } catch (error) {
     console.error("Error fetching inventory logs:", error);
