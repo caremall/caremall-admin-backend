@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+
 const { Schema, model } = mongoose;
 const pickItemSchema = new Schema({
   product: {
@@ -57,6 +58,7 @@ const dispatchSchema = new Schema(
   {
     carrier: { type: Schema.Types.ObjectId, ref: "Carrier" },
     driver: { type: Schema.Types.ObjectId, ref: "Driver" },
+    Rider: { type: Schema.Types.ObjectId, ref: "DeliveryBoy" },
     vehicleNumber: { type: String },
     dispatchDate: { type: Date, default: Date.now },
     dispatchTime: { type: String },

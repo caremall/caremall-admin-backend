@@ -5,6 +5,7 @@ import inventoryLog from "../../models/inventoryLog.mjs";
 import TransferRequest from "../../models/TransferRequest.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 import Product from "../../models/Product.mjs";
+import mongoose from "mongoose";
 
 
 export const getTransactionByID = async (req, res) => {
@@ -502,6 +503,7 @@ export const updateInventory = async (req, res) => {
           let inventory = await Inventory.findOne(query);
 
           if (inventory) {
+            const previousQuantity = inventory.AvailableQuantity;
             const newQuantity = inventory.AvailableQuantity + quantityChange;
             
             if (newQuantity < 0) {
@@ -523,6 +525,22 @@ export const updateInventory = async (req, res) => {
             }
             
             await inventory.save();
+
+            // Create inventory log for update
+            await inventoryLog.create({
+              inventory: inventory._id,
+              product: productId,
+              variant: variantId || null,
+              warehouse: warehouseId,
+              previousQuantity: previousQuantity,
+              quantityChange: quantityChange,
+              newQuantity: newQuantity,
+              reasonForUpdate: reasonForUpdate,
+              note: note,
+              warehouseLocation: warehouseLocation || null,
+              updatedBy: req.user._id,
+            });
+
             results.push(inventory);
           } else {
             if (quantityChange < 0) {
@@ -545,6 +563,22 @@ export const updateInventory = async (req, res) => {
             });
 
             await newInventory.save();
+
+            // Create inventory log for creation
+            await inventoryLog.create({
+              inventory: newInventory._id,
+              product: productId,
+              variant: variantId || null,
+              warehouse: warehouseId,
+              previousQuantity: 0,
+              quantityChange: quantityChange,
+              newQuantity: quantityChange,
+              reasonForUpdate: reasonForUpdate,
+              note: note,
+              warehouseLocation: warehouseLocation || null,
+              updatedBy: req.user._id,
+            });
+
             results.push(newInventory);
           }
         } catch (error) {
@@ -582,6 +616,7 @@ export const updateInventory = async (req, res) => {
       let inventory = await Inventory.findOne(query);
 
       if (inventory) {
+        const previousQuantity = inventory.AvailableQuantity;
         const newQuantity = inventory.AvailableQuantity + quantityChange;
         
         // Prevent negative inventory if needed (optional)
@@ -603,6 +638,21 @@ export const updateInventory = async (req, res) => {
         }
         
         await inventory.save();
+
+        // Create inventory log for update
+        await inventoryLog.create({
+          inventory: inventory._id,
+          product: productId,
+          variant: variantId || null,
+          warehouse: warehouseId,
+          previousQuantity: previousQuantity,
+          quantityChange: quantityChange,
+          newQuantity: newQuantity,
+          reasonForUpdate: reasonForUpdate,
+          note: note,
+          warehouseLocation: warehouseLocation || null,
+          updatedBy: req.user._id,
+        });
 
         return res.status(200).json({
           success: true,
@@ -630,6 +680,21 @@ export const updateInventory = async (req, res) => {
         });
 
         await newInventory.save();
+
+        // Create inventory log for creation
+        await inventoryLog.create({
+          inventory: newInventory._id,
+          product: productId,
+          variant: variantId || null,
+          warehouse: warehouseId,
+          previousQuantity: 0,
+          quantityChange: quantityChange,
+          newQuantity: quantityChange,
+          reasonForUpdate: reasonForUpdate,
+          note: note,
+          warehouseLocation: warehouseLocation || null,
+          updatedBy: req.user._id,
+        });
 
         return res.status(201).json({
           success: true,
@@ -665,7 +730,6 @@ export const updateInventory = async (req, res) => {
     });
   }
 };
-
 
 
 
@@ -830,30 +894,32 @@ export const getUpdatedInventories = async (req, res) => {
   try {
     const { limit = 20, page = 1 } = req.query
 
-    // Convert to numbers
     const pageSize = Number(limit)
     const skip = (Number(page) - 1) * pageSize
 
-    // Find inventories that were updated after creation
+    
     const updatedInventories = await Inventory.find({
-      $expr: { $ne: ["$createdAt", "$updatedAt"] },
+      updatedAt: { $gt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Last 7 days
     })
-      .sort({ updatedAt: -1 }) // newest updates first
-      .skip(skip)
-      .limit(pageSize)
+      .sort({ updatedAt: -1 })
       .populate("warehouse")
       .populate("warehouseLocation")
       .populate({
         path: "variant",
         populate: {
-          path: "productId", // populate product inside variant
-          select: "productName SKU urlSlug images", // select product fields you want
+          path: "productId",
+          select: "productName SKU urlSlug productImages",
         },
       })
-      .populate("product")
+      .populate({
+        path: "product",
+        select: "productName SKU urlSlug images productDescription productImages"
+      })
+      .skip(skip)
+      .limit(pageSize)
 
     const totalCount = await Inventory.countDocuments({
-      $expr: { $ne: ["$createdAt", "$updatedAt"] },
+      updatedAt: { $gt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
     })
 
     return res.status(200).json({
@@ -862,7 +928,7 @@ export const getUpdatedInventories = async (req, res) => {
         page: Number(page),
         limit: Number(limit),
         totalCount,
-        totalPages: Math.ceil(totalCount / limit),
+        totalPages: Math.ceil(totalCount / pageSize),
       },
     })
   } catch (error) {
@@ -951,6 +1017,8 @@ export const getInventoryById = async (req, res) => {
   }
 };
 
+
+
 export const getInventoryLogs = async (req, res) => {
   try {
     const { productId, variantId } = req.query;
@@ -975,45 +1043,82 @@ export const getInventoryLogs = async (req, res) => {
 
     // Generate message and include time (createdAt) and favorite flag
     const logsWithMessages = logs.map((log) => {
-      const qtyChange = log.quantityChange || 0;
-      const qtyAbs = Math.abs(qtyChange);
-      const action = qtyChange > 0 ? "added to" : "removed from";
-      let itemName = "Unknown item";
-      if (log.product) {
-        itemName = `${log.product.productName} (SKU ${log.product.SKU})`;
-      } else if (log.variant) {
-        itemName = `Variant SKU ${log.variant.SKU}`;
-      }
-      const locationName = log.warehouseLocation
-        ? log.warehouseLocation.code ||
-        log.warehouseLocation.name ||
-        "Unknown Location"
-        : "Unknown Location";
-      const userName = log.updatedBy ? log.updatedBy.fullName : "Unknown User";
-      const message = `${qtyChange > 0 ? "+" : "-"
-        }${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
+      // Check if this is a damaged product log
+      if (log.damageType || log.reasonForDamage || log.quantityToReport) {
+        // Damaged product message
+        const itemName = log.product 
+          ? `${log.product.productName} (SKU ${log.product.SKU})` 
+          : log.variant 
+            ? `Variant SKU ${log.variant.SKU}`
+            : "Unknown item";
+        
+        const locationName = log.warehouseLocation
+          ? log.warehouseLocation.code || log.warehouseLocation.name || "Unknown Location"
+          : "Unknown Location";
+        
+        const userName = log.updatedBy ? log.updatedBy.fullName : "Unknown User";
+        const damageType = log.damageType || "damaged";
+        const quantityReported = log.quantityToReport || 0;
+        const reason = log.reasonForDamage || "No reason provided";
 
-      return {
-        message,
-        createdAt: log.createdAt, // Time of log
-        isFavorite: log.isFavorite, // Whether log is marked favorite
-        _id: log._id, // Useful for frontend toggling favorite, etc
-      };
+        const message = `${quantityReported} of ${itemName} marked as ${damageType} at Location ${locationName}, by ${userName}. Reason: ${reason}`;
+
+        return {
+          message,
+          createdAt: log.createdAt,
+          isFavorite: log.isFavorite,
+          _id: log._id,
+          type: "damaged", // Add type to identify damaged logs
+          damageType: log.damageType,
+          quantityToReport: log.quantityToReport,
+          reasonForDamage: log.reasonForDamage
+        };
+      } else {
+        // Regular inventory update message
+        const qtyChange = log.quantityChange || 0;
+        const qtyAbs = Math.abs(qtyChange);
+        const action = qtyChange > 0 ? "added to" : "removed from";
+        let itemName = "Unknown item";
+        if (log.product) {
+          itemName = `${log.product.productName} (SKU ${log.product.SKU})`;
+        } else if (log.variant) {
+          itemName = `Variant SKU ${log.variant.SKU}`;
+        }
+        const locationName = log.warehouseLocation
+          ? log.warehouseLocation.code || log.warehouseLocation.name || "Unknown Location"
+          : "Unknown Location";
+        const userName = log.updatedBy ? log.updatedBy.fullName : "Unknown User";
+        const message = `${qtyChange > 0 ? "+" : "-"}${qtyAbs} of ${itemName} was ${action} Location ${locationName}, by ${userName}`;
+
+        return {
+          message,
+          createdAt: log.createdAt,
+          isFavorite: log.isFavorite,
+          _id: log._id,
+          type: "inventory_update" // Add type to identify regular updates
+        };
+      }
     });
 
     // Filter for favorites
     const favoriteLogs = logsWithMessages.filter((log) => log.isFavorite);
 
+    // Filter for damaged logs only (if needed)
+    const damagedLogs = logsWithMessages.filter((log) => log.type === "damaged");
+
     res.status(200).json({
       data: logsWithMessages,
       logs: logs,
-      favorites: favoriteLogs, // only favorite logs
+      favorites: favoriteLogs,
+      damaged: damagedLogs // Add separate damaged logs array
     });
   } catch (error) {
     console.error("Error fetching inventory logs:", error);
     res.status(500).json({ message: "Server error fetching inventory logs" });
   }
 };
+
+
 
 export const toggleFavoriteInventoryLog = async (req, res) => {
   try {
@@ -1044,6 +1149,9 @@ export const toggleFavoriteInventoryLog = async (req, res) => {
 };
 
 export const createDamagedInventoryReport = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const {
       product, // product ID (optional but preferred)
@@ -1058,27 +1166,45 @@ export const createDamagedInventoryReport = async (req, res) => {
     const warehouse =
       Array.isArray(req.user?.assignedWarehouses)
         ? req.user.assignedWarehouses[0]?._id
-        : req.user?.assignedWarehouses?._id || warehouseFromBody;
+        : req.user?.assignedWarehouses?._id;
+
     // Validate required fields
     if (!warehouse) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ message: "Warehouse ID is required" });
     }
     if (!product && !variant) {
+      await session.abortTransaction();
+      session.endSession();
       return res
         .status(400)
         .json({ message: "Either product or variant must be specified" });
     }
     if (typeof currentQuantity !== "number" || currentQuantity < 0) {
+      await session.abortTransaction();
+      session.endSession();
       return res
         .status(400)
         .json({ message: "Current quantity must be a non-negative number" });
     }
     if (typeof quantityToReport !== "number" || quantityToReport <= 0) {
+      await session.abortTransaction();
+      session.endSession();
       return res
         .status(400)
         .json({ message: "Quantity to report must be a positive number" });
     }
+    if (quantityToReport > currentQuantity) {
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(400)
+        .json({ message: "Quantity to report cannot exceed current quantity" });
+    }
     if (!damageType) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ message: "Damage type is required" });
     }
 
@@ -1088,8 +1214,42 @@ export const createDamagedInventoryReport = async (req, res) => {
         ? await uploadBase64Images(evidenceImages, "damaged-inventory/")
         : [];
 
-    // Create damaged report *without linking inventory*
-    const damagedReport = await damagedInventory.create({
+    // First, find or create the inventory record
+    let inventoryRecord;
+    try {
+      // Try to find existing inventory
+      const Inventory = mongoose.model("Inventory");
+      inventoryRecord = await Inventory.findOne({
+        warehouse,
+        $or: [
+          { product: product || null },
+          { variant: variant || null }
+        ]
+      }).session(session);
+
+      // If inventory doesn't exist, create one
+      if (!inventoryRecord) {
+        inventoryRecord = await Inventory.create([{
+          warehouse,
+          product: product || undefined,
+          variant: variant || undefined,
+          quantity: currentQuantity,
+          createdBy: req.user._id
+        }], { session });
+        inventoryRecord = inventoryRecord[0];
+      }
+    } catch (inventoryError) {
+      console.error("Inventory lookup/creation error:", inventoryError);
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(500).json({ 
+        message: "Error processing inventory record",
+        error: inventoryError.message 
+      });
+    }
+
+    // Create damaged inventory report
+    const damagedReport = await damagedInventory.create([{
       warehouse,
       product: product || undefined,
       variant: variant || undefined,
@@ -1099,17 +1259,54 @@ export const createDamagedInventoryReport = async (req, res) => {
       note,
       evidenceImages: uploadedImageUrls,
       uploadedBy: req.user._id,
-    });
+    }], { session });
+
+    // Create inventory log with the inventory reference
+    const inventoryHistory = await inventoryLog.create([{
+      inventory: inventoryRecord._id, // Required field
+      warehouse,
+      product: product || undefined,
+      variant: variant || undefined,
+      previousQuantity: currentQuantity,
+      quantityToReport,
+      // quantityChange: -quantityToReport,
+      newQuantity: currentQuantity - quantityToReport,
+      reasonForDamage: note,
+      damageType,
+      note,
+      updatedBy: req.user._id
+    }], { session });
+
+    // Update the actual inventory quantity
+    await mongoose.model("Inventory").findByIdAndUpdate(
+      inventoryRecord._id,
+      { 
+        $inc: { quantity: -quantityToReport },
+        $set: { updatedBy: req.user._id }
+      },
+      { session }
+    );
+
+    await session.commitTransaction();
+    session.endSession();
 
     res.status(201).json({
       message: "Damaged inventory report created successfully",
-      damagedReport,
+      damagedReport: damagedReport[0],
+      inventoryHistory: inventoryHistory[0],
     });
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
     console.error("Create Damaged Inventory Report Error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ 
+      message: "Internal server error",
+      error: error.message 
+    });
   }
 };
+
+
 
 export const updateDamagedInventoryReport = async (req, res) => {
   try {
