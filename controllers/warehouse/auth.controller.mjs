@@ -10,6 +10,8 @@ import Role from "../../models/Role.mjs";
 //⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡
 
 export const login = async (req, res) => {
+  console.log(req.body,"req.bodyreq.bodyreq.bodyreq.bodyreq.body");
+  
   try {
     const { email, password } = req.body;
     if (!email || !password)

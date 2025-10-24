@@ -43,6 +43,9 @@ export const registerFinanceAdmin = async (req, res) => {
 
 // Login
 export const loginFinanceAdmin = async (req, res) => {
+
+  console.log(req.body,"asldkfalsdkfjaldkjfaldkj");
+  
   try {
     const { email, password } = req.body;
 

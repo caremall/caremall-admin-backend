@@ -133,18 +133,19 @@ export const getAllocatedOrders = async (req, res) => {
     if (!warehouseId) {
       return res
         .status(400)
-        .json({ message: "No warehouse assigned to this warehouse" });
+        .json({ message: "No warehouse assigned to this user" }); // Fixed message
     }
 
-    const { search = "", status, startDate, endDate } = req.query;
+    const { search = "", status, startDate, endDate, page = 1, limit = 10 } = req.query;
 
     const query = { allocatedWarehouse: warehouseId };
 
-    // Search by name or phone in shippingAddress (example)
+    // Search by name or phone in shippingAddress
     if (search) {
       query.$or = [
         { "shippingAddress.fullName": { $regex: search, $options: "i" } },
         { "shippingAddress.phone": { $regex: search, $options: "i" } },
+        { orderId: { $regex: search, $options: "i" } } // Also search by order ID
       ];
     }
 
@@ -168,19 +169,64 @@ export const getAllocatedOrders = async (req, res) => {
       }
     }
 
-    const orders = await Order.find(query)
-      .populate("user")
-      .populate("dispatches.driver")
-      .populate("dispatches.carrier")
-      .populate("allocatedWarehouse")
-      .populate("items.product")
-      .populate("items.variant")
-      .sort({ createdAt: -1 });
+    // Pagination
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
 
-    res.status(200).json({ data: orders });
+    const orders = await Order.find(query)
+      .populate("user", "name email phone") // Select specific user fields
+      .populate("dispatches.driver", "name phone")
+      .populate("dispatches.carrier", "name trackingUrl")
+      .populate("allocatedWarehouse", "name address")
+      .populate("items.product", "name sku images")
+      .populate("items.variant", "size color")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    // Get total count for pagination
+    const totalOrders = await Order.countDocuments(query);
+    const totalPages = Math.ceil(totalOrders / limitNum);
+
+    // Transform response to include explicit status
+    const ordersWithStatus = orders.map(order => ({
+      _id: order._id,
+      orderId: order.orderId,
+      orderStatus: order.orderStatus, // Explicitly including order status
+      user: order.user,
+      items: order.items,
+      shippingAddress: order.shippingAddress,
+      totalAmount: order.totalAmount,
+      finalAmount: order.finalAmount,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      pickings: order.pickings,
+      packings: order.packings,
+      dispatches: order.dispatches,
+      allocatedWarehouse: order.allocatedWarehouse,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: ordersWithStatus,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalOrders,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1
+      }
+    });
   } catch (error) {
     console.error("Get Allocated Orders Error:", error);
-    res.status(500).json({ message: "Failed to fetch warehouse orders" });
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to fetch warehouse orders",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
