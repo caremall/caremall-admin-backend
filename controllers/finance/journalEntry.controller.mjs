@@ -1,29 +1,34 @@
 import JournalEntry from "../../models/finance/JournalEntry.mjs";
+import { postToLedger, removeFromLedger } from "./ledgerServices.mjs";
 
 export const createJournal = async (req, res) => {
   try {
     const payload = { ...req.body, createdBy: req.user?.id };
-    // Validate that totalDebit === totalCredit before saving (recommended)
-    const totalDebit = (payload.entries || []).reduce(
-      (s, e) => s + (e.debit || 0),
-      0
-    );
-    const totalCredit = (payload.entries || []).reduce(
-      (s, e) => s + (e.credit || 0),
-      0
-    );
+    const entries = payload.entries || [];
+
+    const totalDebit = entries.reduce((s, e) => s + (e.debit || 0), 0);
+    const totalCredit = entries.reduce((s, e) => s + (e.credit || 0), 0);
     if (totalDebit !== totalCredit) {
-      return res
-        .status(400)
-        .json({ message: "Unbalanced journal entry (debits !== credits)" });
+      return res.status(400).json({ message: "Journal entry must be balanced (debit === credit)" });
     }
+
     payload.totalDebit = totalDebit;
     payload.totalCredit = totalCredit;
     const doc = await JournalEntry.create(payload);
-    // TODO: ledger posting hook
-    res.status(201).json(doc);
+
+    // Post to ledger: journal lines already have account, debit, credit
+    await postToLedger({
+      entries: entries.map(e => ({ account: e.account, debit: e.debit, credit: e.credit, narration: e.narration })),
+      date: doc.date || new Date(),
+      referenceId: doc._id,
+      referenceType: "JournalEntry",
+      createdBy: req.user?.id,
+    });
+
+    res.status(201).json({ message: "Journal created and ledger posted", data: doc });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    console.error(err);
+    res.status(500).json({ message: err.message });
   }
 };
 
@@ -32,7 +37,6 @@ export const getJournals = async (req, res) => {
     const { page = 1, limit = 25 } = req.query;
     const docs = await JournalEntry.find()
       .populate("entries.account", "code name")
-      .populate("createdBy", "fullName")
       .skip((page - 1) * limit)
       .limit(Number(limit))
       .sort({ date: -1 });
@@ -42,6 +46,60 @@ export const getJournals = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+export const deleteJournal = async (req, res) => {
+  try {
+    const doc = await JournalEntry.findByIdAndDelete(req.params.id);
+    if (doc) await removeFromLedger(doc._id, "JournalEntry");
+    res.json({ message: "Journal deleted and ledger rows removed" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+// export const createJournal = async (req, res) => {
+//   try {
+//     const payload = { ...req.body, createdBy: req.user?.id };
+//     // Validate that totalDebit === totalCredit before saving (recommended)
+//     const totalDebit = (payload.entries || []).reduce(
+//       (s, e) => s + (e.debit || 0),
+//       0
+//     );
+//     const totalCredit = (payload.entries || []).reduce(
+//       (s, e) => s + (e.credit || 0),
+//       0
+//     );
+//     if (totalDebit !== totalCredit) {
+//       return res
+//         .status(400)
+//         .json({ message: "Unbalanced journal entry (debits !== credits)" });
+//     }
+//     payload.totalDebit = totalDebit;
+//     payload.totalCredit = totalCredit;
+//     const doc = await JournalEntry.create(payload);
+//     // TODO: ledger posting hook
+//     res.status(201).json(doc);
+//   } catch (err) {
+//     res.status(400).json({ message: err.message });
+//   }
+// };
+
+// export const getJournals = async (req, res) => {
+//   try {
+//     const { page = 1, limit = 25 } = req.query;
+//     const docs = await JournalEntry.find()
+//       .populate("entries.account", "code name")
+//       .populate("createdBy", "fullName")
+//       .skip((page - 1) * limit)
+//       .limit(Number(limit))
+//       .sort({ date: -1 });
+//     const total = await JournalEntry.countDocuments();
+//     res.json({ data: docs, total });
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
 
 export const getJournalById = async (req, res) => {
   try {
@@ -68,12 +126,12 @@ export const updateJournal = async (req, res) => {
   }
 };
 
-export const deleteJournal = async (req, res) => {
-  try {
-    await JournalEntry.findByIdAndDelete(req.params.id);
-    // TODO: reverse ledger entries if posted
-    res.json({ message: "Deleted" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
+// export const deleteJournal = async (req, res) => {
+//   try {
+//     await JournalEntry.findByIdAndDelete(req.params.id);
+//     // TODO: reverse ledger entries if posted
+//     res.json({ message: "Deleted" });
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
