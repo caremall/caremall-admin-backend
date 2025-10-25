@@ -323,7 +323,7 @@ export const getFilteredProducts = async (req, res) => {
       });
     }
 
-    // Fetch filtered products with proper population
+    // Fetch filtered products with proper population and variants
     const products = await Product.find(productFilter)
       .select(
         "_id productName brand category subcategory urlSlug productStatus hasVariant sellingPrice defaultVariant productImages mrpPrice SKU barcode costPrice discountPercent taxRate landingSellPrice"
@@ -331,82 +331,45 @@ export const getFilteredProducts = async (req, res) => {
       .populate("brand", "_id brandName imageUrl")
       .populate("category", "_id name image")
       .populate("subcategory", "_id name image")
+      .populate({
+        path: "variants",
+        match: variantMatch,
+        select: "_id variantAttributes SKU barcode costPrice sellingPrice mrpPrice landingSellPrice discountPercent taxRate isDefault variantId images"
+      })
       .sort({ sellingPrice: 1 })
       .lean();
 
-    // Build flat products array
-    const flatProducts = [];
-    const variantsByProductId = filteredVariants.reduce((acc, v) => {
-      const pid = v.productId.toString();
-      if (!acc[pid]) acc[pid] = [];
-      acc[pid].push(v);
-      return acc;
-    }, {});
+    // CORRECTED: Build products array with variants nested inside products
+    const productsWithVariants = [];
 
     for (const product of products) {
-      if (product.hasVariant) {
-        // Get matching variants for this product
-        const matchingVariants = variantsByProductId[product._id.toString()] || [];
-
-        // Add each variant as a separate product entry
-        matchingVariants.forEach((variant) => {
-          flatProducts.push({
-            _id: variant._id,
-            type: "variant",
-            productId: product._id,
-            productName: product.productName,
-            brand: product.brand,
-            category: product.category,
-            subcategory: product.subcategory,
-            urlSlug: product.urlSlug,
-            productStatus: product.productStatus,
-            hasVariant: true,
-            variantAttributes: variant.variantAttributes,
-            SKU: variant.SKU,
-            barcode: variant.barcode,
-            productImages:
-              variant.images && variant.images.length
-                ? variant.images
-                : product.productImages,
-            costPrice: variant.costPrice,
-            sellingPrice: variant.sellingPrice,
-            mrpPrice: variant.mrpPrice,
-            landingSellPrice: variant.landingSellPrice,
-            discountPercent: variant.discountPercent,
-            taxRate: variant.taxRate,
-            isDefault: variant.isDefault,
-            variantId: variant.variantId,
-          });
-        });
-      } else {
-        // Add product without variant
-        flatProducts.push({
-          _id: product._id,
+      // For products with variants, include the filtered variants
+      if (product.hasVariant && product.variants && product.variants.length > 0) {
+        productsWithVariants.push({
+          ...product,
           type: "product",
-          productName: product.productName,
-          brand: product.brand,
-          category: product.category,
-          subcategory: product.subcategory,
-          urlSlug: product.urlSlug,
-          productStatus: product.productStatus,
-          hasVariant: false,
-          SKU: product.SKU,
-          barcode: product.barcode,
-          productImages: product.productImages,
-          costPrice: product.costPrice,
-          sellingPrice: product.sellingPrice,
-          mrpPrice: product.mrpPrice,
-          landingSellPrice: product.landingSellPrice,
-          discountPercent: product.discountPercent,
-          taxRate: product.taxRate,
+          variants: product.variants.map(variant => ({
+            ...variant,
+            type: "variant",
+            productImages: variant.images && variant.images.length ? variant.images : product.productImages,
+          }))
+        });
+      } 
+      // For products without variants or products with variants but no matching variants after filtering
+      else if (!product.hasVariant) {
+        productsWithVariants.push({
+          ...product,
+          type: "product",
+          variants: []
         });
       }
+      // Note: We skip products with variants that have no matching variants after filtering
     }
 
     // CORRECTED: Filter options should only show available options based on current selection
     // Get available brands from filtered products
     const availableBrandIds = [
-      ...new Set(flatProducts.map((p) => p.brand._id.toString())),
+      ...new Set(productsWithVariants.map((p) => p.brand._id.toString())),
     ];
     const availableBrands = await Brand.find({
       _id: { $in: availableBrandIds },
@@ -416,7 +379,7 @@ export const getFilteredProducts = async (req, res) => {
     // Get available categories and subcategories from filtered products
     const availableCategoryIds = [
       ...new Set(
-        flatProducts.map((p) =>
+        productsWithVariants.map((p) =>
           p.category._id ? p.category._id.toString() : p.category.toString()
         )
       ),
@@ -424,7 +387,7 @@ export const getFilteredProducts = async (req, res) => {
     
     const availableSubcategoryIds = [
       ...new Set(
-        flatProducts
+        productsWithVariants
           .filter(p => p.subcategory)
           .map((p) =>
             p.subcategory._id ? p.subcategory._id.toString() : p.subcategory.toString()
@@ -549,7 +512,7 @@ export const getFilteredProducts = async (req, res) => {
     });
 
     res.status(200).json({
-      products: flatProducts,
+      products: productsWithVariants, // Now products have nested variants
       filterOptions: {
         variantAttributes: variantFilters,
         brands: availableBrands,
@@ -575,7 +538,6 @@ export const getFilteredProducts = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 export const getMostWantedProducts = async (req, res) => {
   try {

@@ -1154,8 +1154,8 @@ export const createDamagedInventoryReport = async (req, res) => {
 
   try {
     const {
-      product, // product ID (optional but preferred)
-      variant, // variant ID (optional)
+      product, 
+      variant, 
       currentQuantity,
       quantityToReport,
       damageType,
@@ -1167,6 +1167,7 @@ export const createDamagedInventoryReport = async (req, res) => {
       Array.isArray(req.user?.assignedWarehouses)
         ? req.user.assignedWarehouses[0]?._id
         : req.user?.assignedWarehouses?._id;
+    
 
     // Validate required fields
     if (!warehouse) {
