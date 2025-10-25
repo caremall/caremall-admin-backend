@@ -429,14 +429,14 @@ export const getFilteredProducts = async (req, res) => {
         $match: {
           _id: { $in: products.map(p => p._id) },
           productStatus: status,
-          sellingPrice: { $exists: true, $gt: 0 },
+          landingSellPrice: { $exists: true, $gt: 0 },
         },
       },
       {
         $group: {
           _id: null,
-          minPrice: { $min: "$sellingPrice" },
-          maxPrice: { $max: "$sellingPrice" },
+          minPrice: { $min: "$landingSellPrice" },
+          maxPrice: { $max: "$landingSellPrice" },
           minDiscount: { $min: "$discountPercent" },
           maxDiscount: { $max: "$discountPercent" },
         },
@@ -453,8 +453,8 @@ export const getFilteredProducts = async (req, res) => {
       {
         $group: {
           _id: null,
-          minPrice: { $min: "$sellingPrice" },
-          maxPrice: { $max: "$sellingPrice" },
+          minPrice: { $min: "$landingSellPrice" },
+          maxPrice: { $max: "$landingSellPrice" },
           minDiscount: { $min: "$discountPercent" },
           maxDiscount: { $max: "$discountPercent" },
         },
