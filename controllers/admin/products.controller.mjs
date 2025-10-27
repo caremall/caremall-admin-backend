@@ -566,18 +566,6 @@ export const updateProduct = async (req, res) => {
       ...(visibility !== undefined && { visibility }),
       ...(isFeatured !== undefined && { isFeatured: Boolean(isFeatured) }),
       ...(isPreOrder !== undefined && { isPreOrder: Boolean(isPreOrder) }),
-      ...(availableQuantity !== undefined && {
-        availableQuantity: Number(availableQuantity),
-      }),
-      ...(minimumQuantity !== undefined && {
-        minimumQuantity: Number(minimumQuantity),
-      }),
-      ...(reorderQuantity !== undefined && {
-        reorderQuantity: Number(reorderQuantity),
-      }),
-      ...(maximumQuantity !== undefined && {
-        maximumQuantity: Number(maximumQuantity),
-      }),
       ...(weight !== undefined && { weight: Number(weight) }),
       ...(dimensions !== undefined && { dimensions }),
       ...(isFragile !== undefined && { isFragile: Boolean(isFragile) }),
@@ -605,7 +593,12 @@ export const updateProduct = async (req, res) => {
       ...(warehouse !== undefined && { warehouse }),
     };
 
+    // Only update quantity fields for non-variant products
     if (hasVariant === false) {
+      updateFields.minimumQuantity = minimumQuantity !== undefined ? Number(minimumQuantity) : existingProduct.minimumQuantity;
+      updateFields.reorderQuantity = reorderQuantity !== undefined ? Number(reorderQuantity) : existingProduct.reorderQuantity;
+      updateFields.maximumQuantity = maximumQuantity !== undefined ? Number(maximumQuantity) : existingProduct.maximumQuantity;
+      
       // Non-variant product fields
       if (SKU !== undefined) updateFields.SKU = SKU.trim();
       if (barcode !== undefined)
@@ -636,6 +629,10 @@ export const updateProduct = async (req, res) => {
       updateFields.sellingPrice = null;
       updateFields.mrpPrice = null;
       updateFields.landingSellPrice = null;
+      updateFields.minimumQuantity = 0;
+      updateFields.reorderQuantity = 0;
+      updateFields.maximumQuantity = 0;
+      
       if (defaultVariant !== undefined)
         updateFields.defaultVariant = defaultVariant;
     }
@@ -688,6 +685,9 @@ export const updateProduct = async (req, res) => {
             ? Number(variant.discountPercent)
             : undefined,
           taxRate: variant.taxRate ? Number(variant.taxRate) : undefined,
+          minimumQuantity: variant.minimumQuantity !== undefined ? Number(variant.minimumQuantity) : 0,
+          reorderQuantity: variant.reorderQuantity !== undefined ? Number(variant.reorderQuantity) : 0,
+          maximumQuantity: variant.maximumQuantity !== undefined ? Number(variant.maximumQuantity) : 0,
           images:
             processedImages.length > 0 ? processedImages : variant.images || [],
           isDefault: variant.isDefault || false,
@@ -720,7 +720,6 @@ export const updateProduct = async (req, res) => {
       .populate("category")
       .populate("subcategory")
       .populate("productType")
-      // .populate("warehouse")
       .populate("variants");
 
     return res.status(200).json({
@@ -743,6 +742,8 @@ export const updateProduct = async (req, res) => {
       .json({ message: "Update failed", error: err.message });
   }
 };
+
+
 
 export const deleteProduct = async (req, res) => {
   try {

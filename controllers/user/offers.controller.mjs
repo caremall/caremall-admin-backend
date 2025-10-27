@@ -1,7 +1,10 @@
 import Offer from '../../models/offerManagement.mjs';
 import mongoose from "mongoose";
 import Product from '../../models/Product.mjs';
+import Brand from '../../models/Brand.mjs';
+import Category from '../../models/Category.mjs';
 import Variant from '../../models/Variant.mjs';
+import { enrichProductsWithDefaultVariants } from '../../utils/enrichedProducts.mjs';
 
 // Get active published offers with a valid duration
 export const getPublishedOffersWithDuration = async (req, res) => {
@@ -94,7 +97,6 @@ export const applyCouponCode = async (req, res) => {
 };
 
 
-
 export const getOfferByID = async (req, res) => {
   try {
     const { id } = req.params;
@@ -113,71 +115,75 @@ export const getOfferByID = async (req, res) => {
       return res.status(404).json({ success: false, message: "Offer not found" });
     }
 
-    // 🟩 Fetch eligible products and variants (with defaultVariant populated)
-    let offerEligibleProducts = [];
+    let populatedItems = [];
+
+    // ✅ Populate eligible items based on offer type
     if (offer.offerEligibleItems?.length) {
-      const ids = offer.offerEligibleItems.filter((id) =>
-        mongoose.Types.ObjectId.isValid(id)
-      );
+      switch (offer.offerType) {
+        case "product":
+          {
+            const products = await Product.find({
+              _id: { $in: offer.offerEligibleItems },
+              productStatus: "published",
+              visibility: "visible",
+            })
+              .select(
+                "productId productName shortDescription productDescription brand category sellingPrice mrpPrice productImages urlSlug hasVariant defaultVariant variants"
+              )
+              .populate("brand", "name")
+              .populate("category", "name")
+              .populate(
+                "defaultVariant",
+                "variantId images sellingPrice mrpPrice SKU barcode isDefault"
+              )
+              .populate(
+                "variants",
+                "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault"
+              )
+              .lean();
 
-      console.log("Valid offerEligibleItem IDs:", ids);
+            // 🟩 Merge default variant data (like getMostWantedProducts)
+            populatedItems = await enrichProductsWithDefaultVariants(products);
+          }
+          break;
 
-      // Fetch products with populated relationships
-      const products = await Product.find({
-        _id: { $in: ids },
-        productStatus: "published",
-        visibility: "visible",
-      })
-        .populate({
-          path: "brand",
-          model: "Brand",
-          select: "name",
-        })
-        .populate({
-          path: "category",
-          model: "Category",
-          select: "name",
-        })
-        .populate({
-          path: "defaultVariant",
-          model: "Variant",
-          select: "variantId productImages images sellingPrice mrpPrice SKU barcode isDefault",
-        })
-        .populate({
-          path: "variants",
-          model: "Variant",
-          select:
-            "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault",
-        })
-        .lean();
+        case "brand":
+          populatedItems = await Brand.find({
+            _id: { $in: offer.offerEligibleItems },
+            status: "active",
+          })
+            .select("brandName tagline description termsAndConditions status imageUrl")
+            .lean();
+          break;
 
-      // Fetch variants separately (if directly referenced)
-      const variants = await Variant.find({
-        _id: { $in: ids },
-      }).lean();
+        case "category":
+          populatedItems = await Category.find({
+            _id: { $in: offer.offerEligibleItems },
+            status: "active",
+          })
+            .select("type image name description parentId categoryCode status isPopular")
+            .populate("parentId", "name")
+            .lean();
+          break;
 
-      offerEligibleProducts = [...products, ...variants];
+        case "cart":
+          populatedItems = offer.offerEligibleItems;
+          break;
+
+        default:
+          populatedItems = offer.offerEligibleItems;
+      }
     }
+
+    // 🧹 Remove any null/undefined items
+    populatedItems = populatedItems.filter(Boolean);
 
     res.status(200).json({
       success: true,
       data: {
-        _id: offer._id,
-        offerTitle: offer.offerTitle,
-        offerDescription: offer.offerDescription,
-        offerType: offer.offerType,
-        offerDiscountUnit: offer.offerDiscountUnit,
-        offerDiscountValue: offer.offerDiscountValue,
-        offerMinimumOrderValue: offer.offerMinimumOrderValue,
-        offerImageUrl: offer.offerImageUrl,
-        offerRedeemTimePeriod: offer.offerRedeemTimePeriod,
-        offerEligibleItems: offer.offerEligibleItems,
-        offerEligibleProducts,
-        isOfferFeatured: offer.isOfferFeatured,
-        offerStatus: offer.offerStatus,
-        offerAuthor: offer.offerAuthor,
-        createdAt: offer.createdAt,
-        updatedAt: offer.updatedAt,
+        ...offer,
+        offerEligibleItems: populatedItems,
+        offerEligibleProducts: populatedItems,
       },
     });
   } catch (error) {
@@ -189,4 +195,5 @@ export const getOfferByID = async (req, res) => {
     });
   }
 };
+
 

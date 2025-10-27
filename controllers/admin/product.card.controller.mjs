@@ -1,6 +1,7 @@
 
 import mongoose from "mongoose";
 import ProductCard from "../../models/productCard.mjs";
+import { enrichProductsWithDefaultVariants } from "../../utils/enrichedProducts.mjs";
 
 // Create a new ProductCard with linked products
 export const createProductCard = async (req, res) => {
@@ -55,16 +56,54 @@ export const getAllProductCards = async (req, res) => {
 export const getAllActiveProductCards = async (req, res) => {
   try {
     const cards = await ProductCard.find({ active: true })
-      .populate("products")
+      .populate({
+        path: "products",
+        match: { productStatus: "published", visibility: "visible" },
+        populate: [
+          {
+            path: "brand",
+            model: "Brand",
+            select: "name",
+          },
+          {
+            path: "category",
+            model: "Category",
+            select: "name",
+          },
+          {
+            path: "defaultVariant",
+            model: "Variant",
+            select:
+              "variantId images sellingPrice mrpPrice SKU barcode isDefault",
+          },
+          {
+            path: "variants",
+            model: "Variant",
+            select:
+              "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault",
+          },
+        ],
+      })
       .sort({ createdAt: -1 })
       .lean();
 
-    res.status(200).json({ success: true, data: cards });
+    // Enrich each product card’s products with default variants (optional)
+    const enrichedCards = await Promise.all(
+      cards.map(async (card) => {
+        const enrichedProducts = await enrichProductsWithDefaultVariants(
+          card.products || []
+        );
+        return { ...card, products: enrichedProducts };
+      })
+    );
+
+    res.status(200).json({ success: true, data: enrichedCards });
   } catch (error) {
     console.error("Get All ProductCards Error:", error);
     res.status(500).json({ message: "Failed to fetch product cards" });
   }
 };
+
 
 // Get single ProductCard by ID with populated products
 export const getProductCardById = async (req, res) => {

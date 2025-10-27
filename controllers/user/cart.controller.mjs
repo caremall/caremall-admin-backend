@@ -32,6 +32,29 @@ export const addToCart = async (req, res) => {
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
+    // 🔹 Check maximum quantity for the product/variant
+    let maxQuantity;
+    if (parsedVariantId) {
+      const variant = await Variant.findOne({ 
+        _id: parsedVariantId,
+        productId: productId 
+      }).populate('inventory');
+      
+      if (!variant) {
+        return res.status(404).json({ message: "Variant not found" });
+      }
+      maxQuantity = variant.maximumQuantity;
+    } else {
+      maxQuantity = product.maximumQuantity;
+    }
+
+    // 🔹 Validate if quantity exceeds maximum quantity
+    if (maxQuantity > 0 && quantity > maxQuantity) {
+      return res.status(400).json({ 
+        message: `Cannot add more than maximum quantity of ${maxQuantity}` 
+      });
+    }
+
     let price = product.landingSellPrice && product.landingSellPrice > 0
       ? product.landingSellPrice
       : product.sellingPrice;
@@ -47,7 +70,6 @@ export const addToCart = async (req, res) => {
           ? variant.landingSellPrice
           : variant.sellingPrice) || price;
     }
-
 
     const itemTotal = price * quantity;
 
@@ -76,6 +98,14 @@ export const addToCart = async (req, res) => {
       );
 
       if (index >= 0) {
+        // 🔹 Check if adding quantity would exceed maximum quantity for existing item
+        const newQuantity = cart.items[index].quantity + quantity;
+        if (maxQuantity > 0 && newQuantity > maxQuantity) {
+          return res.status(400).json({ 
+            message: `Cannot exceed maximum quantity of ${maxQuantity}. Current quantity: ${cart.items[index].quantity}` 
+          });
+        }
+        
         cart.items[index].quantity += quantity;
         cart.items[index].totalPrice =
           cart.items[index].quantity * cart.items[index].priceAtCart;
@@ -98,6 +128,7 @@ export const addToCart = async (req, res) => {
     res.status(500).json({ message: "Failed to add item to cart" });
   }
 };
+
 
 
 
@@ -205,22 +236,45 @@ export const getCart = async (req, res) => {
   try {
     const userId = req.user._id;
     const cart = await Cart.findOne({ user: userId })
-      .populate(
-        "items.product",
-        "productName productImages sellingPrice urlSlug mrpPrice landingSellPrice hasVariant category brand discountPercent"
-      )
-      .populate("items.variant")
-      .lean(); // Use lean() for better performance and fresh data
+      .populate({
+        path: "items.product",
+        select: "productName productImages sellingPrice urlSlug mrpPrice landingSellPrice hasVariant category brand discountPercent minimumQuantity reorderQuantity maximumQuantity productStatus visibility",
+        model: "Product"
+      })
+      .populate({
+        path: "items.variant",
+        select: "variantAttributes SKU barcode costPrice sellingPrice mrpPrice landingSellPrice discountPercent minimumQuantity reorderQuantity maximumQuantity taxRate images isDefault",
+        model: "Variant"
+      })
+      .populate({
+        path: "items.product.brand",
+        select: "brandName",
+        model: "Brand"
+      })
+      .populate({
+        path: "items.product.category",
+        select: "categoryName",
+        model: "Category"
+      })
+      .lean();
 
-    if (!cart || !cart.items || cart.items.length === 0)
+    if (!cart || !cart.items || cart.items.length === 0) {
       return res.status(200).json({ items: [], cartTotal: 0 });
+    }
 
-    // Filter out items where product no longer exists
+    // Filter out items where product no longer exists or is not published/visible
     const validItems = cart.items.filter((item) => {
       if (!item.product) {
         console.warn("Product missing for cart item, will be cleaned up");
         return false;
       }
+      
+      // Check if product is published and visible
+      if (item.product.productStatus !== 'published' || item.product.visibility !== 'visible') {
+        console.warn("Product is not available, will be removed from cart");
+        return false;
+      }
+      
       return true;
     });
 
@@ -228,7 +282,12 @@ export const getCart = async (req, res) => {
     if (validItems.length !== cart.items.length) {
       await Cart.updateOne(
         { user: userId },
-        { $pull: { items: { product: null } } }
+        { 
+          $set: { 
+            items: validItems,
+            updatedAt: new Date()
+          } 
+        }
       );
     }
 
@@ -242,23 +301,67 @@ export const getCart = async (req, res) => {
 
     const applyDiscount = (price, discountUnit, discountValue) => {
       if (discountUnit === "percentage") {
-        return price - (price * discountValue) / 100;
+        return Math.max(0, price - (price * discountValue) / 100);
       } else if (discountUnit === "fixed") {
-        return price - discountValue;
+        return Math.max(0, price - discountValue);
       }
       return price;
     };
 
     let cartSubtotal = 0;
-    const discountedItems = validItems.map((item) => {
-      // Determine base price
-      let basePrice;
+    const discountedItems = [];
+
+    for (const item of validItems) {
+      // Determine base price and validate availability
+      let basePrice = 0;
+      let availableQuantity = 0;
+      let maxAllowedQuantity = 0;
+      let variantDetails = null;
+      let productDetails = {
+        productName: item.product.productName,
+        productImages: item.product.productImages || [],
+        brand: item.product.brand,
+        category: item.product.category,
+        hasVariant: item.product.hasVariant,
+        discountPercent: item.product.discountPercent || 0,
+        urlSlug: item.product.urlSlug,
+        _id: item.product._id
+      };
 
       if (item.product.hasVariant && item.variant) {
-        basePrice =
-          item.variant.landingSellPrice > 0
-            ? item.variant.landingSellPrice
-            : item.variant.sellingPrice;
+        // Use variant pricing and inventory
+        basePrice = item.variant.landingSellPrice > 0 
+          ? item.variant.landingSellPrice 
+          : item.variant.sellingPrice;
+
+        // Get variant inventory details
+        const variantInventory = await mongoose.model('Inventory').findOne({
+          variant: item.variant._id
+        }).lean();
+
+        availableQuantity = variantInventory?.quantity || 0;
+        maxAllowedQuantity = Math.min(
+          item.variant.maximumQuantity || 10,
+          availableQuantity
+        );
+
+        variantDetails = {
+          _id: item.variant._id,
+          variantAttributes: item.variant.variantAttributes || [],
+          SKU: item.variant.SKU,
+          barcode: item.variant.barcode,
+          costPrice: item.variant.costPrice,
+          sellingPrice: item.variant.sellingPrice,
+          mrpPrice: item.variant.mrpPrice,
+          landingSellPrice: item.variant.landingSellPrice,
+          discountPercent: item.variant.discountPercent || 0,
+          minimumQuantity: item.variant.minimumQuantity || 0,
+          reorderQuantity: item.variant.reorderQuantity || 0,
+          maximumQuantity: item.variant.maximumQuantity || 0,
+          taxRate: item.variant.taxRate || 0,
+          images: item.variant.images || [],
+          isDefault: item.variant.isDefault || false
+        };
 
         console.log("Using variant price:", {
           productId: item.product._id,
@@ -266,37 +369,72 @@ export const getCart = async (req, res) => {
           landingSellPrice: item.variant.landingSellPrice,
           sellingPrice: item.variant.sellingPrice,
           finalPrice: basePrice,
+          availableQuantity,
+          maxAllowedQuantity
         });
       } else {
-        basePrice =
-          item.product.landingSellPrice > 0
-            ? item.product.landingSellPrice
-            : item.product.sellingPrice;
+        // Use product pricing and inventory
+        basePrice = item.product.landingSellPrice > 0 
+          ? item.product.landingSellPrice 
+          : item.product.sellingPrice;
+
+        // Get product inventory details
+        const productInventory = await mongoose.model('Inventory').findOne({
+          product: item.product._id,
+          variant: { $exists: false }
+        }).lean();
+
+        availableQuantity = productInventory?.quantity || 0;
+        maxAllowedQuantity = Math.min(
+          item.product.maximumQuantity || 10,
+          availableQuantity
+        );
 
         console.log("Using product price:", {
           productId: item.product._id,
           landingSellPrice: item.product.landingSellPrice,
           sellingPrice: item.product.sellingPrice,
           finalPrice: basePrice,
+          availableQuantity,
+          maxAllowedQuantity
         });
       }
 
       // Validate basePrice
-      if (!basePrice || basePrice <= 0) {
+      if (!basePrice || basePrice <= 0 || isNaN(basePrice)) {
         console.warn("Invalid base price for item:", item);
         basePrice = item.product.sellingPrice || 0;
+      }
+
+      // Adjust quantity if it exceeds available stock
+      let finalQuantity = item.quantity;
+      if (finalQuantity > maxAllowedQuantity && maxAllowedQuantity > 0) {
+        console.warn(`Reducing quantity from ${finalQuantity} to ${maxAllowedQuantity} due to stock limits`);
+        finalQuantity = maxAllowedQuantity;
+        
+        // Update cart with corrected quantity
+        await Cart.updateOne(
+          { 
+            user: userId, 
+            "items._id": item._id 
+          },
+          { 
+            $set: { 
+              "items.$.quantity": finalQuantity,
+              updatedAt: new Date()
+            } 
+          }
+        );
       }
 
       let discountedPrice = basePrice;
       let originalPrice = basePrice;
 
-      // Apply discounts
+      // Apply offers/discounts
       for (const offer of offers) {
         switch (offer.offerType) {
           case "product":
-            if (
-              offer.offerEligibleItems.includes(item.product._id.toString())
-            ) {
+            if (offer.offerEligibleItems.includes(item.product._id.toString())) {
               discountedPrice = applyDiscount(
                 discountedPrice,
                 offer.offerDiscountUnit,
@@ -305,12 +443,8 @@ export const getCart = async (req, res) => {
             }
             break;
           case "category":
-            if (
-              item.product.category &&
-              offer.offerEligibleItems.includes(
-                item.product.category.toString()
-              )
-            ) {
+            if (item.product.category &&
+                offer.offerEligibleItems.includes(item.product.category.toString())) {
               discountedPrice = applyDiscount(
                 discountedPrice,
                 offer.offerDiscountUnit,
@@ -319,10 +453,8 @@ export const getCart = async (req, res) => {
             }
             break;
           case "brand":
-            if (
-              item.product.brand &&
-              offer.offerEligibleItems.includes(item.product.brand.toString())
-            ) {
+            if (item.product.brand &&
+                offer.offerEligibleItems.includes(item.product.brand.toString())) {
               discountedPrice = applyDiscount(
                 discountedPrice,
                 offer.offerDiscountUnit,
@@ -334,43 +466,92 @@ export const getCart = async (req, res) => {
       }
 
       discountedPrice = Math.max(0, discountedPrice);
-      const lineTotal = discountedPrice * item.quantity;
+      const lineTotal = discountedPrice * finalQuantity;
       cartSubtotal += lineTotal;
 
-      return {
-        ...item,
-        priceAtCart: discountedPrice, // override to reflect latest price
-        totalPrice: lineTotal, // override to reflect latest total
-        originalPrice,
-        discountedPrice,
-        lineTotal,
+      // Build the complete item response
+      const cartItemResponse = {
+        product: {
+          ...productDetails,
+          sellingPrice: item.product.sellingPrice,
+          mrpPrice: item.product.mrpPrice,
+          landingSellPrice: item.product.landingSellPrice,
+          discountPercent: item.product.discountPercent || 0,
+          minimumQuantity: item.product.minimumQuantity || 0,
+          reorderQuantity: item.product.reorderQuantity || 0,
+          maximumQuantity: item.product.maximumQuantity || 0,
+          hasVariant: item.product.hasVariant,
+          productImages: item.product.productImages || [],
+          _id: item.product._id
+        },
+        variant: variantDetails,
+        quantity: finalQuantity,
+        priceAtCart: discountedPrice,
+        totalPrice: lineTotal,
+        originalPrice: originalPrice,
+        discountedPrice: discountedPrice,
+        lineTotal: lineTotal,
+        availableQuantity: availableQuantity,
+        maxAllowedQuantity: maxAllowedQuantity,
+        isAvailable: availableQuantity > 0
       };
-    });
 
+      discountedItems.push(cartItemResponse);
+    }
+
+    // Apply cart-level offers
     let finalCartTotal = cartSubtotal;
+    let appliedCartOffers = [];
 
     for (const offer of offers) {
       if (offer.offerType === "cart") {
-        if (cartSubtotal >= offer.offerMinimumOrderValue) {
+        if (cartSubtotal >= (offer.offerMinimumOrderValue || 0)) {
+          const discountAmount = offer.offerDiscountUnit === "percentage" 
+            ? (finalCartTotal * offer.offerDiscountValue) / 100
+            : offer.offerDiscountValue;
+          
           finalCartTotal = applyDiscount(
             finalCartTotal,
             offer.offerDiscountUnit,
             offer.offerDiscountValue
           );
-          finalCartTotal = Math.max(0, finalCartTotal);
+          
+          appliedCartOffers.push({
+            offerName: offer.offerName,
+            discountAmount: discountAmount,
+            discountType: offer.offerDiscountUnit
+          });
         }
       }
     }
 
-    finalCartTotal = Math.round(finalCartTotal * 100) / 100; // round 2 decimals
+    finalCartTotal = Math.round(finalCartTotal * 100) / 100;
+
+    // Update cart total in database
+    await Cart.updateOne(
+      { user: userId },
+      { 
+        $set: { 
+          cartTotal: finalCartTotal,
+          updatedAt: new Date()
+        } 
+      }
+    );
 
     res.status(200).json({
       items: discountedItems,
       cartTotal: finalCartTotal,
+      cartSubtotal: cartSubtotal,
+      appliedOffers: appliedCartOffers,
+      itemCount: discountedItems.length,
+      totalQuantity: discountedItems.reduce((sum, item) => sum + item.quantity, 0)
     });
   } catch (error) {
     console.error("Get cart error:", error);
-    res.status(500).json({ message: "Failed to fetch cart" });
+    res.status(500).json({ 
+      message: "Failed to fetch cart",
+      error: error.message 
+    });
   }
 };
 
@@ -395,11 +576,41 @@ export const updateCartItem = async (req, res) => {
 
     let item = cart.items[index];
 
+    // 🔹 Fetch product/variant to get maximum quantity
+    let maxQuantity;
+    if (variantId) {
+      // For variant product - get variant's maximum quantity
+      const variant = await mongoose.model('Variant').findOne({ 
+        _id: variantId,
+        productId: productId 
+      }).populate('inventory');
+      
+      if (!variant) {
+        return res.status(404).json({ message: "Variant not found" });
+      }
+      maxQuantity = variant.maximumQuantity;
+    } else {
+      // For non-variant product - get product's maximum quantity
+      const product = await mongoose.model('Product').findOne({ 
+        _id: productId 
+      }).populate('inventory');
+      
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      maxQuantity = product.maximumQuantity;
+    }
+
     // 🔹 Direct quantity update if given
     if (typeof quantity === "number") {
-      if (quantity < 1) {
-        // Remove item if quantity is zero or negative
-        cart.items.splice(index, 1);
+      if (maxQuantity == 0) {
+        item.quantity = quantity;
+        item.totalPrice = item.quantity * item.priceAtCart;
+        // cart.items.splice(index, 1);
+      } else if (quantity > maxQuantity) {
+        return res.status(400).json({ 
+          message: `Maximum quantity allowed is ${maxQuantity}` 
+        });
       } else {
         item.quantity = quantity;
         item.totalPrice = item.quantity * item.priceAtCart;
@@ -407,6 +618,11 @@ export const updateCartItem = async (req, res) => {
     }
     // 🔹 Otherwise fall back to action type
     else if (action === "increment") {
+      if (item.quantity >= maxQuantity) {
+        return res.status(400).json({ 
+          message: `Cannot exceed maximum quantity of ${maxQuantity}` 
+        });
+      }
       item.quantity += 1;
       item.totalPrice = item.quantity * item.priceAtCart;
     } else if (action === "decrement") {
@@ -431,6 +647,8 @@ export const updateCartItem = async (req, res) => {
     res.status(500).json({ message: "Failed to update cart item" });
   }
 };
+
+
 
 export const removeCartItem = async (req, res) => {
   try {
@@ -459,6 +677,9 @@ export const removeCartItem = async (req, res) => {
     res.status(500).json({ message: "Failed to remove item from cart" });
   }
 };
+
+
+
 
 export const clearCart = async (req, res) => {
   try {

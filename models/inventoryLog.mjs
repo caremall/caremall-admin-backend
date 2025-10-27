@@ -13,6 +13,10 @@ const inventoryLogSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "Product",
     },
+    damaged: {
+      type: String,
+      required: false,
+    },
     variant: {
       type: Schema.Types.ObjectId,
       ref: "Variant",
@@ -24,19 +28,31 @@ const inventoryLogSchema = new Schema(
     },
     previousQuantity: {
       type: Number,
-      required: true,
+      required: false,
+    },
+    quantityToReport:{
+      type:Number,
+      required:false
     },
     quantityChange: {
       type: Number,
-      required: true,
+      required: false,
     },
     newQuantity: {
       type: Number,
-      required: true,
+      required: false,
     },
     reasonForUpdate: {
       type: String,
-      required: true,
+      required: false,
+    },
+    reasonForDamage: {
+      type: String,
+      required: false,
+    },
+    damageType:{
+      type:String,
+      required: false
     },
     note: {
       type: String,
