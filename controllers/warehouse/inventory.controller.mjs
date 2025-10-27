@@ -9,6 +9,9 @@ import mongoose from "mongoose";
 
 
 export const getTransactionByID = async (req, res) => {
+  const assignedWarehouses = req.user.assignedWarehouses;
+  console.log("Get Transaction by ID - User:", req.user);
+  
   try {
     const { id } = req.params;
 
@@ -21,48 +24,38 @@ export const getTransactionByID = async (req, res) => {
 
     const transaction = await TransferRequest.findById(id)
       .populate({
-        path: "fromWarehouse toWarehouse driver",
+        path: "fromWarehouse",
+        select: "name address contactPerson phoneNumber email"
+      })
+      .populate({
+        path: "toWarehouse",
+        select: "name address contactPerson phoneNumber email"
+      })
+      .populate({
+        path: "driver",
         select: "name address contactPerson phoneNumber email"
       })
       .populate({
         path: "items.productId",
-        select: "productName shortDescription SKU barcode costPrice mrpPrice sellingPrice discountPercent weight dimensions productImages productStatus availableQuantity hasVariant brand category subCategory",
+        select: "productName shortDescription SKU barcode costPrice mrpPrice sellingPrice discountPercent weight dimensions productImages productStatus hasVariant brand category subcategory",
         populate: [
-          {
-            path: "brand",
-            select: "name"
-          },
-          {
-            path: "category", 
-            select: "name"
-          },
-          {
-            path: "subCategory",
-            select: "name"
-          }
-        ]
+          { path: "brand", select: "brandName" }, 
+          { path: "category", select: "name" },
+          { path: "subcategory", select: "name" },
+        ],
       })
       .populate({
         path: "items.variantId",
-        select: "SKU barcode costPrice mrpPrice sellingPrice discountPercent weight dimensions images stockQuantity variantAttributes productId",
+        select: "SKU barcode costPrice mrpPrice sellingPrice discountPercent weight dimensions images variantAttributes productId",
         populate: {
           path: "productId",
-          select: "productName brand category subCategory",
+          select: "productName brand category subcategory",
           populate: [
-            {
-              path: "brand",
-              select: "name"
-            },
-            {
-              path: "category",
-              select: "name"
-            },
-            {
-              path: "subCategory",
-              select: "name"
-            }
-          ]
-        }
+            { path: "brand", select: "brandName" },
+            { path: "category", select: "name" },
+            { path: "subcategory", select: "name" },
+          ],
+        },
       })
       .lean();
 
@@ -73,53 +66,132 @@ export const getTransactionByID = async (req, res) => {
       });
     }
 
-    // Transform the data to match frontend expectations
+    // Get user's assigned warehouse IDs
+    let userWarehouseIds = [];
+    if (Array.isArray(assignedWarehouses)) {
+      userWarehouseIds = assignedWarehouses.map(wh => wh._id?.toString()).filter(id => id);
+    } else if (assignedWarehouses && assignedWarehouses._id) {
+      userWarehouseIds = [assignedWarehouses._id.toString()];
+    }
+
+    // Determine transfer type for the current user
+    let transferType = 'unknown';
+    const fromWarehouseId = transaction.fromWarehouse?._id?.toString();
+    const toWarehouseId = transaction.toWarehouse?._id?.toString();
+
+    if (userWarehouseIds.includes(fromWarehouseId) && userWarehouseIds.includes(toWarehouseId)) {
+      transferType = 'internal';
+    } else if (userWarehouseIds.includes(fromWarehouseId)) {
+      transferType = 'outgoing';
+    } else if (userWarehouseIds.includes(toWarehouseId)) {
+      transferType = 'incoming';
+    }
+
+    // Get all product and variant IDs to fetch inventory quantities
+    const productIds = [];
+    const variantIds = [];
+    
+    transaction.items?.forEach(item => {
+      if (item.productId) {
+        productIds.push(item.productId._id);
+      }
+      if (item.variantId) {
+        variantIds.push(item.variantId._id);
+      }
+    });
+
+    // Fetch inventory data for available quantities
+    const inventoryData = await Inventory.find({
+      $or: [
+        { product: { $in: productIds }, variant: null },
+        { variant: { $in: variantIds } }
+      ]
+    }).lean();
+
+    // Create a map for quick lookup of available quantities
+    const inventoryMap = new Map();
+    
+    inventoryData.forEach(inv => {
+      if (inv.variant) {
+        inventoryMap.set(`variant_${inv.variant.toString()}`, inv.AvailableQuantity);
+      } else {
+        inventoryMap.set(`product_${inv.product.toString()}`, inv.AvailableQuantity);
+      }
+    });
+
     const transformedData = {
       ...transaction,
-      items: transaction.items?.map(item => ({
-        ...item,
-        productId: item.productId ? {
-          _id: item.productId._id,
-          productName: item.productId.productName || 'Unknown Product',
-          shortDescription: item.productId.shortDescription || '',
-          SKU: item.productId.SKU || '',
-          barcode: item.productId.barcode || '',
-          costPrice: item.productId.costPrice || 0,
-          mrpPrice: item.productId.mrpPrice || 0,
-          sellingPrice: item.productId.sellingPrice || 0,
-          discountPercent: item.productId.discountPercent || 0,
-          weight: item.productId.weight || 0,
-          dimensions: item.productId.dimensions || {},
-          productImages: item.productId.productImages || [],
-          productStatus: item.productId.productStatus || 'unknown',
-          availableQuantity: item.productId.availableQuantity || 0,
-          hasVariant: item.productId.hasVariant || false,
-          brand: item.productId.brand?.name || item.productId.brand || 'N/A',
-          category: item.productId.category?.name || item.productId.category || 'N/A',
-          subCategory: item.productId.subCategory?.name || item.productId.subCategory || 'N/A'
-        } : null,
-        variantId: item.variantId ? {
-          _id: item.variantId._id,
-          SKU: item.variantId.SKU || '',
-          barcode: item.variantId.barcode || '',
-          costPrice: item.variantId.costPrice || 0,
-          mrpPrice: item.variantId.mrpPrice || 0,
-          sellingPrice: item.variantId.sellingPrice || 0,
-          discountPercent: item.variantId.discountPercent || 0,
-          weight: item.variantId.weight || 0,
-          dimensions: item.variantId.dimensions || {},
-          images: item.variantId.images || [],
-          stockQuantity: item.variantId.stockQuantity || 0,
-          variantAttributes: item.variantId.variantAttributes || [],
-          productId: item.variantId.productId ? {
-            productName: item.variantId.productId.productName || 'Unknown Product',
-            brand: item.variantId.productId.brand?.name || item.variantId.productId.brand || 'N/A',
-            category: item.variantId.productId.category?.name || item.variantId.productId.category || 'N/A',
-            subCategory: item.variantId.productId.subCategory?.name || item.variantId.productId.subCategory || 'N/A'
-          } : null
-        } : null
-      }))
+      transferType: transferType, // Add transfer type to response
+      isOutgoing: transferType === 'outgoing', // Boolean for easy check
+      isIncoming: transferType === 'incoming', // Boolean for easy check
+      isInternal: transferType === 'internal', // Boolean for easy check
+      items: transaction.items?.map((item) => {
+        let availableQuantity = 0;
+        
+        // Determine available quantity based on whether it's a variant or product
+        if (item.variantId) {
+          // For variant products, get quantity from variant inventory
+          availableQuantity = inventoryMap.get(`variant_${item.variantId._id.toString()}`) || 0;
+        } else if (item.productId) {
+          // For non-variant products, get quantity from product inventory
+          availableQuantity = inventoryMap.get(`product_${item.productId._id.toString()}`) || 0;
+        }
+
+        return {
+          ...item,
+          productId: item.productId
+            ? {
+                _id: item.productId._id,
+                productName: item.productId.productName || "Unknown Product",
+                shortDescription: item.productId.shortDescription || "",
+                SKU: item.productId.SKU || "",
+                barcode: item.productId.barcode || "",
+                costPrice: item.productId.costPrice || 0,
+                mrpPrice: item.productId.mrpPrice || 0,
+                sellingPrice: item.productId.sellingPrice || 0,
+                discountPercent: item.productId.discountPercent || 0,
+                weight: item.productId.weight || 0,
+                dimensions: item.productId.dimensions || {},
+                productImages: item.productId.productImages || [],
+                productStatus: item.productId.productStatus || "unknown",
+                availableQuantity: availableQuantity, // Use calculated available quantity
+                hasVariant: item.productId.hasVariant || false,
+                brand: item.productId.brand?.brandName || "N/A",
+                category: item.productId.category?.name || "N/A",
+                subCategory: item.productId.subcategory?.name || "N/A",
+              }
+            : null,
+          variantId: item.variantId
+            ? {
+                _id: item.variantId._id,
+                SKU: item.variantId.SKU || "",
+                barcode: item.variantId.barcode || "",
+                costPrice: item.variantId.costPrice || 0,
+                mrpPrice: item.variantId.mrpPrice || 0,
+                sellingPrice: item.variantId.sellingPrice || 0,
+                discountPercent: item.variantId.discountPercent || 0,
+                weight: item.variantId.weight || 0,
+                dimensions: item.variantId.dimensions || {},
+                images: item.variantId.images || [],
+                stockQuantity: availableQuantity, // Use calculated available quantity for variants
+                variantAttributes: item.variantId.variantAttributes || [],
+                productId: item.variantId.productId
+                  ? {
+                      productName: item.variantId.productId.productName || "Unknown Product",
+                      brand: item.variantId.productId.brand?.brandName || "N/A",
+                      category: item.variantId.productId.category?.name || "N/A",
+                      subCategory: item.variantId.productId.subcategory?.name || "N/A",
+                    }
+                  : null,
+              }
+            : null,
+        };
+      }),
     };
+
+    console.log(`Transfer ${id} is ${transferType} for user ${req.user._id}`);
+    console.log(`User warehouses: ${userWarehouseIds.join(', ')}`);
+    console.log(`From: ${fromWarehouseId}, To: ${toWarehouseId}`);
 
     res.status(200).json({
       success: true,
@@ -127,13 +199,23 @@ export const getTransactionByID = async (req, res) => {
     });
   } catch (err) {
     console.error("Get transaction by ID error:", err);
+    
+    // More specific error handling
+    if (err.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid transaction ID format",
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: "Server error fetching transaction",
-      error: err.message
+      error: err.message,
     });
   }
 };
+
 
 export const createTransferRequest = async (req, res) => {
   try {
@@ -221,17 +303,39 @@ export const createTransferRequest = async (req, res) => {
 
 export const getTransferRequests = async (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, type } = req.query;
     const query = {};
 
-    const warehouseId = req.user.assignedWarehouses?._id;
-    if (warehouseId) {
-      query.$or = [
-        { fromWarehouse: warehouseId },
-        { toWarehouse: warehouseId },
-      ];
+    // Get user's assigned warehouses
+    const assignedWarehouses = req.user.assignedWarehouses;
+    
+    // Extract warehouse IDs from assigned warehouses
+    let userWarehouseIds = [];
+    
+    if (Array.isArray(assignedWarehouses)) {
+      userWarehouseIds = assignedWarehouses.map(wh => wh._id).filter(id => id);
+    } else if (assignedWarehouses && assignedWarehouses._id) {
+      userWarehouseIds = [assignedWarehouses._id];
     }
 
+    // If user has assigned warehouses, filter transfers accordingly
+    if (userWarehouseIds.length > 0) {
+      if (type === 'outgoing') {
+        // Only get transfers FROM user's warehouses
+        query.fromWarehouse = { $in: userWarehouseIds };
+      } else if (type === 'incoming') {
+        // Only get transfers TO user's warehouses
+        query.toWarehouse = { $in: userWarehouseIds };
+      } else {
+        // Default: get both incoming and outgoing transfers
+        query.$or = [
+          { fromWarehouse: { $in: userWarehouseIds } },
+          { toWarehouse: { $in: userWarehouseIds } }
+        ];
+      }
+    }
+
+    // Filter by status if provided
     if (status) query.status = status;
 
     const transferRequests = await TransferRequest.find(query)
@@ -239,8 +343,32 @@ export const getTransferRequests = async (req, res) => {
       .sort({ requestedAt: -1 })
       .lean();
 
+    // Add transfer type information to each request
+    const transferRequestsWithType = transferRequests.map(request => {
+      const isFromUserWarehouse = userWarehouseIds.some(id => 
+        id.toString() === request.fromWarehouse._id.toString()
+      );
+      const isToUserWarehouse = userWarehouseIds.some(id => 
+        id.toString() === request.toWarehouse._id.toString()
+      );
+
+      let transferType = 'other';
+      if (isFromUserWarehouse && isToUserWarehouse) {
+        transferType = 'internal';
+      } else if (isFromUserWarehouse) {
+        transferType = 'outgoing';
+      } else if (isToUserWarehouse) {
+        transferType = 'incoming';
+      }
+
+      return {
+        ...request,
+        transferType
+      };
+    });
+
     res.status(200).json({
-      data: transferRequests,
+      data: transferRequestsWithType,
     });
   } catch (err) {
     console.error("Get transfer requests error:", err);
