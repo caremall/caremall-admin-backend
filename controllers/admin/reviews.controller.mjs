@@ -179,7 +179,11 @@ export const getReviewsByProduct = async (req, res) => {
           match: { status: "active" },
         },
       })
-      .select("productImages productName SKU urlSlug category brand")
+      .populate({
+        path: "variants",
+        select: "variantAttributes SKU images costPrice sellingPrice mrpPrice landingSellPrice discountPercent isDefault",
+      })
+      .select("productImages productName SKU urlSlug category brand hasVariant defaultVariant")
       .lean();
 
     if (!product) {
@@ -202,12 +206,59 @@ export const getReviewsByProduct = async (req, res) => {
         ? reviews.reduce((acc, r) => acc + (r.rating || 0), 0) / reviews.length
         : 0;
 
-    // Respond with product + reviews + average rating
+    // Prepare response data based on whether product has variants
+    let productData = {
+      ...product,
+      totalReviews: reviews.length,
+      averageRating: averageRating.toFixed(2),
+    };
+
+    // If product has variants, include variant images and SKUs
+    if (product.hasVariant && product.variants && product.variants.length > 0) {
+      // Extract all variant images
+      const variantImages = product.variants.flatMap(variant => variant.images || []);
+      
+      // Extract variant SKU information
+      const variantSKUs = product.variants.map(variant => ({
+        variantId: variant._id,
+        SKU: variant.SKU,
+        variantAttributes: variant.variantAttributes,
+        images: variant.images,
+        pricing: {
+          costPrice: variant.costPrice,
+          sellingPrice: variant.sellingPrice,
+          mrpPrice: variant.mrpPrice,
+          landingSellPrice: variant.landingSellPrice,
+          discountPercent: variant.discountPercent
+        },
+        isDefault: variant.isDefault
+      }));
+
+      // Add variant data to response
+      productData.variantDetails = {
+        images: [...new Set(variantImages)], // Remove duplicates
+        skus: variantSKUs,
+        totalVariants: product.variants.length
+      };
+
+      // If there's a default variant, mark it
+      const defaultVariant = product.variants.find(v => v.isDefault);
+      if (defaultVariant) {
+        productData.defaultVariantDetails = {
+          variantId: defaultVariant._id,
+          SKU: defaultVariant.SKU,
+          images: defaultVariant.images,
+          variantAttributes: defaultVariant.variantAttributes
+        };
+      }
+    }
+
+    // Respond with product + reviews + average rating + variant data
     res.status(200).json({
-      product,
+      product: productData,
       reviews,
       totalReviews: reviews.length,
-      averageRating: averageRating.toFixed(2), // format to 2 decimals
+      averageRating: averageRating.toFixed(2),
     });
   } catch (error) {
     console.error("Get Product with Reviews Error:", error);
