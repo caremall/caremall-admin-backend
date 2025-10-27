@@ -2,14 +2,14 @@ import mongoose from "mongoose";
 
 const { Schema, model } = mongoose;
 
-const transfetItemSchema = new Schema({
+const transferItemSchema = new Schema({
   quantity: Number,
   productId: {
     type: Schema.Types.ObjectId,
     ref: "Product",
     required: true
   },
-   variantId: {
+  variantId: {
     type: Schema.Types.ObjectId,
     ref: "Variant", 
     required: false,
@@ -52,7 +52,7 @@ const transferRequestSchema = new Schema({
   driver: {
     type: Schema.Types.ObjectId,
     ref: "Driver",
-    required: true, // Made driver required
+    required: true,
   },
   shippedAt: Date,
   receivedAt: Date,
@@ -65,12 +65,19 @@ const transferRequestSchema = new Schema({
     type: Date,
     default: Date.now,
   },
-  items: [transfetItemSchema],
+  isConfirmed: {
+    type: Boolean,
+    default: false
+  },
+  confirmedAt: {
+    type: Date
+  },
+  items: [transferItemSchema],
 }, {
   timestamps: true
 });
 
-// Custom validation: variant removed, so only product is required
+
 transferRequestSchema.pre("validate", function (next) {
   if (!this.items || this.items.length === 0) {
     return next(new Error("At least one item must be specified in transfer request"));
