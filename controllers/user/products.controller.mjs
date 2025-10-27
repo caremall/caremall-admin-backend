@@ -8,7 +8,6 @@ import Review from "../../models/Review.mjs";
 import Brand from "../../models/Brand.mjs";
 // import FirstOrder from "../../models/FirstOrder.mjs";
 
-
 // export const getFilteredProducts = async (req, res) => {
 //   try {
 //     const { category, brand, tags, search, color, size, minPrice, maxPrice } =
@@ -122,7 +121,6 @@ import Brand from "../../models/Brand.mjs";
 //   }
 // };
 
-
 export const getFilteredProducts = async (req, res) => {
   try {
     // Parse filters from query params
@@ -131,24 +129,32 @@ export const getFilteredProducts = async (req, res) => {
         ? req.query.brands
         : req.query.brands.split(",")
       : [];
-    
+
     // SEPARATE CATEGORIES AND SUBCATEGORIES
     const categories = req.query.categories
       ? Array.isArray(req.query.categories)
         ? req.query.categories
         : req.query.categories.split(",")
       : [];
-    
+
     const subcategories = req.query.subcategories
       ? Array.isArray(req.query.subcategories)
         ? req.query.subcategories
         : req.query.subcategories.split(",")
       : [];
 
-    const minPrice = req.query.minPrice ? Number(req.query.minPrice) : undefined;
-    const maxPrice = req.query.maxPrice ? Number(req.query.maxPrice) : undefined;
-    const minDiscount = req.query.minDiscount ? Number(req.query.minDiscount) : undefined;
-    const maxDiscount = req.query.maxDiscount ? Number(req.query.maxDiscount) : undefined;
+    const minPrice = req.query.minPrice
+      ? Number(req.query.minPrice)
+      : undefined;
+    const maxPrice = req.query.maxPrice
+      ? Number(req.query.maxPrice)
+      : undefined;
+    const minDiscount = req.query.minDiscount
+      ? Number(req.query.minDiscount)
+      : undefined;
+    const maxDiscount = req.query.maxDiscount
+      ? Number(req.query.maxDiscount)
+      : undefined;
     const status = req.query.status || "published";
 
     // Extract variant attribute filters from query params (excluding reserved fields)
@@ -183,7 +189,7 @@ export const getFilteredProducts = async (req, res) => {
 
     // CORRECTED: SIMPLIFIED CATEGORY FILTERING LOGIC
     const categoryConditions = [];
-    
+
     // If categories are selected, filter by main categories
     if (categories.length > 0) {
       categoryConditions.push({
@@ -197,7 +203,9 @@ export const getFilteredProducts = async (req, res) => {
     if (subcategories.length > 0) {
       categoryConditions.push({
         subcategory: {
-          $in: subcategories.map((id) => new mongoose.Types.ObjectId(String(id))),
+          $in: subcategories.map(
+            (id) => new mongoose.Types.ObjectId(String(id))
+          ),
         },
       });
     }
@@ -234,8 +242,44 @@ export const getFilteredProducts = async (req, res) => {
     if (minPrice !== undefined && maxPrice !== undefined) {
       variantMatch.sellingPrice = { $gte: minPrice, $lte: maxPrice };
     }
+
     if (minDiscount !== undefined && maxDiscount !== undefined) {
-      variantMatch.discountPercent = { $gte: minDiscount, $lte: maxDiscount };
+      variantMatch.$expr = {
+        $and: [
+          {
+            $gte: [
+              {
+                $multiply: [
+                  {
+                    $divide: [
+                      { $subtract: ["$mrpPrice", "$landingSellPrice"] },
+                      "$mrpPrice",
+                    ],
+                  },
+                  100,
+                ],
+              },
+              minDiscount,
+            ],
+          },
+          {
+            $lte: [
+              {
+                $multiply: [
+                  {
+                    $divide: [
+                      { $subtract: ["$mrpPrice", "$landingSellPrice"] },
+                      "$mrpPrice",
+                    ],
+                  },
+                  100,
+                ],
+              },
+              maxDiscount,
+            ],
+          },
+        ],
+      };
     }
 
     const filteredVariants = await Variant.find(variantMatch).lean();
@@ -268,7 +312,7 @@ export const getFilteredProducts = async (req, res) => {
 
     // CORRECTED: FINAL CATEGORY FILTERING - APPLY BOTH CATEGORY AND SUBCATEGORY FILTERS
     const finalCategoryConditions = [];
-    
+
     // Apply category filter if categories are selected
     if (categories.length > 0) {
       finalCategoryConditions.push({
@@ -282,7 +326,9 @@ export const getFilteredProducts = async (req, res) => {
     if (subcategories.length > 0) {
       finalCategoryConditions.push({
         subcategory: {
-          $in: subcategories.map((id) => new mongoose.Types.ObjectId(String(id))),
+          $in: subcategories.map(
+            (id) => new mongoose.Types.ObjectId(String(id))
+          ),
         },
       });
     }
@@ -311,19 +357,63 @@ export const getFilteredProducts = async (req, res) => {
         return cond;
       });
     }
+
     if (minDiscount !== undefined && maxDiscount !== undefined) {
-      productFilter.$or = productFilter.$or.map((cond) => {
-        if (cond.hasVariant === false) {
-          return {
-            hasVariant: false,
-            discountPercent: { $gte: minDiscount, $lte: maxDiscount },
-          };
-        }
-        return cond;
-      });
+      const discountExpr = {
+        $expr: {
+          $and: [
+            {
+              $gte: [
+                {
+                  $multiply: [
+                    {
+                      $divide: [
+                        { $subtract: ["$mrpPrice", "$landingSellPrice"] },
+                        "$mrpPrice",
+                      ],
+                    },
+                    100,
+                  ],
+                },
+                minDiscount,
+              ],
+            },
+            {
+              $lte: [
+                {
+                  $multiply: [
+                    {
+                      $divide: [
+                        { $subtract: ["$mrpPrice", "$landingSellPrice"] },
+                        "$mrpPrice",
+                      ],
+                    },
+                    100,
+                  ],
+                },
+                maxDiscount,
+              ],
+            },
+          ],
+        },
+      };
+
+      productFilter.$or = [
+        {
+          hasVariant: false,
+          ...discountExpr,
+        },
+        {
+          _id: {
+            $in: filteredProductIdsFromVariants.map(
+              (id) => new mongoose.Types.ObjectId(id)
+            ),
+          },
+        },
+      ];
     }
 
-    // Fetch filtered products with proper population and variants
+    // Fetch filtered products with proper population
     const products = await Product.find(productFilter)
       .select(
         "_id productName brand category subcategory urlSlug productStatus hasVariant sellingPrice defaultVariant productImages mrpPrice SKU barcode costPrice discountPercent taxRate landingSellPrice"
@@ -331,45 +421,83 @@ export const getFilteredProducts = async (req, res) => {
       .populate("brand", "_id brandName imageUrl")
       .populate("category", "_id name image")
       .populate("subcategory", "_id name image")
-      .populate({
-        path: "variants",
-        match: variantMatch,
-        select: "_id variantAttributes SKU barcode costPrice sellingPrice mrpPrice landingSellPrice discountPercent taxRate isDefault variantId images"
-      })
       .sort({ sellingPrice: 1 })
       .lean();
 
-    // CORRECTED: Build products array with variants nested inside products
-    const productsWithVariants = [];
+    // Build flat products array
+    const flatProducts = [];
+    const variantsByProductId = filteredVariants.reduce((acc, v) => {
+      const pid = v.productId.toString();
+      if (!acc[pid]) acc[pid] = [];
+      acc[pid].push(v);
+      return acc;
+    }, {});
 
     for (const product of products) {
-      // For products with variants, include the filtered variants
-      if (product.hasVariant && product.variants && product.variants.length > 0) {
-        productsWithVariants.push({
-          ...product,
-          type: "product",
-          variants: product.variants.map(variant => ({
-            ...variant,
+      if (product.hasVariant) {
+        // Get matching variants for this product
+        const matchingVariants =
+          variantsByProductId[product._id.toString()] || [];
+
+        // Add each variant as a separate product entry
+        matchingVariants.forEach((variant) => {
+          flatProducts.push({
+            _id: variant._id,
             type: "variant",
-            productImages: variant.images && variant.images.length ? variant.images : product.productImages,
-          }))
+            productId: product._id,
+            productName: product.productName,
+            brand: product.brand,
+            category: product.category,
+            subcategory: product.subcategory,
+            urlSlug: product.urlSlug,
+            productStatus: product.productStatus,
+            hasVariant: true,
+            variantAttributes: variant.variantAttributes,
+            SKU: variant.SKU,
+            barcode: variant.barcode,
+            productImages:
+              variant.images && variant.images.length
+                ? variant.images
+                : product.productImages,
+            costPrice: variant.costPrice,
+            sellingPrice: variant.sellingPrice,
+            mrpPrice: variant.mrpPrice,
+            landingSellPrice: variant.landingSellPrice,
+            discountPercent: variant.discountPercent,
+            taxRate: variant.taxRate,
+            isDefault: variant.isDefault,
+            variantId: variant.variantId,
+          });
         });
-      } 
-      // For products without variants or products with variants but no matching variants after filtering
-      else if (!product.hasVariant) {
-        productsWithVariants.push({
-          ...product,
+      } else {
+        // Add product without variant
+        flatProducts.push({
+          _id: product._id,
           type: "product",
-          variants: []
+          productName: product.productName,
+          brand: product.brand,
+          category: product.category,
+          subcategory: product.subcategory,
+          urlSlug: product.urlSlug,
+          productStatus: product.productStatus,
+          hasVariant: false,
+          SKU: product.SKU,
+          barcode: product.barcode,
+          productImages: product.productImages,
+          costPrice: product.costPrice,
+          sellingPrice: product.sellingPrice,
+          mrpPrice: product.mrpPrice,
+          landingSellPrice: product.landingSellPrice,
+          discountPercent: product.discountPercent,
+          taxRate: product.taxRate,
         });
       }
-      // Note: We skip products with variants that have no matching variants after filtering
     }
 
     // CORRECTED: Filter options should only show available options based on current selection
     // Get available brands from filtered products
     const availableBrandIds = [
-      ...new Set(productsWithVariants.map((p) => p.brand._id.toString())),
+      ...new Set(flatProducts.map((p) => p.brand._id.toString())),
     ];
     const availableBrands = await Brand.find({
       _id: { $in: availableBrandIds },
@@ -379,18 +507,20 @@ export const getFilteredProducts = async (req, res) => {
     // Get available categories and subcategories from filtered products
     const availableCategoryIds = [
       ...new Set(
-        productsWithVariants.map((p) =>
+        flatProducts.map((p) =>
           p.category._id ? p.category._id.toString() : p.category.toString()
         )
       ),
     ];
-    
+
     const availableSubcategoryIds = [
       ...new Set(
-        productsWithVariants
-          .filter(p => p.subcategory)
+        flatProducts
+          .filter((p) => p.subcategory)
           .map((p) =>
-            p.subcategory._id ? p.subcategory._id.toString() : p.subcategory.toString()
+            p.subcategory._id
+              ? p.subcategory._id.toString()
+              : p.subcategory.toString()
           )
       ),
     ];
@@ -401,42 +531,44 @@ export const getFilteredProducts = async (req, res) => {
     }).select("_id name image type parentId");
 
     // Get all subcategories for the available main categories
-    const mainCategories = availableCategories.filter(cat => cat.type === "Main");
-    const mainCategoryIds = mainCategories.map(cat => cat._id);
+    const mainCategories = availableCategories.filter(
+      (cat) => cat.type === "Main"
+    );
+    const mainCategoryIds = mainCategories.map((cat) => cat._id);
 
     const allSubcategories = await Category.find({
       $or: [
         { parentId: { $in: mainCategoryIds } },
-        { _id: { $in: availableSubcategoryIds } }
+        { _id: { $in: availableSubcategoryIds } },
       ],
-      status: "active"
+      status: "active",
     }).select("_id name image parentId type");
 
     // Create the subcategories response
     const subcategoriesResponse = {
-      subcategories: allSubcategories.map(subcat => ({
+      subcategories: allSubcategories.map((subcat) => ({
         _id: subcat._id,
         name: subcat.name,
         image: subcat.image,
         parentId: subcat.parentId,
-        type: subcat.type
-      }))
+        type: subcat.type,
+      })),
     };
 
     // CORRECTED: Aggregate price and discount ranges from FILTERED products
     const productPriceRange = await Product.aggregate([
       {
         $match: {
-          _id: { $in: products.map(p => p._id) },
+          _id: { $in: products.map((p) => p._id) },
           productStatus: status,
-          landingSellPrice: { $exists: true, $gt: 0 },
+          sellingPrice: { $exists: true, $gt: 0 },
         },
       },
       {
         $group: {
           _id: null,
-          minPrice: { $min: "$landingSellPrice" },
-          maxPrice: { $max: "$landingSellPrice" },
+          minPrice: { $min: "$sellingPrice" },
+          maxPrice: { $max: "$sellingPrice" },
           minDiscount: { $min: "$discountPercent" },
           maxDiscount: { $max: "$discountPercent" },
         },
@@ -446,15 +578,17 @@ export const getFilteredProducts = async (req, res) => {
     const variantPriceRange = await Variant.aggregate([
       {
         $match: {
-          productId: { $in: products.filter(p => p.hasVariant).map(p => p._id) },
+          productId: {
+            $in: products.filter((p) => p.hasVariant).map((p) => p._id),
+          },
           sellingPrice: { $exists: true, $gt: 0 },
         },
       },
       {
         $group: {
           _id: null,
-          minPrice: { $min: "$landingSellPrice" },
-          maxPrice: { $max: "$landingSellPrice" },
+          minPrice: { $min: "$sellingPrice" },
+          maxPrice: { $max: "$sellingPrice" },
           minDiscount: { $min: "$discountPercent" },
           maxDiscount: { $max: "$discountPercent" },
         },
@@ -478,14 +612,31 @@ export const getFilteredProducts = async (req, res) => {
       variantPriceRange[0]?.maxDiscount ?? 0
     );
 
-    const minPriceFinal = Number.isFinite(combinedMinPrice) && combinedMinPrice !== Infinity ? combinedMinPrice : 0;
-    const maxPriceFinal = Number.isFinite(combinedMaxPrice) && combinedMaxPrice !== 0 ? combinedMaxPrice : minPriceFinal;
-    const minDiscountFinal = Number.isFinite(combinedMinDiscount) && combinedMinDiscount !== Infinity ? combinedMinDiscount : 0;
-    const maxDiscountFinal = Number.isFinite(combinedMaxDiscount) ? combinedMaxDiscount : minDiscountFinal;
+    const minPriceFinal =
+      Number.isFinite(combinedMinPrice) && combinedMinPrice !== Infinity
+        ? combinedMinPrice
+        : 0;
+    const maxPriceFinal =
+      Number.isFinite(combinedMaxPrice) && combinedMaxPrice !== 0
+        ? combinedMaxPrice
+        : minPriceFinal;
+    const minDiscountFinal =
+      Number.isFinite(combinedMinDiscount) && combinedMinDiscount !== Infinity
+        ? combinedMinDiscount
+        : 0;
+    const maxDiscountFinal = Number.isFinite(combinedMaxDiscount)
+      ? combinedMaxDiscount
+      : minDiscountFinal;
 
     // Aggregate variant attributes for filter options from filtered products
     const variantAttributesAggregation = await Variant.aggregate([
-      { $match: { productId: { $in: products.filter(p => p.hasVariant).map(p => p._id) } } },
+      {
+        $match: {
+          productId: {
+            $in: products.filter((p) => p.hasVariant).map((p) => p._id),
+          },
+        },
+      },
       { $unwind: "$variantAttributes" },
       {
         $group: {
@@ -512,11 +663,11 @@ export const getFilteredProducts = async (req, res) => {
     });
 
     res.status(200).json({
-      products: productsWithVariants, // Now products have nested variants
+      products: flatProducts,
       filterOptions: {
         variantAttributes: variantFilters,
         brands: availableBrands,
-        categories: availableCategories.filter(cat => cat.type === "Main"),
+        categories: availableCategories.filter((cat) => cat.type === "Main"),
         subcategories: subcategoriesResponse,
         priceRange: { min: minPriceFinal, max: maxPriceFinal },
         discountRange: { min: minDiscountFinal, max: maxDiscountFinal },
@@ -541,7 +692,10 @@ export const getFilteredProducts = async (req, res) => {
 
 export const getMostWantedProducts = async (req, res) => {
   try {
-    const products = await Product.find({ productStatus: "published", visibility: "visible" }).lean();
+    const products = await Product.find({
+      productStatus: "published",
+      visibility: "visible",
+    }).lean();
 
     // Enrich products with default variant data
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
@@ -611,10 +765,14 @@ export const getMostWantedProducts = async (req, res) => {
 
 export const getNewArrivalProducts = async (req, res) => {
   try {
-    const products = await Product.find({ productStatus: "published", visibility: "visible" }).sort({ createdAt: -1 }).lean();
+    const products = await Product.find({
+      productStatus: "published",
+      visibility: "visible",
+    })
+      .sort({ createdAt: -1 })
+      .lean();
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
-    
     const productIds = enrichedProducts.map((p) => p._id);
 
     const reviewStats = await Review.aggregate([
@@ -659,7 +817,12 @@ export const getNewArrivalProducts = async (req, res) => {
 
 export const getBestSellingProducts = async (req, res) => {
   try {
-    const bestSellers = await Product.find({ productStatus: "published", visibility: "visible" }).sort({ orderCount: -1 }).lean();
+    const bestSellers = await Product.find({
+      productStatus: "published",
+      visibility: "visible",
+    })
+      .sort({ orderCount: -1 })
+      .lean();
     const enrichedProducts = await enrichProductsWithDefaultVariants(
       bestSellers
     );
@@ -704,8 +867,6 @@ export const getBestSellingProducts = async (req, res) => {
     res.status(500).json({ message: "Server error fetching best sellers" });
   }
 };
-
-
 
 export const getProductById = async (req, res) => {
   try {
@@ -764,7 +925,9 @@ export const getProductSearchSuggestions = async (reg, res) => {
         { productDescription: regex },
       ],
     })
-      .select("productName sellingPrice thumbnail category urlSlug SKU productImages")
+      .select(
+        "productName sellingPrice thumbnail category urlSlug SKU productImages"
+      )
       .limit(10)
       .lean();
 
@@ -797,7 +960,9 @@ export const getSearchSuggestions = async (req, res) => {
         { productDescription: regex },
       ],
     })
-      .select("productName sellingPrice mrpPrice thumbnail category urlSlug SKU productImages")
+      .select(
+        "productName sellingPrice mrpPrice thumbnail category urlSlug SKU productImages"
+      )
       .limit(10)
       .lean();
 
@@ -826,7 +991,6 @@ export const getSearchSuggestions = async (req, res) => {
       brandsPromise,
     ]);
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
-
 
     // Return combined results categorized by entity type
     res.status(200).json({ enrichedProducts, categories, brands });
@@ -926,8 +1090,6 @@ export const getNearbyProducts = async (req, res) => {
   }
 };
 
-
-
 // export const getFirstOrderAmount = async (req, res) => {
 //   try {
 //     const discount = await FirstOrder.findOne();
@@ -951,5 +1113,3 @@ export const getNearbyProducts = async (req, res) => {
 //     });
 //   }
 // };
-
-
