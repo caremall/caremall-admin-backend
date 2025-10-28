@@ -1870,3 +1870,148 @@ export const getInboundJobById = async (req, res) => {
   }
 };
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const confirmTransferRequest = async (req, res) => {
+  const session = await mongoose.startSession();
+  
+  try {
+    session.startTransaction();
+    
+    const { transferRequestId } = req.params;
+
+    // Find the transfer request
+    const transferRequest = await TransferRequest.findById(transferRequestId).session(session);
+    
+    if (!transferRequest) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Transfer request not found"
+      });
+    }
+
+    if (transferRequest.isConfirmed) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Transfer request is already confirmed"
+      });
+    }
+
+    // Process each item in the transfer request
+    for (const item of transferRequest.items) {
+      // Find the inventory record for the source warehouse
+      const inventoryQuery = {
+        warehouse: transferRequest.fromWarehouse,
+        product: item.productId
+      };
+      
+      // Include variantId in query if it exists
+      if (item.variantId) {
+        inventoryQuery.variant = item.variantId;
+      } else {
+        inventoryQuery.variant = null;
+      }
+
+      const sourceInventory = await Inventory.findOne(inventoryQuery).session(session);
+
+      if (!sourceInventory) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `Inventory not found for product ${item.productId} in source warehouse`
+        });
+      }
+
+      // Check if sufficient quantity is available
+      if (sourceInventory.AvailableQuantity < item.quantity) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient quantity for product ${item.productId}. Available: ${sourceInventory.AvailableQuantity}, Requested: ${item.quantity}`
+        });
+      }
+
+      // Decrease quantity in source warehouse
+      sourceInventory.AvailableQuantity -= item.quantity;
+      sourceInventory.updatedAt = new Date();
+      await sourceInventory.save({ session });
+
+      // Find or create inventory record in destination warehouse
+      const destInventoryQuery = {
+        warehouse: transferRequest.toWarehouse,
+        product: item.productId
+      };
+      
+      if (item.variantId) {
+        destInventoryQuery.variant = item.variantId;
+      } else {
+        destInventoryQuery.variant = null;
+      }
+
+      let destInventory = await Inventory.findOne(destInventoryQuery).session(session);
+
+      if (destInventory) {
+        // Update existing inventory
+        destInventory.AvailableQuantity += item.quantity;
+        destInventory.updatedAt = new Date();
+      } else {
+        // Create new inventory record
+        destInventory = new Inventory({
+          warehouse: transferRequest.toWarehouse,
+          product: item.productId,
+          variant: item.variantId || null,
+          AvailableQuantity: item.quantity,
+          updatedAt: new Date()
+        });
+      }
+
+      await destInventory.save({ session });
+    }
+
+    // Update transfer request status
+    transferRequest.isConfirmed = true;
+    transferRequest.confirmedAt = new Date();
+    transferRequest.pickStatus = "picked"; // Auto-mark as picked when confirmed
+    await transferRequest.save({ session });
+
+    // Commit transaction
+    await session.commitTransaction();
+
+    res.status(200).json({
+      success: true,
+      message: "Transfer request confirmed successfully",
+      data: transferRequest
+    });
+
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Error confirming transfer request:", error);
+    
+    res.status(500).json({
+      success: false,
+      message: "Failed to confirm transfer request",
+      error: error.message
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
