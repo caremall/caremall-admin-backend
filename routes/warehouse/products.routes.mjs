@@ -14,6 +14,9 @@ const router = Router();
 
 
 router.get("/search", getSearchSuggestions);
+router.delete("/:id", deleteProduct);
+
+
 
 router.route("/").get(getAllProducts).post(catchAsyncErrors(createProduct));
 
