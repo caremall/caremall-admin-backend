@@ -633,7 +633,7 @@ export const updateProduct = async (req, res) => {
 
       // Compute landing price
       const landing = calcLandingPrice(base, taxVal);
-      if (landing !== undefined) updateFields.landingSellPrice = landing;
+      // if (landing !== undefined) updateFields.landingSellPrice = landing;
       // If landing is undefined, do not set landingSellPrice to preserve existing value
     } else if (hasVariant === true) {
       // When product has variants, clear product-level pricing fields
