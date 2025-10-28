@@ -8,6 +8,7 @@ import Review from "../../models/Review.mjs";
 import Brand from "../../models/Brand.mjs";
 // import FirstOrder from "../../models/FirstOrder.mjs";
 
+
 // export const getFilteredProducts = async (req, res) => {
 //   try {
 //     const { category, brand, tags, search, color, size, minPrice, maxPrice } =
@@ -424,8 +425,8 @@ export const getFilteredProducts = async (req, res) => {
       .sort({ sellingPrice: 1 })
       .lean();
 
-    // Build flat products array
-    const flatProducts = [];
+    // MODIFIED: Build products array with variants grouped under parent products
+    const productsWithVariants = [];
     const variantsByProductId = filteredVariants.reduce((acc, v) => {
       const pid = v.productId.toString();
       if (!acc[pid]) acc[pid] = [];
@@ -436,42 +437,45 @@ export const getFilteredProducts = async (req, res) => {
     for (const product of products) {
       if (product.hasVariant) {
         // Get matching variants for this product
-        const matchingVariants =
-          variantsByProductId[product._id.toString()] || [];
+        const matchingVariants = variantsByProductId[product._id.toString()] || [];
 
-        // Add each variant as a separate product entry
-        matchingVariants.forEach((variant) => {
-          flatProducts.push({
+        // Create product with variants array
+        const productWithVariants = {
+          _id: product._id,
+          type: "product",
+          productName: product.productName,
+          brand: product.brand,
+          category: product.category,
+          subcategory: product.subcategory,
+          urlSlug: product.urlSlug,
+          productStatus: product.productStatus,
+          hasVariant: true,
+          variants: matchingVariants.map(variant => ({
             _id: variant._id,
-            type: "variant",
-            productId: product._id,
-            productName: product.productName,
-            brand: product.brand,
-            category: product.category,
-            subcategory: product.subcategory,
-            urlSlug: product.urlSlug,
-            productStatus: product.productStatus,
-            hasVariant: true,
+            variantId: variant.variantId,
             variantAttributes: variant.variantAttributes,
             SKU: variant.SKU,
             barcode: variant.barcode,
-            productImages:
-              variant.images && variant.images.length
-                ? variant.images
-                : product.productImages,
+            productImages: variant.images && variant.images.length ? variant.images : product.productImages,
             costPrice: variant.costPrice,
             sellingPrice: variant.sellingPrice,
             mrpPrice: variant.mrpPrice,
             landingSellPrice: variant.landingSellPrice,
             discountPercent: variant.discountPercent,
             taxRate: variant.taxRate,
-            isDefault: variant.isDefault,
-            variantId: variant.variantId,
-          });
-        });
+            isDefault: variant.isDefault
+          })),
+          // Include product-level fields for easy access
+          productImages: product.productImages,
+          minSellingPrice: matchingVariants.length > 0 ? Math.min(...matchingVariants.map(v => v.sellingPrice)) : product.sellingPrice,
+          maxSellingPrice: matchingVariants.length > 0 ? Math.max(...matchingVariants.map(v => v.sellingPrice)) : product.sellingPrice,
+          variantCount: matchingVariants.length
+        };
+        
+        productsWithVariants.push(productWithVariants);
       } else {
         // Add product without variant
-        flatProducts.push({
+        productsWithVariants.push({
           _id: product._id,
           type: "product",
           productName: product.productName,
@@ -490,14 +494,15 @@ export const getFilteredProducts = async (req, res) => {
           landingSellPrice: product.landingSellPrice,
           discountPercent: product.discountPercent,
           taxRate: product.taxRate,
+          variants: [] // Empty variants array for consistency
         });
       }
     }
 
-    // CORRECTED: Filter options should only show available options based on current selection
+    // MODIFIED: Filter options should only show available options based on current selection
     // Get available brands from filtered products
     const availableBrandIds = [
-      ...new Set(flatProducts.map((p) => p.brand._id.toString())),
+      ...new Set(productsWithVariants.map((p) => p.brand._id.toString())),
     ];
     const availableBrands = await Brand.find({
       _id: { $in: availableBrandIds },
@@ -507,7 +512,7 @@ export const getFilteredProducts = async (req, res) => {
     // Get available categories and subcategories from filtered products
     const availableCategoryIds = [
       ...new Set(
-        flatProducts.map((p) =>
+        productsWithVariants.map((p) =>
           p.category._id ? p.category._id.toString() : p.category.toString()
         )
       ),
@@ -515,7 +520,7 @@ export const getFilteredProducts = async (req, res) => {
 
     const availableSubcategoryIds = [
       ...new Set(
-        flatProducts
+        productsWithVariants
           .filter((p) => p.subcategory)
           .map((p) =>
             p.subcategory._id
@@ -569,7 +574,7 @@ export const getFilteredProducts = async (req, res) => {
           _id: null,
           minPrice: { $min: "$sellingPrice" },
           maxPrice: { $max: "$sellingPrice" },
-          minDiscount: { $min: "$discountPercent" },
+          minDiscount: { $min: "$0" },
           maxDiscount: { $max: "$discountPercent" },
         },
       },
@@ -589,7 +594,7 @@ export const getFilteredProducts = async (req, res) => {
           _id: null,
           minPrice: { $min: "$sellingPrice" },
           maxPrice: { $max: "$sellingPrice" },
-          minDiscount: { $min: "$discountPercent" },
+          minDiscount: { $min: "$0" },
           maxDiscount: { $max: "$discountPercent" },
         },
       },
@@ -663,7 +668,7 @@ export const getFilteredProducts = async (req, res) => {
     });
 
     res.status(200).json({
-      products: flatProducts,
+      products: productsWithVariants, // MODIFIED: Use productsWithVariants instead of flatProducts
       filterOptions: {
         variantAttributes: variantFilters,
         brands: availableBrands,
@@ -692,10 +697,7 @@ export const getFilteredProducts = async (req, res) => {
 
 export const getMostWantedProducts = async (req, res) => {
   try {
-    const products = await Product.find({
-      productStatus: "published",
-      visibility: "visible",
-    }).lean();
+    const products = await Product.find({ productStatus: "published", visibility: "visible" }).lean();
 
     // Enrich products with default variant data
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
@@ -765,14 +767,10 @@ export const getMostWantedProducts = async (req, res) => {
 
 export const getNewArrivalProducts = async (req, res) => {
   try {
-    const products = await Product.find({
-      productStatus: "published",
-      visibility: "visible",
-    })
-      .sort({ createdAt: -1 })
-      .lean();
+    const products = await Product.find({ productStatus: "published", visibility: "visible" }).sort({ createdAt: -1 }).lean();
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
+    
     const productIds = enrichedProducts.map((p) => p._id);
 
     const reviewStats = await Review.aggregate([
@@ -817,12 +815,7 @@ export const getNewArrivalProducts = async (req, res) => {
 
 export const getBestSellingProducts = async (req, res) => {
   try {
-    const bestSellers = await Product.find({
-      productStatus: "published",
-      visibility: "visible",
-    })
-      .sort({ orderCount: -1 })
-      .lean();
+    const bestSellers = await Product.find({ productStatus: "published", visibility: "visible" }).sort({ orderCount: -1 }).lean();
     const enrichedProducts = await enrichProductsWithDefaultVariants(
       bestSellers
     );
@@ -867,6 +860,8 @@ export const getBestSellingProducts = async (req, res) => {
     res.status(500).json({ message: "Server error fetching best sellers" });
   }
 };
+
+
 
 export const getProductById = async (req, res) => {
   try {
@@ -925,9 +920,7 @@ export const getProductSearchSuggestions = async (reg, res) => {
         { productDescription: regex },
       ],
     })
-      .select(
-        "productName sellingPrice thumbnail category urlSlug SKU productImages"
-      )
+      .select("productName sellingPrice thumbnail category urlSlug SKU productImages")
       .limit(10)
       .lean();
 
@@ -960,9 +953,7 @@ export const getSearchSuggestions = async (req, res) => {
         { productDescription: regex },
       ],
     })
-      .select(
-        "productName sellingPrice mrpPrice thumbnail category urlSlug SKU productImages"
-      )
+      .select("productName sellingPrice mrpPrice thumbnail category urlSlug SKU productImages")
       .limit(10)
       .lean();
 
@@ -991,6 +982,7 @@ export const getSearchSuggestions = async (req, res) => {
       brandsPromise,
     ]);
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
+
 
     // Return combined results categorized by entity type
     res.status(200).json({ enrichedProducts, categories, brands });
@@ -1090,6 +1082,8 @@ export const getNearbyProducts = async (req, res) => {
   }
 };
 
+
+
 // export const getFirstOrderAmount = async (req, res) => {
 //   try {
 //     const discount = await FirstOrder.findOne();
@@ -1113,3 +1107,5 @@ export const getNearbyProducts = async (req, res) => {
 //     });
 //   }
 // };
+
+
