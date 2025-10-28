@@ -674,9 +674,90 @@ export const updateProduct = async (req, res) => {
     }
 
     // Handle variant fields
-    if (hasVariant) {
-      // Update variants if necessary
-      // (Add your variant update logic here if applicable)
+    // Handle variant fields (check for duplicate SKUs and update if variant exists)
+    if (hasVariant && Array.isArray(variants) && variants.length > 0) {
+      for (const variant of variants) {
+        // Check if variant SKU already exists
+        const existingVariant = await Variant.findOne({
+          SKU: variant.SKU.trim(),
+          productId,
+        });
+
+        console.log(existingVariant,"existingVariantexistingVariantexistingVariantexistingVariant");
+        console.log(variant,"variantvariantvariantvariantvariantvariantvariantvariantvariantvariant");
+
+        
+
+        if (existingVariant) {
+          // If SKU exists, update the existing variant
+          if (variant.SKU !== existingVariant.SKU) {
+            return res
+              .status(400)
+              .json({ message: `SKU '${variant.SKU}' already exists` });
+          }
+
+          // Process variant data and update the variant
+          const variantData = {
+            variantAttributes: variant.variantAttributes || [],
+            SKU: variant.SKU.trim(),
+            barcode: variant.barcode ? variant.barcode.trim() : undefined,
+            costPrice: Number(variant.costPrice),
+            sellingPrice: Number(variant.sellingPrice),
+            mrpPrice: Number(variant.mrpPrice),
+            landingSellPrice: calcLandingPrice(
+              variant.sellingPrice,
+              variant.taxRate
+            ),
+            discountPercent: variant.discountPercent || 0,
+            taxRate: variant.taxRate || 0,
+            images: variant.images || [],
+            isDefault: Boolean(variant.isDefault),
+            minimumQuantity: variant.minimumQuantity || 0,
+            reorderQuantity: variant.reorderQuantity || 0,
+            maximumQuantity: variant.maximumQuantity || 0,
+          };
+
+          await Variant.findByIdAndUpdate(variant._id, variantData, {
+            new: true,
+            runValidators: true,
+          });
+        } else {
+          // Create a new variant if SKU doesn't exist
+          const variantData = {
+            productId,
+            variantAttributes: variant.variantAttributes || [],
+            SKU: variant.SKU.trim(),
+            barcode: variant.barcode ? variant.barcode.trim() : undefined,
+            costPrice: Number(variant.costPrice),
+            sellingPrice: Number(variant.sellingPrice),
+            mrpPrice: Number(variant.mrpPrice),
+            landingSellPrice: calcLandingPrice(
+              variant.sellingPrice,
+              variant.taxRate
+            ),
+            discountPercent: variant.discountPercent || 0,
+            taxRate: variant.taxRate || 0,
+            images: variant.images || [],
+            isDefault: Boolean(variant.isDefault),
+            minimumQuantity: variant.minimumQuantity || 0,
+            reorderQuantity: variant.reorderQuantity || 0,
+            maximumQuantity: variant.maximumQuantity || 0,
+          };
+
+          await Variant.create(variantData);
+        }
+      }
+    }
+
+    // Ensure defaultVariant is set if variants exist
+    const allVariants = await Variant.find({ productId });
+    if (defaultVariant) {
+      existingProduct.defaultVariant = defaultVariant;
+      await existingProduct.save();
+    } else if (allVariants.length > 0) {
+      const defaultVar = allVariants.find((v) => v.isDefault) || allVariants[0];
+      existingProduct.defaultVariant = defaultVar._id;
+      await existingProduct.save();
     }
 
     // Handle additional fields
