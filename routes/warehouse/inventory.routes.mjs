@@ -21,7 +21,8 @@ import {
   updateDamagedInventoryReport,
   updateInventory,
   updateTransferRequestStatus,
-  getTransactionByID
+  getTransactionByID,
+  confirmTransferRequest
 } from "../../controllers/warehouse/inventory.controller.mjs";
 
 const inventoryRouter = Router();
@@ -35,6 +36,7 @@ inventoryRouter.post("/transfer/create",createTransferRequest)
 inventoryRouter.put("/transfer/:id",updateTransferRequestStatus)
 inventoryRouter.get("/transfer",getTransferRequests)
 inventoryRouter.get("/transfer/:id",getTransactionByID)
+inventoryRouter.patch('/transfer-requests/:transferRequestId/confirm', confirmTransferRequest);
 
 inventoryRouter.post("/transfer/assign-driver/:id",assignDriverToTransferRequest)
 

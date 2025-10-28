@@ -104,4 +104,13 @@ variantSchema.pre("validate", function () {
   }
 });
 
+variantSchema.pre("save", function (next) {
+  if (this.mrpPrice && this.landingSellPrice) {
+    const discount = ((this.mrpPrice - this.landingSellPrice) / this.mrpPrice) * 100;
+    this.discountPercent = Math.round(discount);
+  }
+  next();
+});
+
+
 export default model('Variant', variantSchema);
