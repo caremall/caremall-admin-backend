@@ -538,6 +538,7 @@ export const updateProduct = async (req, res) => {
       orderCount,
       variants = [],
     } = req.body;
+    console.log(req.body, "req.body=============================");
 
     const warehouse = req.user?.assignedWarehouses?._id;
     const productId = req.params.id;
@@ -673,9 +674,27 @@ export const updateProduct = async (req, res) => {
       if (mrpPrice) updateFields.mrpPrice = validatedMrpPrice;
     }
 
-    // Handle variant fields
     // Handle variant fields (check for duplicate SKUs and update if variant exists)
+    // --- Variant processing ---
     if (hasVariant && Array.isArray(variants) && variants.length > 0) {
+      // Delete variants that are in the database but not in the updated variants list
+      const variantSKUs = variants.map((variant) => variant.SKU.trim());
+
+      // Find variants that are associated with this product but not in the updated list
+      const variantsToDelete = await Variant.find({
+        productId,
+        SKU: { $nin: variantSKUs },
+      });
+
+      // Delete the variants not present in the updated list
+      const deletedVariants = await Variant.deleteMany({
+        productId,
+        SKU: { $nin: variantSKUs },
+      });
+
+      console.log("Deleted Variants:", deletedVariants);
+
+      // Now, iterate over the updated variants to process or create new ones
       for (const variant of variants) {
         // Check if variant SKU already exists
         const existingVariant = await Variant.findOne({
@@ -683,23 +702,15 @@ export const updateProduct = async (req, res) => {
           productId,
         });
 
-        console.log(existingVariant,"existingVariantexistingVariantexistingVariantexistingVariant");
-        console.log(variant,"variantvariantvariantvariantvariantvariantvariantvariantvariantvariant");
-
-        
-
         if (existingVariant) {
           // If SKU exists, update the existing variant
           if (variant.SKU !== existingVariant.SKU) {
-            return res
-              .status(400)
-              .json({ message: `SKU '${variant.SKU}' already exists` });
+            return res.status(400).json({ message: "You Can't Change SKU" });
           }
 
           // Process variant data and update the variant
           const variantData = {
             variantAttributes: variant.variantAttributes || [],
-            SKU: variant.SKU.trim(),
             barcode: variant.barcode ? variant.barcode.trim() : undefined,
             costPrice: Number(variant.costPrice),
             sellingPrice: Number(variant.sellingPrice),
@@ -717,7 +728,7 @@ export const updateProduct = async (req, res) => {
             maximumQuantity: variant.maximumQuantity || 0,
           };
 
-          await Variant.findByIdAndUpdate(variant._id, variantData, {
+          await Variant.findByIdAndUpdate(existingVariant._id, variantData, {
             new: true,
             runValidators: true,
           });
