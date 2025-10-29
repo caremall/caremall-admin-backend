@@ -16,26 +16,31 @@ export const getDayBook = async (req, res) => {
       date: { $gte: new Date(fromDate), $lte: new Date(toDate) },
     };
 
-    // Fetch transactions
+    // ✅ Populate references from ChartOfAccount and BankMaster
     const payments = await Payment.find(filter)
+      .populate("party", "name code") // populate party details
+      .populate("bank", "name code")  // optional: populate bank info
       .select("date party paymentType docAmount narration")
       .lean();
 
     const receipts = await Receipt.find(filter)
-      .select("date bankName receiptType docAmount narration")
+      .populate("fromAccount", "name code") // populate fromAccount details
+      .populate("bank", "name code")
+      .select("date bank receiptType docAmount narration fromAccount")
       .lean();
 
     const journals = await JournalEntry.find(filter)
+      .populate("entries.account", "name code") // populate account inside entries array
       .select("date voucher narration entries")
       .lean();
 
-    // Format for frontend
+    // ✅ Format unified response
     const dayBookEntries = [
       ...payments.map((p) => ({
         type: "Payment",
         date: p.date,
         reference: p.paymentType,
-        party: p.party,
+        party: p.party?.name || "Unknown Party",
         debit: p.docAmount,
         credit: 0,
         narration: p.narration,
@@ -44,7 +49,7 @@ export const getDayBook = async (req, res) => {
         type: "Receipt",
         date: r.date,
         reference: r.receiptType,
-        party: r.bankName,
+        party: r.fromAccount?.name || "Unknown Account",
         debit: 0,
         credit: r.docAmount,
         narration: r.narration,
@@ -54,18 +59,17 @@ export const getDayBook = async (req, res) => {
           type: "Journal Entry",
           date: j.date,
           reference: j.voucher || "Manual Entry",
-          party: e.account,
-          debit: e.postingType === "Debit" ? e.docAmount : 0,
-          credit: e.postingType === "Credit" ? e.docAmount : 0,
+          party: e.account?.name || "Unknown Account",
+          debit: e.debit || 0,
+          credit: e.credit || 0,
           narration: j.narration,
         }))
       ),
     ];
 
-    // Sort by date ascending
+    // ✅ Sort and summarize
     dayBookEntries.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    // Totals
     const totalDebit = dayBookEntries.reduce((t, e) => t + e.debit, 0);
     const totalCredit = dayBookEntries.reduce((t, e) => t + e.credit, 0);
 
