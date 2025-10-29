@@ -28,6 +28,7 @@ export const getBankReconciliation = async (req, res) => {
     // Combine both
     const allTransactions = [
       ...payments.map((p) => ({
+        id: p._id,
         type: "Payment",
         party: p.party,
         bankName: p.bankName,
@@ -39,6 +40,7 @@ export const getBankReconciliation = async (req, res) => {
         narration: p.narration,
       })),
       ...receipts.map((r) => ({
+        id: r._id,
         type: "Receipt",
         bankName: r.bankName,
         date: r.date,
