@@ -19,6 +19,16 @@ export const createWarehouse = async (req, res) => {
         message: "Warehouse name already exists. Please use a different name." 
       });
     }
+
+    const existingWarehouseByManager = await Warehouse.findOne({ 
+      manager: warehouseData.manager 
+    });
+
+    if (existingWarehouseByManager) {
+      return res.status(400).json({ 
+        message: "This manager is already assigned to another warehouse." 
+      });
+    }
     
     const warehouse = new Warehouse(warehouseData);
     await warehouse.save();
