@@ -128,13 +128,13 @@ export const getOfferByID = async (req, res) => {
               visibility: "visible",
             })
               .select(
-                "productId productName shortDescription productDescription brand category sellingPrice mrpPrice productImages urlSlug hasVariant defaultVariant variants"
+                "productId productName shortDescription productDescription landingSellPrice brand category sellingPrice mrpPrice productImages urlSlug hasVariant defaultVariant variants"
               )
               .populate("brand", "name")
               .populate("category", "name")
               .populate(
                 "defaultVariant",
-                "variantId images sellingPrice mrpPrice SKU barcode isDefault"
+                "variantId images landingSellPrice sellingPrice mrpPrice SKU barcode isDefault"
               )
               .populate(
                 "variants",

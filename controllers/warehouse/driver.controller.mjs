@@ -13,6 +13,7 @@ export const createDriver = async (req, res) => {
       (Array.isArray(req.user.assignedWarehouses) &&
         req.user.assignedWarehouses.length > 0 &&
         req.user.assignedWarehouses[0]._id);
+        console.log("Creating driver for warehouse:", warehouse);
 
     if (!name || !vehicleNumber || !warehouse) {
       return res
