@@ -19,12 +19,13 @@ const paymentSchema = new mongoose.Schema(
     balAmount: { type: Number, required: true },
     status: {
       type: String,
-      enum: ["Received", "Pending", "Cancelled"],
-      default: "Received",
+      enum: ["Received", "Pending", "Cleared"],
+      default: "Pending",
     },
     allocatedAmount: { type: Number, default: 0 },
     balanceAmount: { type: Number, default: 0 },
     narration: { type: String },
+    clearedDate: { type: Date },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
