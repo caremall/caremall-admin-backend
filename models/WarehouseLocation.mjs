@@ -12,7 +12,6 @@ const warehouseLocationSchema = new Schema(
     code: {
       type: String,
       required: true,
-      unique: true,
       trim: true, // e.g., "A1-01", "Bin-7"
     },
     name: {

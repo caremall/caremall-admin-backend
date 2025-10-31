@@ -37,6 +37,7 @@ export const createWarehouseLocation = async (req, res) => {
         success: false,
         message: `Location code '${code}' already exists in this warehouse. Please use a different code.`,
         existingLocation: {
+          warehouse: existingLocation.warehouse,
           code: existingLocation.code,
           name: existingLocation.name,
           status: existingLocation.status
