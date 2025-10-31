@@ -2,11 +2,10 @@ import Driver from "../../models/Driver.mjs";
 import bcrypt from "bcryptjs";
 import { uploadBase64Image } from "../../utils/uploadImage.mjs";
 
-// Create a new driver
+
 export const createDriver = async (req, res) => {
   try {
-    const { name, location, vehicleNumber, image, notes } =
-      req.body;
+    const { name, location, vehicleNumber, image, notes } = req.body;
 
     const warehouse =
       req.user.assignedWarehouses?._id ||
@@ -14,10 +13,30 @@ export const createDriver = async (req, res) => {
         req.user.assignedWarehouses.length > 0 &&
         req.user.assignedWarehouses[0]._id);
 
+    console.log("Creating driver for warehouse:", warehouse);
+
     if (!name || !vehicleNumber || !warehouse) {
       return res
         .status(400)
         .json({ message: "Name, Vehicle Number, and Warehouse are required" });
+    }
+
+    // Normalize input for comparison
+    const normalizedInput = vehicleNumber
+      .toUpperCase()
+      .replace(/\s+/g, "");
+
+    // Find any driver in the same warehouse with matching normalized vehicle number
+    const existingDriver = await Driver.findOne({
+      warehouse,
+      // Match vehicleNumber where removing spaces + uppercase = normalizedInput
+      vehicleNumber: { $regex: `^${normalizedInput}$`, $options: "i" }
+    });
+
+    if (existingDriver) {
+      return res.status(400).json({
+        message: "Vehicle Number already exists in this warehouse",
+      });
     }
 
     let imageUrl = "";
@@ -28,10 +47,10 @@ export const createDriver = async (req, res) => {
     const newDriver = new Driver({
       name,
       location,
-      vehicleNumber,
+      vehicleNumber: vehicleNumber.trim(), // Save original
       warehouse,
       notes,
-      image: imageUrl
+      image: imageUrl,
     });
 
     await newDriver.save();
