@@ -1,10 +1,10 @@
 import DeliveryBoy from "../../models/DeliveryBoy.mjs";
 import Order from "../../models/Order.mjs";
 import mongoose from "mongoose";
-import {
-  createWarehouse,
-  deliveryPartnerAPI,
-} from "../../utils/deliveryApi.js";
+// import {
+//   createWarehouse,
+//   deliveryPartnerAPI,
+// } from "../../utils/deliveryApi.js";
 
 export const getAllOrders = async (req, res) => {
   try {

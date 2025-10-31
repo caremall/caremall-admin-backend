@@ -180,7 +180,7 @@ export const getFilteredProducts = async (req, res) => {
     });
 
     // Build base product match - FIXED CATEGORY/SUBCATEGORY LOGIC
-    let productMatch = { productStatus: status };
+    let productMatch = { productStatus: status,visibility: "visible" };
 
     if (brands.length > 0) {
       productMatch.brand = {
@@ -293,6 +293,7 @@ export const getFilteredProducts = async (req, res) => {
     // CORRECTED: Build final product filter with PROPER CATEGORY/SUBCATEGORY HANDLING
     let productFilter = {
       productStatus: status,
+      visibility: "visible",
       $or: [
         { hasVariant: false },
         {
@@ -417,7 +418,7 @@ export const getFilteredProducts = async (req, res) => {
     // Fetch filtered products with proper population
     const products = await Product.find(productFilter)
       .select(
-        "_id productName brand category subcategory urlSlug productStatus hasVariant sellingPrice defaultVariant productImages mrpPrice SKU barcode costPrice discountPercent taxRate landingSellPrice"
+        "_id productName brand category subcategory urlSlug productStatus visibility hasVariant sellingPrice defaultVariant productImages mrpPrice SKU barcode costPrice discountPercent taxRate landingSellPrice"
       )
       .populate("brand", "_id brandName imageUrl")
       .populate("category", "_id name image")
