@@ -134,6 +134,11 @@ export const getWarehouseLocationById = async (req, res) => {
 export const updateWarehouseLocation = async (req, res) => {
   try {
     const updates = req.body;
+    const warehouse =
+      req.user.assignedWarehouses?._id ||
+      (Array.isArray(req.user.assignedWarehouses) &&
+        req.user.assignedWarehouses.length > 0 &&
+        req.user.assignedWarehouses[0]._id);
 
     const location = await WarehouseLocation.findByIdAndUpdate(
       req.params.id,
