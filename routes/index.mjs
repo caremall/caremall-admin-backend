@@ -9,7 +9,6 @@ const router = Router();
 router.use("/api/v1/admin", adminRouter);
 router.use("/api/v1/user", userRouter);
 router.use("/api/v1/warehouse", warehouseRouter);
-
 router.use("/api/v1/finance", financeRouter);
 
 export default router;

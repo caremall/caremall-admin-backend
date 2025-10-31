@@ -35,8 +35,9 @@ export const createWarehouseLocation = async (req, res) => {
     if (existingLocation) {
       return res.status(409).json({
         success: false,
-        message: `Location code '${code}' already exists in this warehouse. Please use a different code.`,
+        message: `Location code '${code}' already exists in the '${existingLocation.name}' warehouse. Please use a different code.`,
         existingLocation: {
+          warehouse: existingLocation.warehouse,
           code: existingLocation.code,
           name: existingLocation.name,
           status: existingLocation.status
@@ -62,13 +63,13 @@ export const createWarehouseLocation = async (req, res) => {
     console.error("Create WarehouseLocation Error:", err);
     
     // Handle MongoDB duplicate key error
-    if (err.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: "Location code already exists in this warehouse.",
-        error: "DUPLICATE_CODE"
-      });
-    }
+    // if (err.code === 11000) {
+    //   return res.status(409).json({
+    //     success: false,
+    //     message: "Location code already exists in this warehouse.",
+    //     error: "DUPLICATE_CODE"
+    //   });
+    // }
 
     // Handle validation errors
     if (err.name === 'ValidationError') {
