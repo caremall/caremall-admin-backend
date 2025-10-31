@@ -1,6 +1,10 @@
 import DeliveryBoy from "../../models/DeliveryBoy.mjs";
 import Order from "../../models/Order.mjs";
 import mongoose from "mongoose";
+// import {
+//   createWarehouse,
+//   deliveryPartnerAPI,
+// } from "../../utils/deliveryApi.js";
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -75,12 +79,117 @@ export const getOrderById = async (req, res) => {
   }
 };
 
+// export const updateOrderStatus = async (req, res) => {
+//   try {
+//     const { status } = req.body;
+
+//     console.log(status,"statusstatusstatusstatusstatusstatusstatusstatus");
+
+//     const order = await Order.findById(req.params.id);
+
+//     if (!order) return res.status(404).json({ message: "Order not found" });
+
+//     order.orderStatus = status;
+//     await order.save();
+
+//     res.status(200).json({ message: "Order status updated", order });
+//   } catch (error) {
+//     console.error("Update Order Status Error:", error);
+//     res.status(500).json({ message: "Failed to update order status" });
+//   }
+// };
+
 export const updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    const order = await Order.findById(req.params.id);
 
+    console.log(status, "<<< order status requested");
+
+    const order = await Order.findById(req.params.id).populate(
+      "allocatedWarehouse"
+    );
     if (!order) return res.status(404).json({ message: "Order not found" });
+
+    // if (status === "dispatched") {
+    //   if (
+    //     !order.allocatedWarehouse ||
+    //     order.warehouseAllocationStatus === "unallocated"
+    //   ) {
+    //     return res
+    //       .status(400)
+    //       .json({ message: "Please assign the warehouse before dispatching" });
+    //   }
+
+    //   const warehouse = order.allocatedWarehouse;
+    //   const dropAddress = order.shippingAddress;
+
+    //   /** 1. Create warehouse (pickup location) if not already registered */
+    //   const warehouseData = {
+    //     phone: warehouse.phone,
+    //     city: warehouse.city,
+    //     name: warehouse.name,
+    //     pin: warehouse.pin,
+    //     address: warehouse.addressLine1,
+    //     country: warehouse.country,
+    //     email: warehouse.email,
+    //     registered_name: warehouse.name,
+    //     // return_address: warehouse.returnAddress || warehouse.addressLine1,
+    //     addressLine1: warehouse.address.street,
+    //     addressLine2: `${warehouse.address.city} ${warehouse.address.state} ${warehouse.address.pinCode}`,
+    //     city: warehouse.address.city,
+    //     state: warehouse.address.state,
+    //     postalCode: warehouse.address.pinCode,
+
+    //     // return_pin: warehouse.pin,
+    //     // return_city: warehouse.city,
+    //     // return_state: warehouse.state,
+    //     // return_country: warehouse.country || "India",
+    //   };
+
+    //   console.log(">>> Creating warehouse:", warehouseData);
+    //   const warehouseRes = await createWarehouse(warehouseData);
+    //   console.log(">>> Warehouse Response:", warehouseRes);
+
+    //   /** 2. Create shipment (order package) */
+    //   const shipmentData = {
+    //     shipments: [
+    //       {
+    //         order: order.orderId || `ORD-${Date.now()}`,
+    //         name: dropAddress.fullName || "Consignee",
+    //         phone: dropAddress.phone,
+    //         add: dropAddress.addressLine1,
+    //         pin: dropAddress.postalCode,
+    //         city: dropAddress.city,
+    //         state: dropAddress.state,
+    //         country: dropAddress.country,
+    //         products_desc: order.items.map((i) => i.product.name).join(", "),
+    //         weight: 0.5, // in KG
+    //         payment_mode: order.paymentMethod === "COD" ? "COD" : "Prepaid",
+    //         cod_amount: order.paymentMethod === "COD" ? order.totalAmount : 0,
+    //       },
+    //     ],
+    //     pickup_location: { name: warehouse.name }, // must match warehouse name
+    //   };
+
+    //   console.log(">>> Sending shipment payload:", shipmentData);
+    //   const shipmentRes = await deliveryPartnerAPI(
+    //     "DELHIVERY",
+    //     "/api/cmu/create.json",
+    //     shipmentData
+    //   );
+    //   console.log(">>> Shipment Response:", shipmentRes);
+
+    //   const pickupData = {
+    //     pickup_time: "10:00",
+    //     pickup_date: new Date().toISOString().slice(0, 10),
+    //     pickup_location: warehouse.name,
+    //     expected_package_count: 1,
+    //   };
+
+    //   console.log(">>> Creating pickup request:", pickupData);
+    //   const pickupRes = await createPickup(pickupData);
+    //   console.log(">>> Pickup Response:", pickupRes);
+    // }
 
     order.orderStatus = status;
     await order.save();
@@ -136,7 +245,14 @@ export const getAllocatedOrders = async (req, res) => {
         .json({ message: "No warehouse assigned to this user" }); // Fixed message
     }
 
-    const { search = "", status, startDate, endDate, page = 1, limit = 10 } = req.query;
+    const {
+      search = "",
+      status,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = req.query;
 
     const query = { allocatedWarehouse: warehouseId };
 
@@ -145,7 +261,7 @@ export const getAllocatedOrders = async (req, res) => {
       query.$or = [
         { "shippingAddress.fullName": { $regex: search, $options: "i" } },
         { "shippingAddress.phone": { $regex: search, $options: "i" } },
-        { orderId: { $regex: search, $options: "i" } } // Also search by order ID
+        { orderId: { $regex: search, $options: "i" } }, // Also search by order ID
       ];
     }
 
@@ -190,7 +306,7 @@ export const getAllocatedOrders = async (req, res) => {
     const totalPages = Math.ceil(totalOrders / limitNum);
 
     // Transform response to include explicit status
-    const ordersWithStatus = orders.map(order => ({
+    const ordersWithStatus = orders.map((order) => ({
       _id: order._id,
       orderId: order.orderId,
       orderStatus: order.orderStatus, // Explicitly including order status
@@ -206,7 +322,7 @@ export const getAllocatedOrders = async (req, res) => {
       dispatches: order.dispatches,
       allocatedWarehouse: order.allocatedWarehouse,
       createdAt: order.createdAt,
-      updatedAt: order.updatedAt
+      updatedAt: order.updatedAt,
     }));
 
     res.status(200).json({
@@ -217,15 +333,15 @@ export const getAllocatedOrders = async (req, res) => {
         totalPages,
         totalOrders,
         hasNext: pageNum < totalPages,
-        hasPrev: pageNum > 1
-      }
+        hasPrev: pageNum > 1,
+      },
     });
   } catch (error) {
     console.error("Get Allocated Orders Error:", error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: "Failed to fetch warehouse orders",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
@@ -297,7 +413,7 @@ export const updatePickedQuantities = async (req, res) => {
         });
       }
 
-      // ✅ Update fields
+      // Update fields
       pickItem.pickedQuantity = pickedQuantity;
       pickItem.pickerName = pickerName;
       pickItem.pickerStatus = "assigned";
@@ -433,7 +549,7 @@ export const markOrderDispatched = async (req, res) => {
       totalWeight,
       destinationHub,
       manifestStatus,
-      toLocation
+      toLocation,
     } = req.body;
 
     const order = await Order.findById(orderId);
@@ -483,7 +599,7 @@ export const markOrderCancelled = async (req, res) => {
 
     order.orderStatus = status;
 
-    // ✅ only add cancellation details if status is "cancelled"
+    // only add cancellation details if status is "cancelled"
     if (status === "cancelled") {
       order.cancellationDetails = {
         cancelledBy: req.warehouse?._id || null, // from admin auth middleware
