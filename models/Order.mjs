@@ -112,6 +112,7 @@ const orderSchema = new Schema(
           type: Number,
           required: true,
         },
+        refundAmount: { type: Number, default: 0 },
       },
     ],
 
