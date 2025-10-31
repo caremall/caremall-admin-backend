@@ -42,10 +42,34 @@ export const createProductCard = async (req, res) => {
 export const getAllProductCards = async (req, res) => {
   try {
     const cards = await ProductCard.find()
-      .populate("products")
+      .populate({
+        path: "products",
+        populate: [
+          {
+            path: "brand",
+            model: "Brand",
+            select: "name",
+          },
+          {
+            path: "category",
+            model: "Category",
+            select: "name",
+          },
+          {
+            path: "defaultVariant",
+            model: "Variant",
+            select: "variantId images sellingPrice mrpPrice SKU barcode isDefault",
+          },
+          {
+            path: "variants",
+            model: "Variant",
+            select:
+              "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault",
+          },
+        ],
+      })
       .sort({ createdAt: -1 })
       .lean();
-
     res.status(200).json({ success: true, data: cards });
   } catch (error) {
     console.error("Get All ProductCards Error:", error);
