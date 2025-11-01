@@ -1,4 +1,5 @@
 import Order from "../../models/Order.mjs";
+import { cancelOrder } from "../user/orders.controller.mjs";
 
 export const getDashboardStats = async (req, res) => {
   try {
@@ -11,8 +12,10 @@ export const getDashboardStats = async (req, res) => {
     console.log("User assigned warehouses:", req.user.assignedWarehouses);
 
     // Get all warehouse IDs from the assigned warehouses array
-    const warehouseIds = req.user.assignedWarehouses?.map(wh => wh._id) || [];
+    const warehouse = req.user.assignedWarehouses[0] || [];
+    const warehouseIds = req.user.assignedWarehouses[0]._id || [];
     console.log("Warehouse IDs:", warehouseIds);
+ 
 
     const query = {};
     if (warehouseIds.length > 0) {
@@ -49,6 +52,10 @@ export const getDashboardStats = async (req, res) => {
       pickingOrders: counts.picked,
       packedOrders: counts.packed,
       dispatchOrders: counts.dispatched,
+      cancelOrders: counts.cancelled,
+      processingOrders: counts.processing,
+      shippedOrders: counts.shipped,
+      deliveredOrders: counts.delivered,
     });
   } catch (err) {
     console.error("Error in getDashboardStats:", err);
