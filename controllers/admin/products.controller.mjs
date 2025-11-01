@@ -5,6 +5,7 @@ import Category from "../../models/Category.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 // import Inventory from "../../models/inventory.mjs";
 // import ProductType from "../../models/ProductType.mjs";
+import Order from "../../models/Order.mjs";
 
 export const createProduct = async (req, res) => {
   try {
@@ -744,23 +745,33 @@ export const updateProduct = async (req, res) => {
 };
 
 
-
+// routes/products.ts  (or wherever the delete handler lives)
 export const deleteProduct = async (req, res) => {
   try {
     const productId = req.params.id;
 
-    // First check if product exists
     const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // Delete all variants associated with this product
-    const deleteVariantsResult = await Variant.deleteMany({
-      productId: productId,
+    // Delete variants first
+    const deleteVariantsResult = await Variant.deleteMany({ productId });
+
+    // ---- CHECK ORDERS -------------------------------------------------
+    const existingProductInOrders = await Order.findOne({
+      "items.product": productId,
     });
 
-    // Then delete the product
+    if (existingProductInOrders) {
+      // 400 = client error – this is a *business rule*, not a crash
+      return res.status(400).json({
+        message:
+          "Cannot delete product as it is associated with existing orders.",
+      });
+    }
+    // ------------------------------------------------------------------
+
     await Product.findByIdAndDelete(productId);
 
     res.status(200).json({

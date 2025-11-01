@@ -275,18 +275,19 @@ export const deleteCategory = async (req, res) => {
 
     const subCategory = await Category.findOne({ parentId: id });
     if (subCategory) {
-      return res.status(400).json({
+      return res.status(500).json({
         message: "Cannot delete: This category has subcategories linked.",
       });
     }
 
     const product = await Product.findOne({ category: id });
     if (product) {
-      return res.status(400).json({
+      return res.status(500).json({
         message: "Cannot delete: This category is used in products.",
       });
     }
 
+  
     const deleted = await Category.findByIdAndDelete(id);
     if (!deleted) {
       return res.status(404).json({ message: "Category not found" });
