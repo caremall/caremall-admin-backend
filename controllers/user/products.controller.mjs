@@ -6,8 +6,8 @@ import { enrichProductsWithDefaultVariants } from "../../utils/enrichedProducts.
 import Warehouse from "../../models/Warehouse.mjs";
 import Review from "../../models/Review.mjs";
 import Brand from "../../models/Brand.mjs";
+import inventory from "../../models/inventory.mjs";
 // import FirstOrder from "../../models/FirstOrder.mjs";
-
 
 // export const getFilteredProducts = async (req, res) => {
 //   try {
@@ -180,7 +180,7 @@ export const getFilteredProducts = async (req, res) => {
     });
 
     // Build base product match - FIXED CATEGORY/SUBCATEGORY LOGIC
-    let productMatch = { productStatus: status,visibility: "visible" };
+    let productMatch = { productStatus: status, visibility: "visible" };
 
     if (brands.length > 0) {
       productMatch.brand = {
@@ -438,7 +438,8 @@ export const getFilteredProducts = async (req, res) => {
     for (const product of products) {
       if (product.hasVariant) {
         // Get matching variants for this product
-        const matchingVariants = variantsByProductId[product._id.toString()] || [];
+        const matchingVariants =
+          variantsByProductId[product._id.toString()] || [];
 
         // Create product with variants array
         const productWithVariants = {
@@ -451,28 +452,37 @@ export const getFilteredProducts = async (req, res) => {
           urlSlug: product.urlSlug,
           productStatus: product.productStatus,
           hasVariant: true,
-          variants: matchingVariants.map(variant => ({
+          variants: matchingVariants.map((variant) => ({
             _id: variant._id,
             variantId: variant.variantId,
             variantAttributes: variant.variantAttributes,
             SKU: variant.SKU,
             barcode: variant.barcode,
-            productImages: variant.images && variant.images.length ? variant.images : product.productImages,
+            productImages:
+              variant.images && variant.images.length
+                ? variant.images
+                : product.productImages,
             costPrice: variant.costPrice,
             sellingPrice: variant.sellingPrice,
             mrpPrice: variant.mrpPrice,
             landingSellPrice: variant.landingSellPrice,
             discountPercent: variant.discountPercent,
             taxRate: variant.taxRate,
-            isDefault: variant.isDefault
+            isDefault: variant.isDefault,
           })),
           // Include product-level fields for easy access
           productImages: product.productImages,
-          minSellingPrice: matchingVariants.length > 0 ? Math.min(...matchingVariants.map(v => v.sellingPrice)) : product.sellingPrice,
-          maxSellingPrice: matchingVariants.length > 0 ? Math.max(...matchingVariants.map(v => v.sellingPrice)) : product.sellingPrice,
-          variantCount: matchingVariants.length
+          minSellingPrice:
+            matchingVariants.length > 0
+              ? Math.min(...matchingVariants.map((v) => v.sellingPrice))
+              : product.sellingPrice,
+          maxSellingPrice:
+            matchingVariants.length > 0
+              ? Math.max(...matchingVariants.map((v) => v.sellingPrice))
+              : product.sellingPrice,
+          variantCount: matchingVariants.length,
         };
-        
+
         productsWithVariants.push(productWithVariants);
       } else {
         // Add product without variant
@@ -495,7 +505,7 @@ export const getFilteredProducts = async (req, res) => {
           landingSellPrice: product.landingSellPrice,
           discountPercent: product.discountPercent,
           taxRate: product.taxRate,
-          variants: [] // Empty variants array for consistency
+          variants: [], // Empty variants array for consistency
         });
       }
     }
@@ -661,6 +671,57 @@ export const getFilteredProducts = async (req, res) => {
       { $sort: { _id: 1 } },
     ]);
 
+    // === ADD INVENTORY AVAILABILITY ===
+
+    for (const product of productsWithVariants) {
+      if (product.hasVariant && product.variants.length > 0) {
+        // For each variant, find total available quantity
+        for (const variant of product.variants) {
+          const totalStock = await inventory.aggregate([
+            {
+              $match: {
+                product: new mongoose.Types.ObjectId(product._id),
+                variant: new mongoose.Types.ObjectId(variant._id),
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                totalAvailableQuantity: { $sum: "$AvailableQuantity" },
+              },
+            },
+          ]);
+
+          variant.totalAvailableQuantity =
+            totalStock[0]?.totalAvailableQuantity || 0;
+        }
+
+        // Product-level total = sum of its variants
+        product.totalAvailableQuantity = product.variants.reduce(
+          (sum, v) => sum + (v.totalAvailableQuantity || 0),
+          0
+        );
+      } else {
+        // Non-variant product
+        const totalStock = await inventory.aggregate([
+          {
+            $match: {
+              product: new mongoose.Types.ObjectId(product._id),
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              totalAvailableQuantity: { $sum: "$AvailableQuantity" },
+            },
+          },
+        ]);
+
+        product.totalAvailableQuantity =
+          totalStock[0]?.totalAvailableQuantity || 0;
+      }
+    }
+
     const variantFilters = {};
     variantAttributesAggregation.forEach((attr) => {
       variantFilters[attr._id] = attr.values
@@ -698,7 +759,10 @@ export const getFilteredProducts = async (req, res) => {
 
 export const getMostWantedProducts = async (req, res) => {
   try {
-    const products = await Product.find({ productStatus: "published", visibility: "visible" }).lean();
+    const products = await Product.find({
+      productStatus: "published",
+      visibility: "visible",
+    }).lean();
 
     // Enrich products with default variant data
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
@@ -768,10 +832,14 @@ export const getMostWantedProducts = async (req, res) => {
 
 export const getNewArrivalProducts = async (req, res) => {
   try {
-    const products = await Product.find({ productStatus: "published", visibility: "visible" }).sort({ createdAt: -1 }).lean();
+    const products = await Product.find({
+      productStatus: "published",
+      visibility: "visible",
+    })
+      .sort({ createdAt: -1 })
+      .lean();
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
-    
     const productIds = enrichedProducts.map((p) => p._id);
 
     const reviewStats = await Review.aggregate([
@@ -816,7 +884,12 @@ export const getNewArrivalProducts = async (req, res) => {
 
 export const getBestSellingProducts = async (req, res) => {
   try {
-    const bestSellers = await Product.find({ productStatus: "published", visibility: "visible" }).sort({ orderCount: -1 }).lean();
+    const bestSellers = await Product.find({
+      productStatus: "published",
+      visibility: "visible",
+    })
+      .sort({ orderCount: -1 })
+      .lean();
     const enrichedProducts = await enrichProductsWithDefaultVariants(
       bestSellers
     );
@@ -862,20 +935,63 @@ export const getBestSellingProducts = async (req, res) => {
   }
 };
 
-
-
 export const getProductById = async (req, res) => {
   try {
     const product = await Product.findOne({ urlSlug: req.params.slug }).lean();
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // Fetch variants if present
     let variants = [];
+
+    // === Fetch variants if applicable ===
     if (product.hasVariant) {
       variants = await Variant.find({ productId: product._id }).lean();
+
+      // Add totalAvailableQuantity for each variant
+      for (const variant of variants) {
+        const stockAgg = await inventory.aggregate([
+          {
+            $match: {
+              product: new mongoose.Types.ObjectId(product._id),
+              variant: new mongoose.Types.ObjectId(variant._id),
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              totalAvailableQuantity: { $sum: "$AvailableQuantity" },
+            },
+          },
+        ]);
+
+        variant.totalAvailableQuantity =
+          stockAgg[0]?.totalAvailableQuantity || 0;
+      }
+
+      // Compute totalAvailableQuantity for product (sum of all variants)
+      product.totalAvailableQuantity = variants.reduce(
+        (sum, v) => sum + (v.totalAvailableQuantity || 0),
+        0
+      );
+    } else {
+      // === Non-variant product — sum directly from inventory ===
+      const stockAgg = await inventory.aggregate([
+        {
+          $match: {
+            product: new mongoose.Types.ObjectId(product._id),
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalAvailableQuantity: { $sum: "$AvailableQuantity" },
+          },
+        },
+      ]);
+
+      product.totalAvailableQuantity = stockAgg[0]?.totalAvailableQuantity || 0;
     }
 
-    // Aggregate reviews to calculate average rating and count
+    // === Aggregate reviews to calculate average rating and count ===
     const reviewStats = await Review.aggregate([
       { $match: { productId: product._id } },
       {
@@ -890,14 +1006,15 @@ export const getProductById = async (req, res) => {
     const averageRating = reviewStats.length ? reviewStats[0].averageRating : 0;
     const reviewCount = reviewStats.length ? reviewStats[0].reviewCount : 0;
 
+    // === Final response ===
     res.status(200).json({
       ...product,
       variants,
-      averageRating: Number(averageRating.toFixed(2)), // format to 2 decimals
+      averageRating: Number(averageRating.toFixed(2)),
       reviewCount,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Error fetching product details:", error);
     res.status(500).json({ message: "Server error fetching product details" });
   }
 };
@@ -921,7 +1038,9 @@ export const getProductSearchSuggestions = async (reg, res) => {
         { productDescription: regex },
       ],
     })
-      .select("productName sellingPrice thumbnail category urlSlug SKU productImages")
+      .select(
+        "productName sellingPrice thumbnail category urlSlug SKU productImages"
+      )
       .limit(10)
       .lean();
 
@@ -954,7 +1073,9 @@ export const getSearchSuggestions = async (req, res) => {
         { productDescription: regex },
       ],
     })
-      .select("productName sellingPrice mrpPrice thumbnail category urlSlug SKU productImages")
+      .select(
+        "productName sellingPrice mrpPrice thumbnail category urlSlug SKU productImages"
+      )
       .limit(10)
       .lean();
 
@@ -983,7 +1104,6 @@ export const getSearchSuggestions = async (req, res) => {
       brandsPromise,
     ]);
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
-
 
     // Return combined results categorized by entity type
     res.status(200).json({ enrichedProducts, categories, brands });
@@ -1083,8 +1203,6 @@ export const getNearbyProducts = async (req, res) => {
   }
 };
 
-
-
 // export const getFirstOrderAmount = async (req, res) => {
 //   try {
 //     const discount = await FirstOrder.findOne();
@@ -1108,5 +1226,3 @@ export const getNearbyProducts = async (req, res) => {
 //     });
 //   }
 // };
-
-

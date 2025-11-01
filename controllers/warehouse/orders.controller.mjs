@@ -1,10 +1,13 @@
 import DeliveryBoy from "../../models/DeliveryBoy.mjs";
+import inventory from "../../models/inventory.mjs";
 import Order from "../../models/Order.mjs";
 import mongoose from "mongoose";
 // import {
-//   createWarehouse,
-//   deliveryPartnerAPI,
-// } from "../../utils/deliveryApi.js";
+//   ensureClientWarehouse,
+//   createManifest,
+//   getManifestStatus,
+//   createPickupRequest,
+// } from "../../utils/delhiveryB2B.js";
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -79,125 +82,237 @@ export const getOrderById = async (req, res) => {
   }
 };
 
-// export const updateOrderStatus = async (req, res) => {
-//   try {
-//     const { status } = req.body;
-
-//     console.log(status,"statusstatusstatusstatusstatusstatusstatusstatus");
-
-//     const order = await Order.findById(req.params.id);
-
-//     if (!order) return res.status(404).json({ message: "Order not found" });
-
-//     order.orderStatus = status;
-//     await order.save();
-
-//     res.status(200).json({ message: "Order status updated", order });
-//   } catch (error) {
-//     console.error("Update Order Status Error:", error);
-//     res.status(500).json({ message: "Failed to update order status" });
-//   }
-// };
-
 export const updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
 
-    console.log(status, "<<< order status requested");
+    const order = await Order.findById(req.params.id)
+      .populate("allocatedWarehouse")
+      .populate("items.product", "productName hasVariant");
 
-    const order = await Order.findById(req.params.id).populate(
-      "allocatedWarehouse"
-    );
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    // if (status === "dispatched") {
-    //   if (
-    //     !order.allocatedWarehouse ||
-    //     order.warehouseAllocationStatus === "unallocated"
-    //   ) {
-    //     return res
-    //       .status(400)
-    //       .json({ message: "Please assign the warehouse before dispatching" });
-    //   }
+    //     //     // if (status === "dispatched") {
+    //     //     //   const wh = order.allocatedWarehouse;
+    //     //     //   const consignee = order.shippingAddress;
 
-    //   const warehouse = order.allocatedWarehouse;
-    //   const dropAddress = order.shippingAddress;
+    //     //     //   if (!wh) return res.status(400).json({ message: "Warehouse missing" });
+    //     //     //   if (!order.items?.length)
+    //     //     //     return res.status(400).json({ message: "Order has no items" });
 
-    //   /** 1. Create warehouse (pickup location) if not already registered */
-    //   const warehouseData = {
-    //     phone: warehouse.phone,
-    //     city: warehouse.city,
-    //     name: warehouse.name,
-    //     pin: warehouse.pin,
-    //     address: warehouse.addressLine1,
-    //     country: warehouse.country,
-    //     email: warehouse.email,
-    //     registered_name: warehouse.name,
-    //     // return_address: warehouse.returnAddress || warehouse.addressLine1,
-    //     addressLine1: warehouse.address.street,
-    //     addressLine2: `${warehouse.address.city} ${warehouse.address.state} ${warehouse.address.pinCode}`,
-    //     city: warehouse.address.city,
-    //     state: warehouse.address.state,
-    //     postalCode: warehouse.address.pinCode,
+    //     //     //   //  1. Create/Update warehouse
+    //     //     //   await ensureClientWarehouse({
+    //     //     //     name: wh.name,
+    //     //     //     pin_code: wh.address.pinCode,
+    //     //     //     city: wh.address.city,
+    //     //     //     state: wh.address.state,
+    //     //     //     country: wh.address.country || "India",
+    //     //     //     address_details: {
+    //     //     //       address: `${wh.address.street} ${wh.address.landmark || ""}`.trim(),
+    //     //     //       contact_person: wh.contactPerson || wh.name,
+    //     //     //       phone_number: wh.phone,
+    //     //     //       email: wh.email,
+    //     //     //     },
+    //     //     //     ret_address: {
+    //     //     //       pin: wh.returnAddress?.pin || wh.address.pinCode,
+    //     //     //       address: wh.returnAddress?.address || wh.address.street,
+    //     //     //       city: wh.returnAddress?.city || wh.address.city,
+    //     //     //       state: wh.returnAddress?.state || wh.address.state,
+    //     //     //       country: wh.returnAddress?.country || wh.address.country || "India",
+    //     //     //     },
+    //     //     //   });
 
-    //     // return_pin: warehouse.pin,
-    //     // return_city: warehouse.city,
-    //     // return_state: warehouse.state,
-    //     // return_country: warehouse.country || "India",
-    //   };
+    //     //     //   //  2. Prepare manifest-safe payloads
+    //     //     //   const weightG = Math.max(
+    //     //     //     100,
+    //     //     //     Math.round((order.packings?.packageWeight || 0.5) * 1000)
+    //     //     //   );
 
-    //   console.log(">>> Creating warehouse:", warehouseData);
-    //   const warehouseRes = await createWarehouse(warehouseData);
-    //   console.log(">>> Warehouse Response:", warehouseRes);
+    //     //     //   const invoices = [
+    //     //     //     {
+    //     //     //       ewaybill: "",
+    //     //     //       inv_num: order.invoiceNumber || `INV-${order.orderId}`,
+    //     //     //       inv_amt: order.finalAmount,
+    //     //     //       inv_qr_code: "",
+    //     //     //     },
+    //     //     //   ];
 
-    //   /** 2. Create shipment (order package) */
-    //   const shipmentData = {
-    //     shipments: [
-    //       {
-    //         order: order.orderId || `ORD-${Date.now()}`,
-    //         name: dropAddress.fullName || "Consignee",
-    //         phone: dropAddress.phone,
-    //         add: dropAddress.addressLine1,
-    //         pin: dropAddress.postalCode,
-    //         city: dropAddress.city,
-    //         state: dropAddress.state,
-    //         country: dropAddress.country,
-    //         products_desc: order.items.map((i) => i.product.name).join(", "),
-    //         weight: 0.5, // in KG
-    //         payment_mode: order.paymentMethod === "COD" ? "COD" : "Prepaid",
-    //         cod_amount: order.paymentMethod === "COD" ? order.totalAmount : 0,
-    //       },
-    //     ],
-    //     pickup_location: { name: warehouse.name }, // must match warehouse name
-    //   };
+    //     //     //   const shipment_details = [
+    //     //     //     {
+    //     //     //       order_id: order.orderId || `ORD-${Date.now()}`,
+    //     //     //       box_count: 1,
+    //     //     //       description: order.items
+    //     //     //         .map((i) => i.product?.productName || "Item")
+    //     //     //         .join(", "),
+    //     //     //       weight: weightG,
+    //     //     //       waybills: [],
+    //     //     //       master: false,
+    //     //     //     },
+    //     //     //   ];
 
-    //   console.log(">>> Sending shipment payload:", shipmentData);
-    //   const shipmentRes = await deliveryPartnerAPI(
-    //     "DELHIVERY",
-    //     "/api/cmu/create.json",
-    //     shipmentData
-    //   );
-    //   console.log(">>> Shipment Response:", shipmentRes);
+    //     //     //   const dimensions = [
+    //     //     //     {
+    //     //     //       box_count: 1,
+    //     //     //       length: Math.max(order.packings?.packageLength || 10, 1),
+    //     //     //       width: Math.max(order.packings?.packageWidth || 10, 1),
+    //     //     //       height: Math.max(order.packings?.packageHeight || 10, 1),
+    //     //     //     },
+    //     //     //   ];
 
-    //   const pickupData = {
-    //     pickup_time: "10:00",
-    //     pickup_date: new Date().toISOString().slice(0, 10),
-    //     pickup_location: warehouse.name,
-    //     expected_package_count: 1,
-    //   };
+    //     //     //   const billing_address = {
+    //     //     //     name: wh.contactPerson || wh.name,
+    //     //     //     company: wh.company || wh.name,
+    //     //     //     consignor: wh.name,
+    //     //     //     address: wh.address.street,
+    //     //     //     city: wh.address.city,
+    //     //     //     state: wh.address.state,
+    //     //     //     pin: String(wh.address.pinCode),
+    //     //     //     phone: wh.phone,
+    //     //     //     pan_number: wh.pan || "",
+    //     //     //     gst_number: wh.gst || "",
+    //     //     //   };
 
-    //   console.log(">>> Creating pickup request:", pickupData);
-    //   const pickupRes = await createPickup(pickupData);
-    //   console.log(">>> Pickup Response:", pickupRes);
-    // }
+    //     //     //   const dropoff_location = {
+    //     //     //     consignee_name: consignee.fullName,
+    //     //     //     address: `${consignee.addressLine1} ${
+    //     //     //       consignee.addressLine2 || ""
+    //     //     //     }`.trim(),
+    //     //     //     city: consignee.city,
+    //     //     //     state: consignee.state,
+    //     //     //     zip: String(consignee.postalCode),
+    //     //     //     phone: consignee.phone,
+    //     //     //     email: consignee.email || "",
+    //     //     //   };
 
+    //     //     //   //  3. Create Manifest
+    //     //     //   const manifestJob = await createManifest({
+    //     //     //     pickup_location_name: wh.name,
+    //     //     //     payment_mode: order.paymentMethod === "COD" ? "cod" : "prepaid",
+    //     //     //     cod_amount: order.paymentMethod === "COD" ? order.finalAmount : 0,
+    //     //     //     weight: Math.max((order.packings?.packageWeight || 0.5) * 1000, 100),
+    //     //     //     dropoff_location,
+    //     //     //     invoices,
+    //     //     //     shipment_details,
+    //     //     //     dimensions,
+    //     //     //     billing_address,
+    //     //     //   });
+
+    //     //     //   //  4. Poll job status for LRNs
+    //     //     //   const lrnInfo = await getManifestStatus(manifestJob.job_id);
+
+    //     //     //   //  5. Create Pickup request
+    //     //     //   const pickup_date = new Date().toISOString().slice(0, 10);
+    //     //     //   const pur = await createPickupRequest({
+    //     //     //     client_warehouse: wh.name,
+    //     //     //     pickup_date,
+    //     //     //     start_time: "10:00:00",
+    //     //     //     expected_package_count: 1,
+    //     //     //   });
+
+    //     //     //   //  6. Save order
+    //     //     //   order.orderStatus = "dispatched";
+    //     //     //   order.dispatches.push({
+    //     //     //     carrier: "Delhivery B2B",
+    //     //     //     toLocation: consignee.city,
+    //     //     //     totalPackages: 1,
+    //     //     //     totalWeight: weightG / 1000,
+    //     //     //     manifestStatus: "Requested",
+    //     //     //     trackingNumber: lrnInfo?.lrns?.[0] || null,
+    //     //     //   });
+    //     //     //   await order.save();
+
+    //     //     //   return res.status(200).json({
+    //     //     //     message: "Order dispatched & synced to Delhivery B2B",
+    //     //     //     manifest_job: manifestJob,
+    //     //     //     manifest_status: lrnInfo,
+    //     //     //     pickup_request: pur,
+    //     //     //     order,
+    //     //     //   });
+    //     //     // }
+
+    // ===== DISPATCH VALIDATION =====
+    if (status === "dispatched") {
+      if (!order.allocatedWarehouse) {
+        return res
+          .status(400)
+          .json({ message: "Cannot dispatch — no warehouse allocated." });
+      }
+
+      const warehouseId = order.allocatedWarehouse._id;
+      const insufficient = [];
+
+      // Check stock before committing any changes
+      for (const item of order.items) {
+        const { product, variant, quantity } = item;
+
+        const inventoryItem = await inventory.findOne({
+          warehouse: warehouseId,
+          product: product._id,
+          variant: variant || null,
+        });
+
+        if (!inventoryItem) {
+          insufficient.push({
+            product: product.productName,
+            reason: "No inventory record found",
+          });
+          continue;
+        }
+
+        if (inventoryItem.AvailableQuantity <= 0) {
+          insufficient.push({
+            product: product.productName,
+            reason: "Out of stock",
+          });
+        } else if (inventoryItem.AvailableQuantity < quantity) {
+          insufficient.push({
+            product: product.productName,
+            reason: `Only ${inventoryItem.AvailableQuantity} units left`,
+          });
+        }
+      }
+
+      // Stop if any product fails
+      if (insufficient.length > 0) {
+        return res.status(400).json({
+          message:
+            "Dispatch blocked. One or more items have insufficient stock.",
+          details: insufficient,
+        });
+      }
+
+      // ===== Deduct inventory now =====
+      for (const item of order.items) {
+        const { product, variant, quantity } = item;
+
+        const inventoryItem = await inventory.findOne({
+          warehouse: warehouseId,
+          product: product._id,
+          variant: variant || null,
+        });
+
+        inventoryItem.AvailableQuantity -= quantity;
+        inventoryItem.updatedAt = new Date();
+        await inventoryItem.save();
+      }
+    }
+
+    // ===== UPDATE ORDER STATUS =====
     order.orderStatus = status;
     await order.save();
 
-    res.status(200).json({ message: "Order status updated", order });
+    res
+      .status(200)
+      .json({ message: "Order status updated successfully", order });
   } catch (error) {
-    console.error("Update Order Status Error:", error);
-    res.status(500).json({ message: "Failed to update order status" });
+    console.error(
+      "Update Order Status Error:",
+      error?.response?.data || error.message
+    );
+    res.status(500).json({
+      message: "Failed to update order status",
+      error: error?.response?.data || error.message,
+    });
   }
 };
 
