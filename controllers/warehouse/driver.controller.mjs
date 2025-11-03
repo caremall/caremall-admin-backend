@@ -4,14 +4,18 @@ import { uploadBase64Image } from "../../utils/uploadImage.mjs";
 
 
 export const createDriver = async (req, res) => {
+  console.log("Create Driver Request Body:", req.body);
   try {
     const { name, location, vehicleNumber, image, notes } = req.body;
 
-    const warehouse =
-      req.user.assignedWarehouses?._id ||
-      (Array.isArray(req.user.assignedWarehouses) &&
-        req.user.assignedWarehouses.length > 0 &&
-        req.user.assignedWarehouses[0]._id);
+    let warehouse;
+    if (req.user.assignedWarehouses) {
+      if (req.user.assignedWarehouses._id) {
+        warehouse = req.user.assignedWarehouses._id;
+      } else if (Array.isArray(req.user.assignedWarehouses) && req.user.assignedWarehouses.length > 0) {
+        warehouse = req.user.assignedWarehouses[0]._id;
+      }
+    }
 
     console.log("Creating driver for warehouse:", warehouse);
 
@@ -21,16 +25,13 @@ export const createDriver = async (req, res) => {
         .json({ message: "Name, Vehicle Number, and Warehouse are required" });
     }
 
-    // Normalize input for comparison
-    const normalizedInput = vehicleNumber
-      .toUpperCase()
-      .replace(/\s+/g, "");
+    // Normalize vehicle number for duplicate check (remove spaces, uppercase)
+    const normalizedVehicleNumber = vehicleNumber.replace(/\s/g, '').toUpperCase();
 
     // Find any driver in the same warehouse with matching normalized vehicle number
     const existingDriver = await Driver.findOne({
       warehouse,
-      // Match vehicleNumber where removing spaces + uppercase = normalizedInput
-      vehicleNumber: { $regex: `^${normalizedInput}$`, $options: "i" }
+      vehicleNumberNormalized: normalizedVehicleNumber, // Check against normalized field
     });
 
     if (existingDriver) {
@@ -47,7 +48,8 @@ export const createDriver = async (req, res) => {
     const newDriver = new Driver({
       name,
       location,
-      vehicleNumber: vehicleNumber.trim(), // Save original
+      vehicleNumber: vehicleNumber.trim(), // Save original casing, trimmed
+      vehicleNumberNormalized: normalizedVehicleNumber, // Store normalized for fast lookups
       warehouse,
       notes,
       image: imageUrl,
@@ -61,7 +63,6 @@ export const createDriver = async (req, res) => {
     res.status(500).json({ message: "Failed to create driver" });
   }
 };
-
 // Get list of all drivers (optionally filtered by warehouse)
 export const getAllDrivers = async (req, res) => {
   try {
