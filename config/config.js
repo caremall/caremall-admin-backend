@@ -11,7 +11,7 @@ const getConfig = () => {
     // JWT_SECRET: process.env.JWT_SECRET,
 
     // Delivery Partners Configurations
-    DELHIVERY_API_KEY: process.env.DELHIVERY_API_KEY,
+    // DELHIVERY_API_KEY: process.env.DELHIVERY_API_KEY,
     DELHIVERY_API_URL:
       process.env.DELHIVERY_API_URL ||
       "https://staging-express.delhivery.com/api/v1/",
