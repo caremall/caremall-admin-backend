@@ -4,6 +4,7 @@ import Category from "../../models/Category.mjs";
 import Warehouse from "../../models/Warehouse.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 import Inventory from "../../models/inventory.mjs";
+import Order from "../../models/Order.mjs";
 
 // helper
 const calcLandingPrice = (baseVal, taxVal) => {
@@ -870,20 +871,32 @@ export const deleteProduct = async (req, res) => {
   try {
     const productId = req.params.id;
 
-    // First check if product exists
+    // 1. Verify product exists
     const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // Delete all variants associated with this product
+    // 2. Delete **all** variants that belong to this product
     const deleteVariantsResult = await Variant.deleteMany({
-      productId: productId,
+      product: productId,               // <-- correct field name
     });
 
-    // Then delete the product
+    // 3. Block deletion if the product appears in **any** order
+    const orderWithProduct = await Order.findOne({
+      "items.product": productId,       // <-- correct path inside array
+    });
+
+    if (orderWithProduct) {
+      return res.status(400).json({
+        message: "Cannot delete product – it is part of one or more orders",
+      });
+    }
+
+    // 4. Finally delete the product itself
     await Product.findByIdAndDelete(productId);
 
+    // 5. Success response
     res.status(200).json({
       message: "Product and its variants deleted successfully",
       deletedVariantsCount: deleteVariantsResult.deletedCount,
