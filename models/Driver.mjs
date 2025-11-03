@@ -18,12 +18,19 @@ const driverSchema = new Schema(
     vehicleNumber: {
       type: String,
       required: true,
-      trim: true,
+      trim: true, 
+    },
+    vehicleNumberNormalized: {
+      type: String,
+      required: true,
+      unique: false, 
+      index: true,
     },
     warehouse: {
       type: Schema.Types.ObjectId,
       ref: "Warehouse",
-      required: true, // optional, if every driver must be assigned a warehouse
+      required: true,
+      index: true, 
     },
     notes: {
       type: String,
