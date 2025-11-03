@@ -122,10 +122,10 @@ const productSchema = new Schema(
     weightUnit: { type: String, enum: ["g", "kg"], default: "g" },
 
     dimensions: {
-      length: Number,
-      width: Number,
-      height: Number,
-    },
+  length: { value: Number, unit: { type: String, enum: ["cm", "inch"], default: "cm" } },
+  width:  { value: Number, unit: { type: String, enum: ["cm", "inch"], default: "cm" } },
+  height: { value: Number, unit: { type: String, enum: ["cm", "inch"], default: "cm" } },
+},
     
     dimensionUnit: { type: String, enum: ["cm", "inch"], default: "cm" },
 
