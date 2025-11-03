@@ -1,11 +1,11 @@
 import { Router } from "express";
-import { getBestSellingProducts, getFilteredProducts, getMostWantedProducts, getNearbyProducts, getNewArrivalProducts, getProductById, getProductsByCategory,
+import { getBestSellingProducts, getFilteredProducts, getFilteredProductsUpdated, getMostWantedProducts, getNearbyProducts, getNewArrivalProducts, getProductById, getProductsByCategory,
      getProductSearchSuggestions, getSearchSuggestions } from "../../controllers/user/products.controller.mjs";
 
 const router = Router()
 
 
-router.get('/filter', getFilteredProducts)
+router.get('/filter', getFilteredProductsUpdated)
 router.get('/most-wanted', getMostWantedProducts)
 router.get('/new-arrivals', getNewArrivalProducts)
 router.get('/best-sellers', getBestSellingProducts)
