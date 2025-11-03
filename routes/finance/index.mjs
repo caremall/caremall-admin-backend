@@ -20,6 +20,7 @@ import soaRoutes from "./soa.routes.mjs";
 import ageingSummaryRoutes from "./ageingSummary.routes.mjs";
 import dayBookRoutes from "./dayBook.routes.mjs";
 import cashFlowRoutes from "./cashFlow.routes.mjs";
+import pdcRoutes from "./pdc.router.mjs";
 
 const financeRouter = Router();
 financeRouter.use("/auth", Auth);
@@ -42,6 +43,7 @@ financeRouter.use("/soa", soaRoutes);
 financeRouter.use("/ageing-summary", ageingSummaryRoutes);
 financeRouter.use("/day-book", dayBookRoutes);
 financeRouter.use("/cash-flow", cashFlowRoutes);
+financeRouter.use("/pdc", pdcRoutes);
 
 export default financeRouter;
 
