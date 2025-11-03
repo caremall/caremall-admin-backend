@@ -602,9 +602,7 @@ export const bulkAddToCart = async (req, res) => {
 //   }
 // };
 
-// // import mongoose from "mongoose";
-// import Cart from "../models/cart.js";
-// import Offer from "../models/offer.js"; // adjust import if needed
+
 
 export const getCart = async (req, res) => {
   try {
