@@ -15,6 +15,18 @@ export const createDriver = async (req, res) => {
         req.user.assignedWarehouses[0]._id);
         console.log("Creating driver for warehouse:", warehouse);
 
+     const existingVehicleNumber = await Driver.findOne({
+      warehouse,
+      vehicleNumber: vehicleNumber.trim(),
+    });
+    if(existingVehicleNumber){
+      return  res.status(400).json({ message: "Vehicle Number already exists in this warehouse" });
+    }
+    
+  
+
+
+
     if (!name || !vehicleNumber || !warehouse) {
       return res
         .status(400)
