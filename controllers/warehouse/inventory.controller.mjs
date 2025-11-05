@@ -1346,26 +1346,31 @@ export const createDamagedInventoryReport = async (req, res) => {
     // First, find or create the inventory record
     let inventoryRecord;
     try {
-      // Try to find existing inventory
       const Inventory = mongoose.model("Inventory");
-      inventoryRecord = await Inventory.findOne({
-        warehouse,
-        $or: [
-          { product: product || null },
-          { variant: variant || null }
-        ]
-      }).session(session);
 
-      // If inventory doesn't exist, create one
+      // Build correct query based on variant presence
+      const query = { warehouse };
+      if (variant) {
+        query.variant = variant;
+      } else {
+        query.product = product;
+        query.variant = null;
+      }
+
+      inventoryRecord = await Inventory.findOne(query).session(session);
+
+      // Create if not exists
       if (!inventoryRecord) {
-        inventoryRecord = await Inventory.create([{
+        const createDoc = {
           warehouse,
-          product: product || undefined,
-          variant: variant || undefined,
-          quantity: currentQuantity,
-          createdBy: req.user._id
-        }], { session });
-        inventoryRecord = inventoryRecord[0];
+          product: variant ? product : product,
+          variant: variant || null,
+          AvailableQuantity: currentQuantity,
+          createdBy: req.user._id,
+        };
+
+        const [created] = await Inventory.create([createDoc], { session });
+        inventoryRecord = created;
       }
     } catch (inventoryError) {
       console.error("Inventory lookup/creation error:", inventoryError);
@@ -1398,7 +1403,6 @@ export const createDamagedInventoryReport = async (req, res) => {
       variant: variant || undefined,
       previousQuantity: currentQuantity,
       quantityToReport,
-      // quantityChange: -quantityToReport,
       newQuantity: currentQuantity - quantityToReport,
       reasonForDamage: note,
       damageType,
@@ -1406,11 +1410,11 @@ export const createDamagedInventoryReport = async (req, res) => {
       updatedBy: req.user._id
     }], { session });
 
-    // Update the actual inventory quantity
+    
     await mongoose.model("Inventory").findByIdAndUpdate(
       inventoryRecord._id,
       { 
-        $inc: { quantity: -quantityToReport },
+        $inc: { AvailableQuantity: -quantityToReport },
         $set: { updatedBy: req.user._id }
       },
       { session }

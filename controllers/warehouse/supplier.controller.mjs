@@ -28,17 +28,27 @@ export const createSupplier = async (req, res) => {
         .json({ message: "User is not assigned to any warehouse" });
     }
 
-    // Check existing supplier by name scoped only to assigned warehouse
-    const existingSupplier = await Supplier.findOne({
-      supplierName: supplierName.trim(),
+    
+    const existingContactNumber = await Supplier.findOne({
+      contactNumber: contactNumber.trim(),
       warehouse: warehouseId,
     });
-    if (existingSupplier) {
-      return res.status(200).json({
-        message: "Supplier already exists in this warehouse",
+    if (existingContactNumber) {
+      return res.status(500).json({
+        message: "contact number already exists in this warehouse",
       });
     }
 
+    const existingEmail = await Supplier.findOne({
+      email: email.trim(),
+      warehouse: warehouseId,
+    });
+    if (existingEmail) {
+      return res.status(500).json({
+        message: "Email already exists in this warehouse",
+      });
+    }
+    
     let imageURL = "";
     if (image) {
       const uploaded = await uploadBase64Image(image, "supplier-images/");
@@ -71,6 +81,7 @@ export const createSupplier = async (req, res) => {
     });
   }
 };
+
 
 // Get all suppliers for the user's assigned warehouse
 export const getSuppliers = async (req, res) => {

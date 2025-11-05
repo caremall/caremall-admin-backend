@@ -19,6 +19,29 @@ export const createCarrier = async (req, res) => {
       });
     }
 
+    const existingEmail = await Carrier.findOne({
+      warehouse, 
+      email: email.toLowerCase(),
+    })
+     const exitingContactNumber = await Carrier.findOne({
+      warehouse,
+      phoneNumber: phoneNumber,
+    });
+    
+    if(existingEmail && exitingContactNumber){
+      return res.status(400).json({ message: "Email and Contact Number already exists in this warehouse" });
+    }
+    if (existingEmail) {
+      return res.status(400).json({ message: "Email already exists in this warehouse" });
+    }
+   
+    if (exitingContactNumber) {
+      return res
+        .status(400)
+        .json({ message: "Contact Number already exists in this warehouse" });
+    }
+    
+
     let imageUrl = "";
     if (image) {
       imageUrl = await uploadBase64Image(image, "carrier-images/");

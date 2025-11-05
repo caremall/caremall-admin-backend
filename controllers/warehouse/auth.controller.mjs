@@ -10,8 +10,8 @@ import Role from "../../models/Role.mjs";
 //⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡
 
 export const login = async (req, res) => {
-  console.log(req.body,"req.bodyreq.bodyreq.bodyreq.bodyreq.body");
-  
+  console.log(req.body, "req.bodyreq.bodyreq.bodyreq.bodyreq.body");
+
   try {
     const { email, password } = req.body;
     if (!email || !password)
@@ -21,27 +21,36 @@ export const login = async (req, res) => {
 
     const admin = await Admin.findOne({ email })
       .populate("role")
-      .populate("assignedWarehouses");
+      .populate({
+        path: "assignedWarehouses",
+        select: "name type", // include type to check delivery hub
+      });
 
     if (!admin) return res.status(404).json({ message: "Admin not found" });
 
-    if (!admin.assignedWarehouses) {
+    if (!admin.assignedWarehouses || admin.assignedWarehouses.length === 0) {
       return res
         .status(403)
         .json({ message: "Access denied: no warehouse assigned" });
     }
 
-    const role = await Role.findById(admin.role);
+    // 🚫 Check if any assigned warehouse has type 'delivery hub'
+    const hasDeliveryHub = admin.assignedWarehouses.some(
+      (wh) => wh.type === "delivery hub"
+    );
 
-    if (
-      !role ||
-      (role.name !== "warehouseManager")
-    ) {
+    if (hasDeliveryHub) {
+      return res.status(403).json({
+        message: "Delivery hub warehouse managers are not allowed to log in here",
+      });
+    }
+
+    const role = await Role.findById(admin.role);
+    if (!role || role.name !== "warehouseManager") {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
     const isMatch = await bcrypt.compare(password, admin.password);
-
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
 
@@ -56,14 +65,84 @@ export const login = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    admin.password = undefined; // Remove password from response
-    admin.encryptedPassword = undefined; // Remove encrypted password from response
+    admin.password = undefined;
+    admin.encryptedPassword = undefined;
 
-    if (admin.role !== "superAdmin") admin.populate("role");
+    res.status(200).json({
+      message: "Login successful",
+      manager: admin,
+      token,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 
-    res
-      .status(200)
-      .json({ message: "Login successful", manager: admin, token });
+export const deliveryHublogin = async (req, res) => {
+  console.log(req.body, "req.bodyreq.bodyreq.bodyreq.bodyreq.body");
+
+  try {
+    const { email, password } = req.body;
+    if (!email || !password)
+      return res
+        .status(400)
+        .json({ message: "Email and Password are required" });
+
+    const admin = await Admin.findOne({ email })
+      .populate("role")
+      .populate({
+        path: "assignedWarehouses",
+        select: "name type", // include type to check delivery hub
+      });
+
+    if (!admin) return res.status(404).json({ message: "Admin not found" });
+
+    if (!admin.assignedWarehouses || admin.assignedWarehouses.length === 0) {
+      return res
+        .status(403)
+        .json({ message: "Access denied: no warehouse assigned" });
+    }
+
+    // 🚫 Check if any assigned warehouse has type 'delivery hub'
+    const isDeliveryHub = admin.assignedWarehouses.some(
+      (wh) => wh.type === "delivery hub"
+    );
+
+    if (!isDeliveryHub) {
+      return res.status(403).json({
+        message: "State and District warehouse managers are not allowed to log in delivery hub warehouse",
+      });
+    }
+
+    const role = await Role.findById(admin.role);
+    if (!role || role.name !== "warehouseManager") {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const isMatch = await bcrypt.compare(password, admin.password);
+    if (!isMatch)
+      return res.status(401).json({ message: "Invalid credentials" });
+
+    const token = generateAccessToken(admin);
+    const refreshToken = generateRefreshToken(admin);
+
+    // Send refresh token in cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    admin.password = undefined;
+    admin.encryptedPassword = undefined;
+
+    res.status(200).json({
+      message: "Login successful",
+      manager: admin,
+      token,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Internal server error" });
@@ -121,7 +200,7 @@ export const getLoggedInAdmin = async (req, res) => {
       .select("-password -encryptedPassword -otp -otpExpires")
       .populate({
         path: "role",
-        select: "name permissions description status", 
+        select: "name permissions description status",
       })
       .populate({
         path: "assignedWarehouses",
@@ -129,9 +208,9 @@ export const getLoggedInAdmin = async (req, res) => {
       });
 
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "User not found" 
+        message: "User not found"
       });
     }
 
@@ -169,19 +248,19 @@ export const getLoggedInAdmin = async (req, res) => {
     });
   } catch (error) {
     console.error("Get Logged In User Details Error:", error);
-    
+
     // More specific error handling
     if (error.name === 'CastError') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Invalid user ID format" 
+        message: "Invalid user ID format"
       });
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       success: false,
       message: "Failed to get user details",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

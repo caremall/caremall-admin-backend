@@ -5,6 +5,7 @@ import {
     updateAddress,
     deleteAddress,
     setDefaultAddress,
+    getUserformattedAddresses,
 } from '../../controllers/user/addresses.controller.mjs';
 import { verifyUserToken } from '../../middlewares/verifyToken.mjs';
 import { catchAsyncErrors } from '../../utils/catchAsyncErrors.mjs';
@@ -24,7 +25,8 @@ router.post('/', catchAsyncErrors(addAddress));
  * @route GET /addresses
  * @desc Get all addresses for the logged-in user
  */
-router.get('/', getUserAddresses);
+router.get('/', getUserformattedAddresses);
+router.get('/mobile', getUserformattedAddresses);
 
 /**
  * @route PUT /addresses/:id

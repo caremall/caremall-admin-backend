@@ -71,7 +71,7 @@ export const getOrderById = async (req, res) => {
       .populate("items.product", "productName SKU productImages")
       .populate("allocatedWarehouse")
       .populate("allocatedBy")
-      .populate("items.variant", "variantName");
+      .populate("items.variant", "SKU images variantAttributes");
 
     if (!order) return res.status(404).json({ message: "Order not found" });
 

@@ -18,7 +18,7 @@ export const createOrder = async (req, res) => {
     const {
       items,
       shippingAddressId,
-      billingAddressId, 
+      billingAddressId,
       paymentMethod,
       totalAmount,
       couponCode,
@@ -71,10 +71,11 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: "Invalid total amount" });
     }
     let appliedCoupon = null;
+    let coupon = null;
 
     // Apply coupon via Offer model
     if (couponCode?.trim()) {
-      const coupon = await Coupon.findOne({
+      coupon = await Coupon.findOne({
         code: couponCode.trim(),
         active: true,
       });
@@ -116,10 +117,47 @@ export const createOrder = async (req, res) => {
         couponId: coupon._id,
         couponCode: coupon.code,
         discountValue: discount,
+        discountType: coupon.discountType,
+        discountValueOriginal: coupon.discountValue,
+        maxDiscountAmount: coupon.maxDiscountAmount,
       };
 
       // Increment usage count
       await Coupon.findByIdAndUpdate(coupon._id, { $inc: { usageCount: 1 } });
+    }
+
+    // Calculate refund amounts for items
+    let refundAdjustedItems = formattedItems.map((item) => ({ ...item }));
+
+    if (appliedCoupon && coupon) {
+      const totalItemCount = formattedItems.length;
+      const totalOriginalPrice = formattedItems.reduce((sum, item) => sum + item.totalPrice, 0);
+
+      if (coupon.discountType === "percentage") {
+        refundAdjustedItems = formattedItems.map((item) => {
+          const itemDiscountRatio = item.totalPrice / totalOriginalPrice;
+          const itemDiscount = appliedCoupon.discountValue * itemDiscountRatio;
+          const refundAmount = item.totalPrice - itemDiscount;
+          return {
+            ...item,
+            refundAmount: Number(refundAmount.toFixed(2))
+          };
+        });
+      } else if (coupon.discountType === "fixed") {
+        const perItemDiscount = appliedCoupon.discountValue / totalItemCount;
+        refundAdjustedItems = formattedItems.map((item) => {
+          const refundAmount = item.totalPrice - perItemDiscount;
+          return {
+            ...item,
+            refundAmount: Number(refundAmount.toFixed(2))
+          };
+        });
+      }
+    } else {
+      refundAdjustedItems = formattedItems.map((item) => ({
+        ...item,
+        refundAmount: Number(item.totalPrice.toFixed(2)),
+      }));
     }
 
     // Create Razorpay order
@@ -132,7 +170,7 @@ export const createOrder = async (req, res) => {
     // Create and save order in DB
     const order = await Order.create({
       user: req.user._id,
-      items: formattedItems,
+      items: refundAdjustedItems,
       shippingAddress: { ...shippingAddressDoc },
       billingAddress: { ...finalBillingAddress },
       paymentMethod,
@@ -165,6 +203,95 @@ export const createOrder = async (req, res) => {
   } catch (error) {
     console.error("Create Order Error:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getUserOrders = async (req, res) => {
+  try {
+    const orders = await Order.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .populate("items.product", "productName productImages urlSlug SKU")
+      .populate("items.variant", "variantAttributes SKU images");
+
+    // Process each order to ensure refundAmount is calculated correctly
+    const processedOrders = orders.map(order => {
+      const orderObj = order.toObject();
+
+      // If refundAmount doesn't exist or needs recalculation
+      if (!orderObj.items[0]?.refundAmount && orderObj.appliedCoupon?.couponCode) {
+        const coupon = orderObj.appliedCoupon;
+
+        if (coupon.discountType === "percentage") {
+          orderObj.items = orderObj.items.map((item) => ({
+            ...item,
+            refundAmount: Number((item.totalPrice - (item.totalPrice * coupon.discountValueOriginal) / 100).toFixed(2)),
+          }));
+        } else if (coupon.discountType === "fixed") {
+          const perItemDiscount = coupon.discountValueOriginal / orderObj.items.length;
+          orderObj.items = orderObj.items.map((item) => ({
+            ...item,
+            refundAmount: Number((item.totalPrice - perItemDiscount).toFixed(2)),
+          }));
+        }
+      } else if (!orderObj.items[0]?.refundAmount) {
+        // If no coupon was applied, refundAmount should equal totalPrice
+        orderObj.items = orderObj.items.map((item) => ({
+          ...item,
+          refundAmount: item.totalPrice,
+        }));
+      }
+
+      return orderObj;
+    });
+
+    res.status(200).json(processedOrders);
+  } catch (err) {
+    console.error("Get User Orders Error:", err);
+    res.status(500).json({ message: "Failed to fetch orders" });
+  }
+};
+
+export const getOrderById = async (req, res) => {
+  try {
+    const order = await Order.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    })
+      .populate("items.product", "productName productImages urlSlug SKU")
+      .populate("items.variant", "variantAttributes SKU images");
+
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    const orderObj = order.toObject();
+
+    // Ensure refundAmount is calculated correctly for single order
+    if (!orderObj.items[0]?.refundAmount && orderObj.appliedCoupon?.couponCode) {
+      const coupon = orderObj.appliedCoupon;
+
+      if (coupon.discountType === "percentage") {
+        orderObj.items = orderObj.items.map((item) => ({
+          ...item,
+          refundAmount: Number((item.totalPrice - (item.totalPrice * coupon.discountValueOriginal) / 100).toFixed(2)),
+        }));
+      } else if (coupon.discountType === "fixed") {
+        const perItemDiscount = coupon.discountValueOriginal / orderObj.items.length;
+        orderObj.items = orderObj.items.map((item) => ({
+          ...item,
+          refundAmount: Number((item.totalPrice - perItemDiscount).toFixed(2)),
+        }));
+      }
+    } else if (!orderObj.items[0]?.refundAmount) {
+      // If no coupon was applied, refundAmount should equal totalPrice
+      orderObj.items = orderObj.items.map((item) => ({
+        ...item,
+        refundAmount: item.totalPrice,
+      }));
+    }
+
+    res.status(200).json(orderObj);
+  } catch (err) {
+    console.error("Get Order Error:", err);
+    res.status(500).json({ message: "Failed to fetch order" });
   }
 };
 
@@ -272,37 +399,7 @@ export const verifyOrder = async (req, res) => {
 //   }
 // };
 
-export const getUserOrders = async (req, res) => {
-  try {
-    const orders = await Order.find({ user: req.user._id })
-      .sort({ createdAt: -1 })
-      .populate("items.product", "productName productImages urlSlug SKU")
-      .populate("items.variant", "variantAttributes SKU images");
 
-    res.status(200).json(orders);
-  } catch (err) {
-    console.error("Get User Orders Error:", err);
-    res.status(500).json({ message: "Failed to fetch orders" });
-  }
-};
-
-export const getOrderById = async (req, res) => {
-  try {
-    const order = await Order.findOne({
-      _id: req.params.id,
-      user: req.user._id,
-    })
-      .populate("items.product", "productName productImages urlSlug SKU")
-      .populate("items.variant", "variantAttributes SKU images");
-
-    if (!order) return res.status(404).json({ message: "Order not found" });
-
-    res.status(200).json(order);
-  } catch (err) {
-    console.error("Get Order Error:", err);
-    res.status(500).json({ message: "Failed to fetch order" });
-  }
-};
 
 export const cancelOrder = async (req, res) => {
   try {

@@ -4,6 +4,7 @@ import Category from "../../models/Category.mjs";
 import Warehouse from "../../models/Warehouse.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 import Inventory from "../../models/inventory.mjs";
+import Order from "../../models/Order.mjs";
 
 // helper
 const calcLandingPrice = (baseVal, taxVal) => {
@@ -31,8 +32,6 @@ const calcLandingPrice = (baseVal, taxVal) => {
 
 // controller
 export const createProduct = async (req, res) => {
-  // console.log(req.body.subcategory, "this is the subcategory");
-
   try {
     const {
       productName,
@@ -57,9 +56,15 @@ export const createProduct = async (req, res) => {
       productStatus,
       visibility,
       isFeatured,
-      isPreorder,
+      isPreOrder,
+      availableQuantity,
+      minimumQuantity,
+      reorderQuantity,
+      maximumQuantity,
+      warehouseLocation,
       weight,
-      dimensions,
+      weightUnit,
+      dimensions, // { length, width, height, lengthUnit, widthUnit, heightUnit }
       isFragile,
       shippingClass,
       packageType,
@@ -74,35 +79,27 @@ export const createProduct = async (req, res) => {
       addedToCartCount,
       wishlistCount,
       orderCount,
-      // Quantity fields
-      minimumQuantity,
-      reorderQuantity,
-      maximumQuantity,
+      warehouse,
       variants = [],
     } = req.body;
 
-    // Validate required fields
+    // ---------- VALIDATION ----------
     const missingFields = [];
-    if (!productName?.trim()) missingFields.push("productName");
-    if (!shortDescription?.trim()) missingFields.push("shortDescription");
-    if (!productDescription?.trim()) missingFields.push("productDescription");
+    if (!productName || productName.trim() === "") missingFields.push("productName");
+    if (!shortDescription || shortDescription.trim() === "") missingFields.push("shortDescription");
+    if (!productDescription || productDescription.trim() === "") missingFields.push("productDescription");
     if (!brand) missingFields.push("brand");
     if (!category) missingFields.push("category");
-    if (!urlSlug?.trim()) missingFields.push("urlSlug");
+    if (!urlSlug || urlSlug.trim() === "") missingFields.push("urlSlug");
     if (typeof hasVariant !== "boolean") missingFields.push("hasVariant");
 
     if (hasVariant === false) {
-      if (!SKU?.trim()) missingFields.push("SKU");
-      if (!productImages || productImages.length === 0)
-        missingFields.push("productImages");
-      if (costPrice === undefined || costPrice === null)
-        missingFields.push("costPrice");
-      if (sellingPrice === undefined || sellingPrice === null)
-        missingFields.push("sellingPrice");
-      if (mrpPrice === undefined || mrpPrice === null)
-        missingFields.push("mrpPrice");
+      if (!SKU) missingFields.push("SKU");
+      if (!productImages || productImages.length === 0) missingFields.push("productImages");
+      if (costPrice === undefined) missingFields.push("costPrice");
+      if (sellingPrice === undefined) missingFields.push("sellingPrice");
+      if (mrpPrice === undefined) missingFields.push("mrpPrice");
     }
-
     if (hasVariant === true && !productType) missingFields.push("productType");
 
     if (missingFields.length > 0) {
@@ -111,248 +108,172 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    // Check for duplicate product name and slug
-    const [existingProductName, existingSlug] = await Promise.all([
-      Product.findOne({ productName: productName.trim() }),
-      Product.findOne({ urlSlug: urlSlug.trim() }),
-    ]);
-
-    if (existingProductName) {
+    if (await Product.findOne({ productName: productName.trim() })) {
       return res.status(400).json({ message: "Product name is already taken" });
     }
-    if (existingSlug) {
+    if (await Product.findOne({ urlSlug: urlSlug.trim() })) {
       return res.status(400).json({ message: "Slug is already taken" });
     }
 
-    // Check for duplicate SKU and barcode for non-variant products
     if (!hasVariant) {
-      const skuBarcodeChecks = [];
-
-      if (SKU?.trim()) {
-        skuBarcodeChecks.push(Product.findOne({ SKU: SKU.trim() }));
+      if (SKU && SKU.trim() !== "" && (await Product.findOne({ SKU: SKU.trim() }))) {
+        return res.status(400).json({ message: "This SKU is already in use" });
       }
-      if (barcode?.trim()) {
-        skuBarcodeChecks.push(Product.findOne({ barcode: barcode.trim() }));
-      }
-
-      if (skuBarcodeChecks.length > 0) {
-        const [existingSKU, existingBarcode] = await Promise.all(
-          skuBarcodeChecks
-        );
-
-        if (existingSKU) {
-          return res
-            .status(400)
-            .json({ message: "This SKU is already in use" });
-        }
-        if (existingBarcode) {
-          return res
-            .status(400)
-            .json({ message: "This Barcode is already in use" });
-        }
+      if (barcode && barcode.trim() !== "" && (await Product.findOne({ barcode: barcode.trim() }))) {
+        return res.status(400).json({ message: "This Barcode is already in use" });
       }
     }
 
-    // Check for duplicate variant SKU and barcode
-    if (hasVariant && Array.isArray(variants) && variants.length > 0) {
-      const variantChecks = [];
-
+    if (hasVariant && Array.isArray(variants)) {
       for (const variant of variants) {
-        if (variant.SKU?.trim()) {
-          variantChecks.push(Variant.findOne({ SKU: variant.SKU.trim() }));
+        if (!variant.SKU || variant.SKU.trim() === "") {
+          return res.status(400).json({ message: "Each variant must have a valid SKU." });
         }
-        if (variant.barcode?.trim()) {
-          variantChecks.push(
-            Variant.findOne({ barcode: variant.barcode.trim() })
-          );
+        if (variant.SKU && (await Variant.findOne({ SKU: variant.SKU.trim() }))) {
+          return res.status(400).json({ message: `Variant SKU '${variant.SKU}' is already in use` });
         }
-      }
-
-      if (variantChecks.length > 0) {
-        const results = await Promise.all(variantChecks);
-
-        for (let i = 0; i < results.length; i += 2) {
-          const existingVariantSKU = results[i];
-          const existingVariantBarcode = results[i + 1];
-
-          if (existingVariantSKU) {
-            const variantIndex = Math.floor(i / 2);
-            return res.status(400).json({
-              message: `Variant SKU '${variants[variantIndex].SKU}' is already in use`,
-            });
-          }
-          if (existingVariantBarcode) {
-            const variantIndex = Math.floor(i / 2);
-            return res.status(400).json({
-              message: `Variant Barcode '${variants[variantIndex].barcode}' is already in use`,
-            });
-          }
+        if (variant.barcode && (await Variant.findOne({ barcode: variant.barcode.trim() }))) {
+          return res.status(400).json({ message: `Variant Barcode '${variant.barcode}' is already in use` });
         }
       }
     }
 
-    // Upload product images for non-variant products
+    // ---------- IMAGES ----------
     let uploadedImageUrls = [];
-    if (productImages && !hasVariant) {
-      try {
-        uploadedImageUrls = Array.isArray(productImages)
-          ? await uploadBase64Images(productImages, "products/")
-          : await uploadBase64Images([productImages], "products/");
-      } catch (uploadError) {
-        console.error("Image upload error:", uploadError);
-        return res.status(500).json({
-          message: "Failed to upload product images",
-          error: uploadError.message,
-        });
-      }
+    if (productImages) {
+      uploadedImageUrls = Array.isArray(productImages)
+        ? await uploadBase64Images(productImages, "products/")
+        : await uploadBase64Images([productImages], "products/");
     }
 
-    // Prepare product data - ensure no null values
+    // ---------- TRANSFORM DIMENSIONS TO NESTED FORMAT ----------
+    const dim = dimensions || {};
+
+    const processedDimensions = {
+      length: {
+        value: Number(dim.length) || 0,
+        unit: (dim.lengthUnit || "cm").toLowerCase()
+      },
+      width: {
+        value: Number(dim.width) || 0,
+        unit: (dim.widthUnit || "cm").toLowerCase()
+      },
+      height: {
+        value: Number(dim.height) || 0,
+        unit: (dim.heightUnit || "cm").toLowerCase()
+      }
+    };
+
+    // ---------- PRODUCT DATA ----------
     const productData = {
       productName: productName.trim(),
       shortDescription: shortDescription.trim(),
       productDescription: productDescription.trim(),
-      warrantyPolicy: warrantyPolicy || "",
+      warrantyPolicy,
       brand,
       category,
-      subcategory: subcategory || undefined,
+      subcategory,
       hasVariant,
-      productType: productType || undefined,
-      SKU: hasVariant ? undefined : SKU?.trim() || "",
-      barcode: hasVariant ? undefined : barcode?.trim() || "",
+      productType,
+      SKU: hasVariant ? undefined : SKU ? SKU.trim() : undefined,
+      barcode: hasVariant ? undefined : barcode ? barcode.trim() : undefined,
       defaultVariant: defaultVariant || undefined,
       productImages: hasVariant ? undefined : uploadedImageUrls,
       tags: Array.isArray(tags) ? tags : [],
-      costPrice: hasVariant ? undefined : costPrice || 0,
-      sellingPrice: hasVariant ? undefined : sellingPrice || 0,
-      mrpPrice: hasVariant ? undefined : mrpPrice || 0,
-      discountPercent: discountPercent || 0,
-      taxRate: taxRate || 0,
+      costPrice: hasVariant ? undefined : costPrice,
+      sellingPrice: hasVariant ? undefined : sellingPrice,
+      mrpPrice: hasVariant ? undefined : mrpPrice,
+      discountPercent,
+      taxRate,
       productStatus: productStatus || "draft",
       visibility: visibility || "visible",
-      isFeatured: Boolean(isFeatured),
-      isPreOrder: Boolean(isPreorder),
-      weight: weight || 0,
-      dimensions: dimensions || { length: 0, width: 0, height: 0 },
-      isFragile: Boolean(isFragile),
-      shippingClass: shippingClass || "",
-      packageType: packageType || "",
-      quantityPerBox: quantityPerBox || 0,
-      supplierId: supplierId || "",
-      affiliateId: affiliateId || "",
+      isFeatured: !!isFeatured,
+      isPreOrder: !!isPreOrder,
+      availableQuantity,
+      minimumQuantity,
+      reorderQuantity,
+      maximumQuantity,
+      weight,
+      weightUnit: weightUnit?.toLowerCase() === "kg" ? "kg" : "g",
+      dimensions: processedDimensions,  // Now matches schema
+      isFragile,
+      shippingClass,
+      packageType,
+      quantityPerBox,
+      supplierId,
+      affiliateId,
       externalLinks: Array.isArray(externalLinks) ? externalLinks : [],
-      metaTitle: metaTitle || "",
-      metaDescription: metaDescription || "",
+      metaTitle,
+      metaDescription,
       urlSlug: urlSlug.trim(),
-      viewsCount: viewsCount || 0,
-      addedToCartCount: addedToCartCount || 0,
-      wishlistCount: wishlistCount || 0,
-      orderCount: orderCount || 0,
-      // Quantity fields
-      minimumQuantity: minimumQuantity || 0,
-      reorderQuantity: reorderQuantity || 0,
-      maximumQuantity: maximumQuantity || 0,
+      viewsCount,
+      addedToCartCount,
+      wishlistCount,
+      orderCount,
+      warehouse: warehouse || undefined,
     };
 
-    // Remove undefined fields
-    Object.keys(productData).forEach((key) => {
-      if (productData[key] === undefined) {
-        delete productData[key];
-      }
-    });
+    // ---------- CALCULATE landingSellPrice FOR PRODUCT ----------
+    if (!hasVariant) {
+      const base = sellingPrice ?? 0;
+      const tax = taxRate ? (base * taxRate) / 100 : 0;
+      productData.landingSellPrice = Math.ceil(base + tax);
+    }
 
-    // Create product
     const newProduct = await Product.create(productData);
 
+    // ---------- VARIANTS ----------
     let createdVariants = [];
-
-    // Handle variants if exists
     if (hasVariant && Array.isArray(variants) && variants.length > 0) {
-      try {
-        const variantDocs = await Promise.all(
-          variants.map(async (variant) => {
-            let uploadedVariantImages = [];
-            if (variant.images && variant.images.length > 0) {
-              uploadedVariantImages = await uploadBase64Images(
-                variant.images,
-                "variant-images/"
-              );
-            }
+      const variantDocs = await Promise.all(
+        variants.map(async (variant) => {
+          let uploadedVariantImages = [];
+          if (variant.images && variant.images.length > 0) {
+            uploadedVariantImages = await uploadBase64Images(variant.images, "variant-images/");
+          }
 
-            const variantData = {
-              productId: newProduct._id,
-              SKU: variant.SKU?.trim() || "",
-              barcode: variant.barcode?.trim() || "",
-              costPrice: variant.costPrice || 0,
-              sellingPrice: variant.sellingPrice || 0,
-              mrpPrice: variant.mrpPrice || 0,
-              discountPercent: variant.discountPercent || 0,
-              taxRate: variant.taxRate || 0,
-              images: uploadedVariantImages,
-              isDefault: Boolean(variant.isDefault),
-              // Variant quantity fields
-              minimumQuantity: variant.minimumQuantity || 0,
-              reorderQuantity: variant.reorderQuantity || 0,
-              maximumQuantity: variant.maximumQuantity || 0,
-              variantAttributes: Array.isArray(variant.variantAttributes)
-                ? variant.variantAttributes
-                : [],
-            };
+          const base = variant.sellingPrice ?? 0;
+          const tax = variant.taxRate ? (base * variant.taxRate) / 100 : 0;
+          return {
+            ...variant,
+            SKU: variant.SKU.trim(),
+            barcode: variant.barcode?.trim(),
+            images: uploadedVariantImages,
+            productId: newProduct._id,
+            landingSellPrice: Math.ceil(base + tax),
+          };
+        })
+      );
 
-            // Remove undefined fields
-            Object.keys(variantData).forEach((key) => {
-              if (variantData[key] === undefined) {
-                delete variantData[key];
-              }
-            });
+      createdVariants = await Variant.insertMany(variantDocs);
 
-            return variantData;
-          })
-        );
-
-        createdVariants = await Variant.insertMany(variantDocs);
-
-        // Set default variant if exists
-        const defaultVariantDoc = createdVariants.find((v) => v.isDefault);
-        if (defaultVariantDoc) {
-          newProduct.defaultVariant = defaultVariantDoc._id;
-          await newProduct.save();
-        }
-      } catch (variantError) {
-        await Product.findByIdAndDelete(newProduct._id);
-        if (createdVariants.length > 0) {
-          await Variant.deleteMany({
-            _id: { $in: createdVariants.map((v) => v._id) },
-          });
-        }
-        console.error("Variant creation error:", variantError);
-        return res.status(500).json({
-          message: "Failed to create variants",
-          error: variantError.message,
-        });
+      const defaultVariantDoc = createdVariants.find((v) => v.isDefault);
+      if (defaultVariantDoc) {
+        newProduct.defaultVariant = defaultVariantDoc._id;
+        await newProduct.save();
       }
     }
 
-    // Populate the response with necessary data
-    const populatedProduct = await Product.findById(newProduct._id)
-      .populate("brand")
-      .populate("category")
-      .populate("subcategory")
-      .populate("productType")
-      .populate("defaultVariant");
+    // ---------- RESPONSE: FLATTEN DIMENSIONS FOR FRONTEND ----------
+    const responseProduct = newProduct.toObject();
+
+    responseProduct.dimensions = {
+      length: responseProduct.dimensions.length.value,
+      lengthUnit: responseProduct.dimensions.length.unit,
+      width: responseProduct.dimensions.width.value,
+      widthUnit: responseProduct.dimensions.width.unit,
+      height: responseProduct.dimensions.height.value,
+      heightUnit: responseProduct.dimensions.height.unit,
+    };
 
     res.status(201).json({
       success: true,
       message: "Product created successfully",
-      product: populatedProduct,
-      variants: createdVariants.length > 0 ? createdVariants : undefined,
+      product: responseProduct,
     });
   } catch (err) {
     console.error("Create product error:", err);
-    res.status(500).json({
-      message: "Failed to create product",
-      error: err.message,
-    });
+    res.status(500).json({ message: "Failed to create product", error: err.message });
   }
 };
 
@@ -418,8 +339,6 @@ export const getAllProducts = async (req, res) => {
 };
 
 export const getProductBySlug = async (req, res) => {
-  // console.log("ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss");
-  // console.log("afdoihdaifdhaifhaifhaifhd");
   try {
     const product = await Product.findOne({
       urlSlug: req.params.slug,
@@ -440,47 +359,41 @@ export const getProductBySlug = async (req, res) => {
       variants = await Variant.find({ productId: product._id });
     }
 
-    // Check if productType is populated or null
+    // Convert to plain object
+    const responseProduct = product.toObject();
+
+    // Flatten dimensions for frontend
+    responseProduct.dimensions = {
+      length: responseProduct.dimensions.length.value,
+      lengthUnit: responseProduct.dimensions.length.unit,
+      width: responseProduct.dimensions.width.value,
+      widthUnit: responseProduct.dimensions.width.unit,
+      height: responseProduct.dimensions.height.value,
+      heightUnit: responseProduct.dimensions.height.unit,
+    };
+
+    // Debug productType
     const productTypeStatus = product.productType ? "POPULATED" : "NULL/EMPTY";
-    const warehouseStatus = product.warehouse ? "POPULATED" : "NULL/EMPTY";
-
-    console.log("=== PRODUCT TYPE & WAREHOUSE STATUS ===");
-    // console.log("Product Type:", productTypeStatus);
-    // console.log("Warehouse:", warehouseStatus);
-
+    console.log("=== PRODUCT TYPE STATUS ===");
+    console.log("Product Type:", productTypeStatus);
     if (product.productType) {
-      // console.log("Product Type Data:", {
-      //   id: product.productType._id,
-      //   name: product.productType.name,
-      //   attributes: product.productType.attributes,
-      // });
+      console.log("Product Type Data:", {
+        id: product.productType._id,
+        name: product.productType.name,
+        attributes: product.productType.attributes,
+      });
     } else {
       console.log("No product type found for this product");
     }
-
-    if (product.warehouse) {
-      // console.log("Warehouse Data:", {
-      //   id: product.warehouse._id,
-      //   name: product.warehouse.name,
-      //   location: product.warehouse.location,
-      //   // Add other warehouse fields you want to see
-      // });
-    } else {
-      console.log("No warehouse assigned to this product");
-    }
-
-    // console.log("Raw warehouse field from product:", product.warehouse);
     console.log("===========================");
 
     res.status(200).json({
       success: true,
-      product,
+      product: responseProduct,
       variants: product.hasVariant ? variants : [],
       debug: {
-        productTypeStatus: productTypeStatus,
+        productTypeStatus,
         productType: product.productType,
-        warehouseStatus: warehouseStatus,
-        warehouse: product.warehouse,
       },
     });
   } catch (err) {
@@ -489,9 +402,12 @@ export const getProductBySlug = async (req, res) => {
   }
 };
 
+
 // Assumes Product and Variant models are already imported, and uploadBase64Images util exists
+
 export const updateProduct = async (req, res) => {
   try {
+    const productId = req.params.id;
     const {
       productName,
       shortDescription,
@@ -521,7 +437,8 @@ export const updateProduct = async (req, res) => {
       reorderQuantity,
       maximumQuantity,
       weight,
-      dimensions,
+      weightUnit,
+      dimensions,               
       isFragile,
       shippingClass,
       packageType,
@@ -536,42 +453,23 @@ export const updateProduct = async (req, res) => {
       addedToCartCount,
       wishlistCount,
       orderCount,
+      warehouse,
       variants = [],
     } = req.body;
-    console.log(req.body, "req.body=============================");
 
-    const warehouse = req.user?.assignedWarehouses?._id;
-    const productId = req.params.id;
-
-    // Early validation for numeric fields
-    if (
-      (sellingPrice !== undefined && isNaN(Number(sellingPrice))) ||
-      (taxRate !== undefined && isNaN(Number(taxRate))) ||
-      (costPrice !== undefined && isNaN(Number(costPrice))) ||
-      (mrpPrice !== undefined && isNaN(Number(mrpPrice)))
-    ) {
-      return res.status(400).json({
-        message: "Invalid numeric values provided for pricing fields",
-      });
-    }
-
-    // Find the product to update
+    // ---------- FIND EXISTING PRODUCT ----------
     const existingProduct = await Product.findById(productId);
     if (!existingProduct) {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // --- Uniqueness checks ---
+    // ---------- UNIQUENESS CHECKS ----------
     if (productName && productName.trim() !== existingProduct.productName) {
       const dup = await Product.findOne({
         productName: productName.trim(),
         _id: { $ne: productId },
       });
-      if (dup) {
-        return res
-          .status(400)
-          .json({ message: "Product name is already taken" });
-      }
+      if (dup) return res.status(400).json({ message: "Product name is already taken" });
     }
 
     if (urlSlug && urlSlug.trim().toLowerCase() !== existingProduct.urlSlug) {
@@ -579,50 +477,31 @@ export const updateProduct = async (req, res) => {
         urlSlug: urlSlug.trim().toLowerCase(),
         _id: { $ne: productId },
       });
-      if (dup) {
-        return res.status(400).json({ message: "URL slug is already taken" });
+      if (dup) return res.status(400).json({ message: "URL slug is already taken" });
+    }
+
+    if (hasVariant === false) {
+      if (SKU && SKU.trim() !== existingProduct.SKU) {
+        const dup = await Product.findOne({
+          SKU: SKU.trim(),
+          _id: { $ne: productId },
+        });
+        if (dup) return res.status(400).json({ message: "This SKU is already in use" });
+      }
+      if (barcode && barcode.trim() !== existingProduct.barcode) {
+        const dup = await Product.findOne({
+          barcode: barcode.trim(),
+          _id: { $ne: productId },
+        });
+        if (dup) return res.status(400).json({ message: "This Barcode is already in use" });
       }
     }
 
-    if (hasVariant === false && SKU && SKU.trim() !== existingProduct.SKU) {
-      const dup = await Product.findOne({
-        SKU: SKU.trim(),
-        _id: { $ne: productId },
-      });
-      if (dup) {
-        return res.status(400).json({ message: "This SKU is already in use" });
-      }
-    }
-
-    if (
-      hasVariant === false &&
-      barcode &&
-      barcode.trim() !== existingProduct.barcode
-    ) {
-      const dup = await Product.findOne({
-        barcode: barcode.trim(),
-        _id: { $ne: productId },
-      });
-      if (dup) {
-        return res
-          .status(400)
-          .json({ message: "This Barcode is already in use" });
-      }
-    }
-
-    // --- Process images for non-variant product ---
+    // ---------- HANDLE PRODUCT IMAGES ----------
     let finalProductImages = existingProduct.productImages || [];
-    if (
-      productImages &&
-      Array.isArray(productImages) &&
-      productImages.length > 0 &&
-      hasVariant === false
-    ) {
+    if (productImages && productImages.length > 0 && hasVariant === false) {
       const promises = productImages.map(async (img) => {
-        if (
-          typeof img === "string" &&
-          /^data:image\/[a-zA-Z]+;base64,/.test(img)
-        ) {
+        if (typeof img === "string" && /^data:image\/[a-zA-Z]+;base64,/.test(img)) {
           const uploaded = await uploadBase64Images([img], "products/");
           return uploaded[0];
         }
@@ -631,238 +510,200 @@ export const updateProduct = async (req, res) => {
       finalProductImages = (await Promise.all(promises)).flat().filter(Boolean);
     }
 
-    // --- Build updateFields safely ---
-    const updateFields = {};
-
-    const validatedSellingPrice =
-      sellingPrice !== undefined && !isNaN(Number(sellingPrice))
-        ? Number(sellingPrice)
-        : 0;
-    const validatedMrpPrice =
-      mrpPrice !== undefined && !isNaN(Number(mrpPrice)) ? Number(mrpPrice) : 0;
-    const validatedTaxRate =
-      taxRate !== undefined && !isNaN(Number(taxRate)) ? Number(taxRate) : 0;
-
-    // Ensure landing price is valid
-    const landingPrice = calcLandingPrice(
-      validatedSellingPrice,
-      validatedTaxRate
-    );
-    updateFields.landingSellPrice = landingPrice;
-
-    // Proceed to update other fields based on the validated values
-    if (productName) updateFields.productName = productName.trim();
-    if (shortDescription)
-      updateFields.shortDescription = shortDescription.trim();
-    if (productDescription)
-      updateFields.productDescription = productDescription.trim();
-    if (warrantyPolicy) updateFields.warrantyPolicy = warrantyPolicy;
-    if (brand) updateFields.brand = brand;
-    if (category) updateFields.category = category;
-    if (subcategory) updateFields.subcategory = subcategory;
-    if (hasVariant !== undefined) updateFields.hasVariant = Boolean(hasVariant);
-
-    // Handle non-variant product fields
-    if (!hasVariant) {
-      updateFields.productType = null;
-      updateFields.defaultVariant = null;
-      if (SKU) updateFields.SKU = SKU.trim();
-      if (barcode) updateFields.barcode = barcode.trim();
-      if (productImages) updateFields.productImages = finalProductImages;
-      if (costPrice) updateFields.costPrice = validatedSellingPrice; // Fallback to validated selling price
-      if (sellingPrice) updateFields.sellingPrice = validatedSellingPrice;
-      if (mrpPrice) updateFields.mrpPrice = validatedMrpPrice;
-    }
-
-    // Handle variant fields (check for duplicate SKUs and update if variant exists)
-    // --- Variant processing ---
-    if (hasVariant && Array.isArray(variants) && variants.length > 0) {
-      // Delete variants that are in the database but not in the updated variants list
-      const variantSKUs = variants.map((variant) => variant.SKU.trim());
-
-      // Find variants that are associated with this product but not in the updated list
-      const variantsToDelete = await Variant.find({
-        productId,
-        SKU: { $nin: variantSKUs },
-      });
-
-      // Delete the variants not present in the updated list
-      const deletedVariants = await Variant.deleteMany({
-        productId,
-        SKU: { $nin: variantSKUs },
-      });
-
-      console.log("Deleted Variants:", deletedVariants);
-
-      // Now, iterate over the updated variants to process or create new ones
-      for (const variant of variants) {
-        // Check if variant SKU already exists
-        const existingVariant = await Variant.findOne({
-          SKU: variant.SKU.trim(),
-          productId,
-        });
-
-        if (existingVariant) {
-          // If SKU exists, update the existing variant
-          if (variant.SKU !== existingVariant.SKU) {
-            return res.status(400).json({ message: "You Can't Change SKU" });
-          }
-
-          // Process variant data and update the variant
-          const variantData = {
-            variantAttributes: variant.variantAttributes || [],
-            barcode: variant.barcode ? variant.barcode.trim() : undefined,
-            costPrice: Number(variant.costPrice),
-            sellingPrice: Number(variant.sellingPrice),
-            mrpPrice: Number(variant.mrpPrice),
-            landingSellPrice: calcLandingPrice(
-              variant.sellingPrice,
-              variant.taxRate
-            ),
-            discountPercent: variant.discountPercent || 0,
-            taxRate: variant.taxRate || 0,
-            images: variant.images || [],
-            isDefault: Boolean(variant.isDefault),
-            minimumQuantity: variant.minimumQuantity || 0,
-            reorderQuantity: variant.reorderQuantity || 0,
-            maximumQuantity: variant.maximumQuantity || 0,
-          };
-
-          await Variant.findByIdAndUpdate(existingVariant._id, variantData, {
-            new: true,
-            runValidators: true,
-          });
-        } else {
-          // Create a new variant if SKU doesn't exist
-          const variantData = {
-            productId,
-            variantAttributes: variant.variantAttributes || [],
-            SKU: variant.SKU.trim(),
-            barcode: variant.barcode ? variant.barcode.trim() : undefined,
-            costPrice: Number(variant.costPrice),
-            sellingPrice: Number(variant.sellingPrice),
-            mrpPrice: Number(variant.mrpPrice),
-            landingSellPrice: calcLandingPrice(
-              variant.sellingPrice,
-              variant.taxRate
-            ),
-            discountPercent: variant.discountPercent || 0,
-            taxRate: variant.taxRate || 0,
-            images: variant.images || [],
-            isDefault: Boolean(variant.isDefault),
-            minimumQuantity: variant.minimumQuantity || 0,
-            reorderQuantity: variant.reorderQuantity || 0,
-            maximumQuantity: variant.maximumQuantity || 0,
-          };
-
-          await Variant.create(variantData);
+    // ---------- TRANSFORM DIMENSIONS (FLAT → NESTED) ----------
+    let processedDimensions = existingProduct.dimensions; // keep old if not sent
+    if (dimensions !== undefined) {
+      const d = dimensions || {};
+      processedDimensions = {
+        length: {
+          value: Number(d.length) || 0,
+          unit: (d.lengthUnit || "cm").toLowerCase()
+        },
+        width: {
+          value: Number(d.width) || 0,
+          unit: (d.widthUnit || "cm").toLowerCase()
+        },
+        height: {
+          value: Number(d.height) || 0,
+          unit: (d.heightUnit || "cm").toLowerCase()
         }
+      };
+    }
+
+    // ---------- BUILD UPDATE FIELDS ----------
+    const updateFields = {
+      ...(productName !== undefined && { productName: productName.trim() }),
+      ...(shortDescription !== undefined && { shortDescription: shortDescription.trim() }),
+      ...(productDescription !== undefined && { productDescription: productDescription.trim() }),
+      ...(warrantyPolicy !== undefined && { warrantyPolicy }),
+      ...(brand !== undefined && { brand }),
+      ...(category !== undefined && { category }),
+      ...(subcategory !== undefined && { subcategory }),
+      ...(hasVariant !== undefined && { hasVariant }),
+      ...(productType !== undefined && { productType }),
+      ...(tags !== undefined && { tags: Array.isArray(tags) ? tags : [] }),
+      ...(discountPercent !== undefined && { discountPercent: discountPercent === null ? null : Number(discountPercent) }),
+      ...(taxRate !== undefined && { taxRate: taxRate === null ? null : Number(taxRate) }),
+      ...(productStatus !== undefined && { productStatus }),
+      ...(visibility !== undefined && { visibility }),
+      ...(isFeatured !== undefined && { isFeatured: Boolean(isFeatured) }),
+      ...(isPreOrder !== undefined && { isPreOrder: Boolean(isPreOrder) }),
+      ...(weight !== undefined && { weight: Number(weight) }),
+      ...(weightUnit !== undefined && { weightUnit: weightUnit?.toLowerCase() === "kg" ? "kg" : "g" }),
+      ...(dimensions !== undefined && { dimensions: processedDimensions }),
+      ...(isFragile !== undefined && { isFragile: Boolean(isFragile) }),
+      ...(shippingClass !== undefined && { shippingClass }),
+      ...(packageType !== undefined && { packageType }),
+      ...(quantityPerBox !== undefined && { quantityPerBox: Number(quantityPerBox) }),
+      ...(supplierId !== undefined && { supplierId }),
+      ...(affiliateId !== undefined && { affiliateId }),
+      ...(externalLinks !== undefined && { externalLinks: Array.isArray(externalLinks) ? externalLinks : [] }),
+      ...(metaTitle !== undefined && { metaTitle }),
+      ...(metaDescription !== undefined && { metaDescription }),
+      ...(urlSlug !== undefined && { urlSlug: urlSlug.trim().toLowerCase() }),
+      ...(viewsCount !== undefined && { viewsCount: Number(viewsCount) }),
+      ...(addedToCartCount !== undefined && { addedToCartCount: Number(addedToCartCount) }),
+      ...(wishlistCount !== undefined && { wishlistCount: Number(wishlistCount) }),
+      ...(orderCount !== undefined && { orderCount: Number(orderCount) }),
+      ...(warehouse !== undefined && { warehouse }),
+    };
+
+    // ---------- NON-VARIANT FIELDS ----------
+    if (hasVariant === false) {
+      updateFields.minimumQuantity = minimumQuantity !== undefined ? Number(minimumQuantity) : existingProduct.minimumQuantity;
+      updateFields.reorderQuantity = reorderQuantity !== undefined ? Number(reorderQuantity) : existingProduct.reorderQuantity;
+      updateFields.maximumQuantity = maximumQuantity !== undefined ? Number(maximumQuantity) : existingProduct.maximumQuantity;
+
+      if (SKU !== undefined) updateFields.SKU = SKU?.trim() || null;
+      if (barcode !== undefined) updateFields.barcode = barcode?.trim() || null;
+      if (productImages !== undefined) updateFields.productImages = finalProductImages;
+      if (costPrice !== undefined) updateFields.costPrice = Number(costPrice);
+      if (sellingPrice !== undefined) updateFields.sellingPrice = Number(sellingPrice);
+      if (mrpPrice !== undefined) updateFields.mrpPrice = Number(mrpPrice);
+
+      // Recalculate landing price
+      const base = sellingPrice !== undefined ? Number(sellingPrice) : existingProduct.sellingPrice;
+      const taxVal = taxRate !== undefined ? Number(taxRate) : existingProduct.taxRate || 0;
+      if (base && !isNaN(base)) {
+        updateFields.landingSellPrice = Math.ceil(base + (base * taxVal) / 100);
       }
+    } else {
+      // Clear non-variant fields
+      updateFields.SKU = null;
+      updateFields.barcode = null;
+      updateFields.productImages = [];
+      updateFields.costPrice = null;
+      updateFields.sellingPrice = null;
+      updateFields.mrpPrice = null;
+      updateFields.landingSellPrice = null;
+      updateFields.minimumQuantity = 0;
+      updateFields.reorderQuantity = 0;
+      updateFields.maximumQuantity = 0;
+
+      if (defaultVariant !== undefined) updateFields.defaultVariant = defaultVariant;
     }
 
-    // Ensure defaultVariant is set if variants exist
-    const allVariants = await Variant.find({ productId });
-    if (defaultVariant) {
-      existingProduct.defaultVariant = defaultVariant;
-      await existingProduct.save();
-    } else if (allVariants.length > 0) {
-      const defaultVar = allVariants.find((v) => v.isDefault) || allVariants[0];
-      existingProduct.defaultVariant = defaultVar._id;
-      await existingProduct.save();
-    }
-
-    // Handle additional fields
-    if (productType !== undefined) updateFields.productType = productType;
-    if (defaultVariant !== undefined)
-      updateFields.defaultVariant = defaultVariant;
-    if (tags !== undefined) updateFields.tags = Array.isArray(tags) ? tags : [];
-    if (discountPercent !== undefined)
-      updateFields.discountPercent =
-        discountPercent === null ? null : Number(discountPercent);
-    if (taxRate !== undefined)
-      updateFields.taxRate = taxRate === null ? null : Number(taxRate);
-    if (productStatus !== undefined) updateFields.productStatus = productStatus;
-    if (visibility !== undefined) updateFields.visibility = visibility;
-    if (isFeatured !== undefined) updateFields.isFeatured = Boolean(isFeatured);
-    if (isPreOrder !== undefined) updateFields.isPreOrder = Boolean(isPreOrder);
-    if (availableQuantity !== undefined)
-      updateFields.availableQuantity = Number(availableQuantity);
-    if (minimumQuantity !== undefined)
-      updateFields.minimumQuantity = Number(minimumQuantity);
-    if (reorderQuantity !== undefined)
-      updateFields.reorderQuantity = Number(reorderQuantity);
-    if (maximumQuantity !== undefined)
-      updateFields.maximumQuantity = Number(maximumQuantity);
-    if (weight !== undefined) updateFields.weight = Number(weight);
-    if (dimensions !== undefined) updateFields.dimensions = dimensions;
-    if (isFragile !== undefined) updateFields.isFragile = Boolean(isFragile);
-    if (shippingClass !== undefined) updateFields.shippingClass = shippingClass;
-    if (packageType !== undefined) updateFields.packageType = packageType;
-    if (quantityPerBox !== undefined)
-      updateFields.quantityPerBox = Number(quantityPerBox);
-    if (supplierId !== undefined) updateFields.supplierId = supplierId;
-    if (affiliateId !== undefined) updateFields.affiliateId = affiliateId;
-    if (externalLinks !== undefined)
-      updateFields.externalLinks = Array.isArray(externalLinks)
-        ? externalLinks
-        : [];
-    if (metaTitle !== undefined) updateFields.metaTitle = metaTitle;
-    if (metaDescription !== undefined)
-      updateFields.metaDescription = metaDescription;
-    if (urlSlug !== undefined)
-      updateFields.urlSlug = urlSlug ? urlSlug.trim().toLowerCase() : undefined;
-    if (viewsCount !== undefined) updateFields.viewsCount = Number(viewsCount);
-    if (addedToCartCount !== undefined)
-      updateFields.addedToCartCount = Number(addedToCartCount);
-    if (wishlistCount !== undefined)
-      updateFields.wishlistCount = Number(wishlistCount);
-    if (orderCount !== undefined) updateFields.orderCount = Number(orderCount);
-    if (warehouse !== undefined) updateFields.warehouse = warehouse;
-
-    // Handle case when hasVariant is undefined and product has no variants
-    if (hasVariant === undefined && existingProduct.hasVariant === false) {
-      const base =
-        sellingPrice && !isNaN(Number(sellingPrice)) ? Number(sellingPrice) : 0;
-      const tax = taxRate && !isNaN(Number(taxRate)) ? Number(taxRate) : 0;
-
-      const landing = calcLandingPrice(base, tax);
-      console.log("Calculated Landing Price:", landing);
-
-      // Debug logging to ensure values are correct
-      console.log("Base Value (Selling Price):", base);
-      console.log("Tax Value (Tax Rate):", tax);
-      console.log("Calculated Landing Price:", landing);
-
-      // Assign the landingSellPrice only if it's a valid number
-      if (landing !== undefined && !isNaN(landing)) {
-        updateFields.landingSellPrice = isNaN(landing) ? 0 : landing;
-      } else {
-        updateFields.landingSellPrice = 0; // Default to 0 if the calculation failed
-      }
-    }
-
-    // Apply the update
+    // ---------- APPLY UPDATES ----------
     Object.assign(existingProduct, updateFields);
     await existingProduct.save();
 
-    // Return updated product
-    return res.status(200).json({
+    // ---------- HANDLE VARIANTS ----------
+    if (hasVariant === true && Array.isArray(variants)) {
+      const variantIds = variants.map(v => v._id).filter(Boolean);
+      await Variant.deleteMany({ productId, _id: { $nin: variantIds } });
+
+      for (const variant of variants) {
+        if (!variant.SKU || variant.SKU.trim() === "") {
+          return res.status(400).json({ message: "Variant SKU is required" });
+        }
+
+        let processedImages = [];
+        if (variant.images && variant.images.length > 0) {
+          processedImages = await Promise.all(
+            variant.images.map(async (img) =>
+              typeof img === "string" && /^data:image\/[a-zA-Z]+;base64,/.test(img)
+                ? (await uploadBase64Images([img], "variant-images/"))[0]
+                : img
+            )
+          );
+        }
+
+        const base = Number(variant.sellingPrice);
+        const tax = Number(variant.taxRate) || 0;
+        const landing = !isNaN(base) ? Math.ceil(base + (base * tax) / 100) : null;
+
+        const variantData = {
+          productId,
+          variantAttributes: variant.variantAttributes || [],
+          SKU: variant.SKU.trim(),
+          barcode: variant.barcode ? variant.barcode.trim() : undefined,
+          costPrice: Number(variant.costPrice),
+          sellingPrice: Number(variant.sellingPrice),
+          mrpPrice: Number(variant.mrpPrice),
+          landingSellPrice: landing,
+          discountPercent: variant.discountPercent ? Number(variant.discountPercent) : undefined,
+          taxRate: variant.taxRate ? Number(variant.taxRate) : undefined,
+          minimumQuantity: variant.minimumQuantity !== undefined ? Number(variant.minimumQuantity) : 0,
+          reorderQuantity: variant.reorderQuantity !== undefined ? Number(variant.reorderQuantity) : 0,
+          maximumQuantity: variant.maximumQuantity !== undefined ? Number(variant.maximumQuantity) : 0,
+          images: processedImages.length > 0 ? processedImages : variant.images || [],
+          isDefault: variant.isDefault || false,
+        };
+
+        if (variant._id) {
+          await Variant.findByIdAndUpdate(variant._id, variantData, { new: true, runValidators: true });
+        } else {
+          await Variant.create(variantData);
+        }
+      }
+
+      const allVariants = await Variant.find({ productId });
+      if (defaultVariant) {
+        existingProduct.defaultVariant = defaultVariant;
+      } else if (allVariants.length > 0 && !existingProduct.defaultVariant) {
+        existingProduct.defaultVariant = allVariants.find(v => v.isDefault)?._id || allVariants[0]._id;
+      }
+      await existingProduct.save();
+    } else if (hasVariant === false) {
+      await Variant.deleteMany({ productId });
+    }
+
+    // ---------- FETCH UPDATED PRODUCT ----------
+    const updatedProduct = await Product.findById(productId)
+      .populate("brand")
+      .populate("category")
+      .populate("subcategory")
+      .populate("productType")
+      .populate("variants");
+
+    // ---------- FLATTEN DIMENSIONS FOR RESPONSE ----------
+    const responseProduct = updatedProduct.toObject();
+
+    responseProduct.dimensions = {
+      length: responseProduct.dimensions.length.value,
+      lengthUnit: responseProduct.dimensions.length.unit,
+      width: responseProduct.dimensions.width.value,
+      widthUnit: responseProduct.dimensions.width.unit,
+      height: responseProduct.dimensions.height.value,
+      heightUnit: responseProduct.dimensions.height.unit,
+    };
+
+    res.status(200).json({
       success: true,
       message: "Product updated successfully",
-      product: existingProduct,
+      product: responseProduct,
     });
   } catch (err) {
     console.error("Update product error:", err);
     if (err.code === 11000) {
-      return res.status(400).json({ message: `Duplicate field found.` });
+      const field = Object.keys(err.keyPattern)[0];
+      return res.status(400).json({ message: `Duplicate ${field} found.` });
     }
     if (err.name === "ValidationError") {
-      const errors = Object.values(err.errors).map((e) => e.message);
+      const errors = Object.values(err.errors).map(e => e.message);
       return res.status(400).json({ message: "Validation failed", errors });
     }
-    return res
-      .status(500)
-      .json({ message: "Update failed", error: err.message });
+    return res.status(500).json({ message: "Update failed", error: err.message });
   }
 };
 
@@ -870,20 +711,32 @@ export const deleteProduct = async (req, res) => {
   try {
     const productId = req.params.id;
 
-    // First check if product exists
+    // 1. Verify product exists
     const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // Delete all variants associated with this product
+    // 2. Delete **all** variants that belong to this product
     const deleteVariantsResult = await Variant.deleteMany({
-      productId: productId,
+      product: productId,               // <-- correct field name
     });
 
-    // Then delete the product
+    // 3. Block deletion if the product appears in **any** order
+    const orderWithProduct = await Order.findOne({
+      "items.product": productId,       // <-- correct path inside array
+    });
+
+    if (orderWithProduct) {
+      return res.status(400).json({
+        message: "Cannot delete product – it is part of one or more orders",
+      });
+    }
+
+    // 4. Finally delete the product itself
     await Product.findByIdAndDelete(productId);
 
+    // 5. Success response
     res.status(200).json({
       message: "Product and its variants deleted successfully",
       deletedVariantsCount: deleteVariantsResult.deletedCount,

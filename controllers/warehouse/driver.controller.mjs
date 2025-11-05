@@ -2,22 +2,42 @@ import Driver from "../../models/Driver.mjs";
 import bcrypt from "bcryptjs";
 import { uploadBase64Image } from "../../utils/uploadImage.mjs";
 
-// Create a new driver
-export const createDriver = async (req, res) => {
-  try {
-    const { name, location, vehicleNumber, image, notes } =
-      req.body;
 
-    const warehouse =
-      req.user.assignedWarehouses?._id ||
-      (Array.isArray(req.user.assignedWarehouses) &&
-        req.user.assignedWarehouses.length > 0 &&
-        req.user.assignedWarehouses[0]._id);
+export const createDriver = async (req, res) => {
+  console.log("Create Driver Request Body:", req.body);
+  try {
+    const { name, location, vehicleNumber, image, notes } = req.body;
+
+    let warehouse;
+    if (req.user.assignedWarehouses) {
+      if (req.user.assignedWarehouses._id) {
+        warehouse = req.user.assignedWarehouses._id;
+      } else if (Array.isArray(req.user.assignedWarehouses) && req.user.assignedWarehouses.length > 0) {
+        warehouse = req.user.assignedWarehouses[0]._id;
+      }
+    }
+
+    console.log("Creating driver for warehouse:", warehouse);
 
     if (!name || !vehicleNumber || !warehouse) {
       return res
         .status(400)
         .json({ message: "Name, Vehicle Number, and Warehouse are required" });
+    }
+
+    // Normalize vehicle number for duplicate check (remove spaces, uppercase)
+    const normalizedVehicleNumber = vehicleNumber.replace(/\s/g, '').toUpperCase();
+
+    // Find any driver in the same warehouse with matching normalized vehicle number
+    const existingDriver = await Driver.findOne({
+      warehouse,
+      vehicleNumberNormalized: normalizedVehicleNumber, // Check against normalized field
+    });
+
+    if (existingDriver) {
+      return res.status(400).json({
+        message: "Vehicle Number already exists in this warehouse",
+      });
     }
 
     let imageUrl = "";
@@ -28,10 +48,11 @@ export const createDriver = async (req, res) => {
     const newDriver = new Driver({
       name,
       location,
-      vehicleNumber,
+      vehicleNumber: vehicleNumber.trim(), // Save original casing, trimmed
+      vehicleNumberNormalized: normalizedVehicleNumber, // Store normalized for fast lookups
       warehouse,
       notes,
-      image: imageUrl
+      image: imageUrl,
     });
 
     await newDriver.save();
@@ -42,7 +63,6 @@ export const createDriver = async (req, res) => {
     res.status(500).json({ message: "Failed to create driver" });
   }
 };
-
 // Get list of all drivers (optionally filtered by warehouse)
 export const getAllDrivers = async (req, res) => {
   try {
