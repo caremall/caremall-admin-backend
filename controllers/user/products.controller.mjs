@@ -1582,6 +1582,7 @@ export const getBestSellingProducts = async (req, res) => {
 };
 
 export const getProductById = async (req, res) => {
+  console.log('Fetching product with slug:', req.params.slug);
   try {
     const product = await Product.findOne({ urlSlug: req.params.slug }).lean();
     if (!product) return res.status(404).json({ message: "Product not found" });
@@ -1705,59 +1706,87 @@ export const getSearchSuggestions = async (req, res) => {
     if (!search) {
       return res.status(200).json({ products: [], categories: [], brands: [] });
     }
+    // Escape regex special chars
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedSearch = escapeRegex(search);
 
-    const regex = new RegExp(search, "i");
+    const startsWithRegex = new RegExp("^" + escapedSearch, "i");
+    const containsRegex = new RegExp(escapedSearch, "i");
 
-    // Query products
-    const productsPromise = Product.find({
-      productStatus: "published",
-      visibility: "visible",
-      $or: [
-        { productName: regex },
-        { sku: regex },
-        { shortDescription: regex },
-        { productDescription: regex },
-      ],
-    })
-      .select(
-        "productName sellingPrice mrpPrice thumbnail category urlSlug SKU productImages"
-      )
-      .limit(10)
-      .lean();
+    // Helper to run query with two regexes and prioritize starts-with
+    const prioritizeMatches = async (Model, fields, selectFields, limit = 10) => {
+      // Step 1: Get starts-with matches
+      const startsWithQuery = {
+        $or: fields.map(field => ({ [field]: startsWithRegex }))
+      };
+      if (Model.collection.name === 'products') {
+        Object.assign(startsWithQuery, { productStatus: "published", visibility: "visible" });
+      } else if (Model.collection.name === 'categories') {
+        Object.assign(startsWithQuery, { status: "active" });
+      } else if (Model.collection.name === 'brands') {
+        Object.assign(startsWithQuery, { status: "active" });
+      }
 
-    // Query categories
-    const categoriesPromise = Category.find({
-      status: "active",
-      name: regex,
-    })
-      .select("name description image type")
-      .limit(10)
-      .lean();
+      const startsWith = await Model.find(startsWithQuery)
+        .select(selectFields)
+        .limit(limit)
+        .lean();
 
-    // Query brands
-    const brandsPromise = Brand.find({
-      status: "active",
-      brandName: regex,
-    })
-      .select("brandName tagline description imageUrl")
-      .limit(10)
-      .lean();
+      const startsWithIds = startsWith.map(doc => doc._id.toString());
 
-    // Await all queries in parallel
+      // Step 2: Get contains matches, excluding starts-with IDs
+      const containsQuery = {
+        _id: { $nin: startsWithIds.map(id => new mongoose.Types.ObjectId(id)) },
+        $or: fields.map(field => ({ [field]: containsRegex }))
+      };
+      if (Model.collection.name === 'products') {
+        Object.assign(containsQuery, { productStatus: "published", visibility: "visible" });
+      } else if (Model.collection.name === 'categories') {
+        Object.assign(containsQuery, { status: "active" });
+      } else if (Model.collection.name === 'brands') {
+        Object.assign(containsQuery, { status: "active" });
+      }
+
+      const remainingLimit = limit - startsWith.length;
+      const contains = remainingLimit > 0
+        ? await Model.find(containsQuery)
+            .select(selectFields)
+            .limit(remainingLimit)
+            .lean()
+        : [];
+
+      // Step 3: Combine: starts-with first, then contains
+      return [...startsWith, ...contains];
+    };
+
+    // Run in parallel
     const [products, categories, brands] = await Promise.all([
-      productsPromise,
-      categoriesPromise,
-      brandsPromise,
+      prioritizeMatches(
+        Product,
+        ["productName", "sku", "shortDescription", "productDescription"],
+        "productName sellingPrice mrpPrice thumbnail category urlSlug SKU productImages",
+        10
+      ),
+      prioritizeMatches(
+        Category,
+        ["name"],
+        "name description image type",
+        10
+      ),
+      prioritizeMatches(
+        Brand,
+        ["brandName"],
+        "brandName tagline description imageUrl",
+        10
+      )
     ]);
+
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
-    // Return combined results categorized by entity type
     res.status(200).json({ enrichedProducts, categories, brands });
   } catch (error) {
     console.error("Error fetching search suggestions: ", error);
-    res
-      .status(500)
-      .json({ message: "Server error while fetching search suggestions" });
+    res.status(500).json({ message: "Server error while fetching search suggestions" });
   }
 };
 

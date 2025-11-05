@@ -147,7 +147,7 @@ export const getOfferCardById = async (req, res) => {
         populate: {
           path: "offerEligibleItems",
           model: "Product",
-          select: "productId productName shortDescription productDescription brand category sellingPrice mrpPrice productImages urlSlug hasVariant defaultVariant",
+          select: "productId productName shortDescription productDescription brand category sellingPrice mrpPrice productImages urlSlug hasVariant defaultVariant landingSellPrice",
           populate: [
             {
               path: "brand",
@@ -162,12 +162,12 @@ export const getOfferCardById = async (req, res) => {
             {
               path: "defaultVariant",
               model: "Variant",
-              select: "variantId images sellingPrice mrpPrice SKU barcode isDefault"
+              select: "variantId images sellingPrice mrpPrice SKU barcode landingSellPrice isDefault"
             },
             {
               path: "variants",
               model: "Variant",
-              select: "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault"
+              select: "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions landingSellPrice isDefault"
             }
           ]
         }
