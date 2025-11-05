@@ -25,7 +25,7 @@ router.post('/', catchAsyncErrors(addAddress));
  * @route GET /addresses
  * @desc Get all addresses for the logged-in user
  */
-router.get('/', getUserAddresses);
+router.get('/', getUserformattedAddresses);
 router.get('/mobile', getUserformattedAddresses);
 
 /**
