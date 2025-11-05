@@ -56,7 +56,44 @@ export const getUserAddresses = async (req, res) => {
     }
 };
 
+export const getUserformattedAddresses = async (req, res) => {
+    try {
+        const userId = req.user._id;
 
+        const addresses = await Address.find({ user: userId })
+            .sort({ createdAt: -1 })
+            .lean(); // Use .lean() for better performance + easier manipulation
+
+        // Format each address into a single line
+        const formattedAddresses = addresses.map(addr => {
+            const parts = [
+                addr.addressLine1,
+                addr.addressLine2,
+                addr.landmark,
+                addr.city,
+                addr.district,
+                addr.state,
+                addr.postalCode,
+                addr.country
+            ].filter(Boolean); // Remove empty strings
+
+            // Join with comma and trim extra spaces
+            const formattedAddress = parts
+                .map(part => part.trim())
+                .join(', ');
+
+            return {
+                ...addr,
+                formattedAddress
+            };
+        });
+
+        res.status(200).json(formattedAddresses);
+    } catch (error) {
+        console.error('Get Addresses Error:', error);
+        res.status(500).json({ message: 'Failed to fetch addresses' });
+    }
+};
 /**
  * @desc Update an address
  */
