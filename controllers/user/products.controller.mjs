@@ -1405,126 +1405,92 @@ export const getFilteredProductsUpdated = async (req, res) => {
 
 export const getMostWantedProducts = async (req, res) => {
   try {
-    const products = await Product.find({
-      productStatus: "published",
-      visibility: "visible",
-    }).lean();
+    // Fetch products marked as "most wanted" (adjust query if you use a flag/field)
+    let products = await Product.find({ isMostWanted: true })
+      .populate("variants") // populate all variants
+      .populate("defaultVariant") // populate defaultVariant
+      .lean(); // faster + cleaner plain JS objects
 
-    // Enrich products with default variant data
-    const enrichedProducts = await enrichProductsWithDefaultVariants(products);
+    // Validate and fix defaultVariant for each product
+    products = products.map((product) => {
+      // Extract variant IDs for easy comparison
+      const variantIds = product.variants.map((v) => v._id.toString());
+      const defaultVariantId = product.defaultVariant?._id?.toString() || product.defaultVariant?.toString();
 
-    // Aggregate review stats for all products in one go
-    const productIds = enrichedProducts.map((p) => p._id);
-
-    const reviewStats = await Review.aggregate([
-      { $match: { productId: { $in: productIds } } },
-      {
-        $group: {
-          _id: "$productId",
-          averageRating: { $avg: "$rating" },
-          reviewCount: { $sum: 1 },
-        },
-      },
-    ]);
-
-    // Create a map for quick lookup of review stats by product ID
-    const reviewStatsMap = new Map();
-    reviewStats.forEach((stat) => {
-      reviewStatsMap.set(stat._id.toString(), {
-        averageRating: Number(stat.averageRating.toFixed(2)),
-        reviewCount: stat.reviewCount,
-      });
-    });
-
-    // Map review stats and calculate mostWantedScore per product
-    const scoredProducts = enrichedProducts.map((product) => {
-      const review = reviewStatsMap.get(product._id.toString()) || {
-        averageRating: 0,
-        reviewCount: 0,
-      };
-
-      const orderCount = product.orderCount || 0;
-      const addedToCartCount = product.addedToCartCount || 0;
-      const wishlistCount = product.wishlistCount || 0;
-      const viewsCount = product.viewsCount || 0;
-
-      const score =
-        orderCount * 3 +
-        addedToCartCount * 2 +
-        wishlistCount * 1 +
-        viewsCount * 0.5;
+      // If defaultVariant is missing or invalid, set to first variant
+      if (!variantIds.includes(defaultVariantId)) {
+        if (product.variants.length > 0) {
+          product.defaultVariant = product.variants[0];
+        } else {
+          product.defaultVariant = null; // no variants available
+        }
+      }
 
       return {
         ...product,
-        averageRating: review.averageRating,
-        reviewCount: review.reviewCount,
-        mostWantedScore: score,
+        defaultVariantId: product.defaultVariant?._id || null, // convenience field for frontend
       };
     });
 
-    // Sort by mostWantedScore descending, no limit
-    const sorted = scoredProducts.sort(
-      (a, b) => b.mostWantedScore - a.mostWantedScore
-    );
-
-    res.status(200).json(sorted);
+    return res.status(200).json({
+      success: true,
+      message: "Most wanted products fetched successfully",
+      data: products,
+    });
   } catch (error) {
     console.error("Error fetching most wanted products:", error);
-    res
-      .status(500)
-      .json({ message: "Server error fetching most wanted products" });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch most wanted products",
+      error: error.message,
+    });
   }
 };
 
 export const getNewArrivalProducts = async (req, res) => {
   try {
-    const products = await Product.find({
-      productStatus: "published",
-      visibility: "visible",
-    })
-      .sort({ createdAt: -1 })
+    // Fetch products marked as new arrivals
+    // (Adjust query based on how you mark them — by flag or createdAt)
+    let products = await Product.find({ isNewArrival: true })
+      .sort({ createdAt: -1 }) // newest first
+      .populate("variants")
+      .populate("defaultVariant")
       .lean();
-    const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
-    const productIds = enrichedProducts.map((p) => p._id);
+    // Validate and fix defaultVariant for each product
+    products = products.map((product) => {
+      const variantIds = product.variants.map((v) => v._id.toString());
+      const defaultVariantId =
+        product.defaultVariant?._id?.toString() ||
+        product.defaultVariant?.toString();
 
-    const reviewStats = await Review.aggregate([
-      { $match: { productId: { $in: productIds } } },
-      {
-        $group: {
-          _id: "$productId",
-          averageRating: { $avg: "$rating" },
-          reviewCount: { $sum: 1 },
-        },
-      },
-    ]);
+      // Ensure valid defaultVariant
+      if (!variantIds.includes(defaultVariantId)) {
+        if (product.variants.length > 0) {
+          product.defaultVariant = product.variants[0];
+        } else {
+          product.defaultVariant = null;
+        }
+      }
 
-    const reviewStatsMap = new Map();
-    reviewStats.forEach((stat) => {
-      reviewStatsMap.set(stat._id.toString(), {
-        averageRating: Number(stat.averageRating.toFixed(2)),
-        reviewCount: stat.reviewCount,
-      });
-    });
-
-    const productsWithReviews = enrichedProducts.map((product) => {
-      const review = reviewStatsMap.get(product._id.toString()) || {
-        averageRating: 0,
-        reviewCount: 0,
-      };
       return {
         ...product,
-        averageRating: review.averageRating,
-        reviewCount: review.reviewCount,
+        defaultVariantId: product.defaultVariant?._id || null, // For frontend use
       };
     });
 
-    res.status(200).json(productsWithReviews);
+    return res.status(200).json({
+      success: true,
+      message: "New arrival products fetched successfully",
+      data: products,
+    });
   } catch (error) {
-    console.error("Error fetching new arrivals:", error);
-    res
-      .status(500)
-      .json({ message: "Server error fetching new arrival products" });
+    console.error("Error fetching new arrival products:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch new arrival products",
+      error: error.message,
+    });
   }
 };
 
