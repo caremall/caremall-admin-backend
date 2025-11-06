@@ -148,6 +148,8 @@ export const addToCart = async (req, res) => {
   }
 };
 
+
+
 export const bulkAddToCart = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -683,11 +685,22 @@ export const getCart = async (req, res) => {
         _id: item.product._id,
       };
 
+      // Determine minimumQuantity
+      const minQty = item.product.hasVariant && item.variant
+        ? (item.variant.minimumQuantity || 1)
+        : (item.product.minimumQuantity || 1);
+
+      let finalQuantity = item.quantity;
+
       if (item.product.hasVariant && item.variant) {
-        basePrice =
-          item.variant.landingSellPrice > 0
-            ? item.variant.landingSellPrice
-            : item.variant.sellingPrice;
+        // === VARIANT CASE ===
+        const landingPrice = item.variant.landingSellPrice || 0;
+        const sellPrice = item.variant.sellingPrice || 0;
+
+        // Use landing price only if quantity >= minQty AND landingPrice > 0
+        basePrice = (finalQuantity >= minQty && landingPrice > 0)
+          ? landingPrice
+          : sellPrice;
 
         const variantInventory = await mongoose
           .model("Inventory")
@@ -718,10 +731,14 @@ export const getCart = async (req, res) => {
           isDefault: item.variant.isDefault || false,
         };
       } else {
-        basePrice =
-          item.product.landingSellPrice > 0
-            ? item.product.landingSellPrice
-            : item.product.sellingPrice;
+        // === NON-VARIANT PRODUCT CASE ===
+        const landingPrice = item.product.landingSellPrice || 0;
+        const sellPrice = item.product.sellingPrice || 0;
+
+        // Use landing price only if quantity >= minQty AND landingPrice > 0
+        basePrice = (finalQuantity >= minQty && landingPrice > 0)
+          ? landingPrice
+          : sellPrice;
 
         const productInventory = await mongoose
           .model("Inventory")
@@ -735,57 +752,63 @@ export const getCart = async (req, res) => {
         );
       }
 
+      // Final fallback
       if (!basePrice || basePrice <= 0 || isNaN(basePrice)) {
         basePrice = item.product.sellingPrice || 0;
       }
 
-      // Adjust quantity only in response (not DB)
-      let finalQuantity = item.quantity;
+      // Cap quantity by stock
       if (finalQuantity > maxAllowedQuantity && maxAllowedQuantity > 0) {
         finalQuantity = maxAllowedQuantity;
       }
 
-      // Apply product/category/brand discounts
+      // Re-evaluate basePrice after quantity cap (in case it drops below minQty)
+      if (finalQuantity < minQty) {
+        basePrice = item.product.hasVariant && item.variant
+          ? (item.variant.sellingPrice || 0)
+          : (item.product.sellingPrice || 0);
+      }
+
+      // === APPLY PRODUCT/CATEGORY/BRAND OFFERS ONLY IF LINE TOTAL MEETS MINIMUM ===
       let discountedPrice = basePrice;
+      const lineTotalBeforeDiscount = basePrice * finalQuantity;
+
       for (const offer of offers) {
-        switch (offer.offerType) {
-          case "product":
-            if (
-              offer.offerEligibleItems.includes(item.product._id.toString())
-            ) {
-              discountedPrice = applyDiscount(
-                discountedPrice,
-                offer.offerDiscountUnit,
-                offer.offerDiscountValue
-              );
-            }
-            break;
-          case "category":
-            if (
-              item.product.category &&
-              offer.offerEligibleItems.includes(
-                item.product.category.toString()
-              )
-            ) {
-              discountedPrice = applyDiscount(
-                discountedPrice,
-                offer.offerDiscountUnit,
-                offer.offerDiscountValue
-              );
-            }
-            break;
-          case "brand":
-            if (
-              item.product.brand &&
-              offer.offerEligibleItems.includes(item.product.brand.toString())
-            ) {
-              discountedPrice = applyDiscount(
-                discountedPrice,
-                offer.offerDiscountUnit,
-                offer.offerDiscountValue
-              );
-            }
-            break;
+        if (offer.offerType === "product") {
+          if (
+            offer.offerEligibleItems.includes(item.product._id.toString()) &&
+            lineTotalBeforeDiscount >= (offer.offerMinimumOrderValue || 0)
+          ) {
+            discountedPrice = applyDiscount(
+              discountedPrice,
+              offer.offerDiscountUnit,
+              offer.offerDiscountValue
+            );
+          }
+        } else if (offer.offerType === "category") {
+          if (
+            item.product.category &&
+            offer.offerEligibleItems.includes(item.product.category.toString()) &&
+            lineTotalBeforeDiscount >= (offer.offerMinimumOrderValue || 0)
+          ) {
+            discountedPrice = applyDiscount(
+              discountedPrice,
+              offer.offerDiscountUnit,
+              offer.offerDiscountValue
+            );
+          }
+        } else if (offer.offerType === "brand") {
+          if (
+            item.product.brand &&
+            offer.offerEligibleItems.includes(item.product.brand.toString()) &&
+            lineTotalBeforeDiscount >= (offer.offerMinimumOrderValue || 0)
+          ) {
+            discountedPrice = applyDiscount(
+              discountedPrice,
+              offer.offerDiscountUnit,
+              offer.offerDiscountValue
+            );
+          }
         }
       }
 
@@ -813,7 +836,7 @@ export const getCart = async (req, res) => {
       });
     }
 
-    // Cart-level offers
+    // === CART-LEVEL OFFERS: Apply only if cartSubtotal meets minimum ===
     let finalCartTotal = cartSubtotal;
     let appliedCartOffers = [];
 
@@ -842,7 +865,7 @@ export const getCart = async (req, res) => {
 
     finalCartTotal = Math.round(finalCartTotal * 100) / 100;
 
-    // Response (read-only, no DB updates)
+    // Response
     res.status(200).json({
       items: discountedItems,
       cartTotal: finalCartTotal,
