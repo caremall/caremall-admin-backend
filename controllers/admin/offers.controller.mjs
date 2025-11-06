@@ -66,7 +66,7 @@ export const createOffer = async (req, res) => {
   }
   let uploadedImageUrl=null;
   if(imageUrl){
-        uploadedImageUrl=await uploadBase64Image(imageUrl,"blog-images/");
+        uploadedImageUrl=await uploadBase64Image(imageUrl,"offer-images/");
   }
 
   const newOffer = await Offer.create({
@@ -160,7 +160,7 @@ export const updateOffer = async (req, res) => {
     // Handle image upload if new image is provided and different from current
     if (imageUrl && imageUrl !== offer.offerImageUrl) {
       try {
-        uploadedImageUrl = await uploadBase64Image(imageUrl, "blog-images/");
+        uploadedImageUrl = await uploadBase64Image(imageUrl, "offer-images/");
       } catch (uploadError) {
         console.error("Image upload error:", uploadError);
         return res.status(400).json({ message: "Failed to upload image" });
