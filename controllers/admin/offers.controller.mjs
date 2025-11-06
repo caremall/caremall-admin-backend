@@ -1,4 +1,6 @@
 import Offer from "../../models/offerManagement.mjs";
+import { uploadBase64Image } from "../../utils/uploadImage.mjs";
+
 
 // Helper to validate and convert booking dates array
 function parseBookingDates(bookingDates, fallback = []) {
@@ -62,6 +64,10 @@ export const createOffer = async (req, res) => {
       return res.status(400).json({ message: "Invalid bookingDates" });
     }
   }
+  let uploadedImageUrl=null;
+  if(imageUrl){
+        uploadedImageUrl=await uploadBase64Image(imageUrl,"blog-images/");
+  }
 
   const newOffer = await Offer.create({
     offerTitle: title,
@@ -74,7 +80,7 @@ export const createOffer = async (req, res) => {
       minimumOrderValue !== undefined
         ? parseFloat(minimumOrderValue)
         : undefined,
-    offerImageUrl: imageUrl,
+    offerImageUrl: uploadedImageUrl,
     offerRedeemTimePeriod: bookingDates,
     offerEligibleItems: eligibleItems || [],
     isOfferFeatured: isFeatured,
@@ -126,6 +132,7 @@ export const getOfferById = async (req, res) => {
   }
 };
 
+
 export const updateOffer = async (req, res) => {
   try {
     let {
@@ -144,7 +151,21 @@ export const updateOffer = async (req, res) => {
     } = req.body;
 
     const offer = await Offer.findById(req.params.id);
-    if (!offer) return res.status(404).json({ message: "Offer not found" });
+    if (!offer) {
+      return res.status(404).json({ message: "Offer not found" });
+    }
+
+    let uploadedImageUrl = offer.offerImageUrl;
+    
+    // Handle image upload if new image is provided and different from current
+    if (imageUrl && imageUrl !== offer.offerImageUrl) {
+      try {
+        uploadedImageUrl = await uploadBase64Image(imageUrl, "blog-images/");
+      } catch (uploadError) {
+        console.error("Image upload error:", uploadError);
+        return res.status(400).json({ message: "Failed to upload image" });
+      }
+    }
 
     // Sanitize enums & bookingDates
     // Only validate bookingDates if it is provided in req.body
@@ -156,7 +177,7 @@ export const updateOffer = async (req, res) => {
         );
       } else {
         bookingDates = parseBookingDates(bookingDates);
-        if (bookingDates.length !== 2) {
+        if (!Array.isArray(bookingDates) || bookingDates.length !== 2) {
           return res.status(400).json({ message: "Invalid bookingDates" });
         }
       }
@@ -167,15 +188,25 @@ export const updateOffer = async (req, res) => {
 
     // Update fields only if provided (cleaner check vs falsy values)
     if (typeof title === "string") offer.offerTitle = title.trim();
-    if (typeof description === "string") offer.offerDescription = description;
+    if (typeof description === "string") offer.offerDescription = description.trim();
     if (offerType !== undefined) offer.offerType = offerType;
     if (discountUnit !== undefined) offer.offerDiscountUnit = discountUnit;
-    if (discountValue !== undefined)
-      offer.offerDiscountValue = parseFloat(discountValue);
-    if (minimumOrderValue !== undefined)
-      offer.offerMinimumOrderValue = parseFloat(minimumOrderValue);
-    if (typeof imageUrl === "string") offer.offerImageUrl = imageUrl;
-    if (bookingDates.length === 2) offer.offerRedeemTimePeriod = bookingDates;
+    if (discountValue !== undefined) {
+      const parsedValue = parseFloat(discountValue);
+      if (!isNaN(parsedValue)) {
+        offer.offerDiscountValue = parsedValue;
+      }
+    }
+    if (minimumOrderValue !== undefined) {
+      const parsedValue = parseFloat(minimumOrderValue);
+      if (!isNaN(parsedValue)) {
+        offer.offerMinimumOrderValue = parsedValue;
+      }
+    }
+    if (uploadedImageUrl) offer.offerImageUrl = uploadedImageUrl;
+    if (Array.isArray(bookingDates) && bookingDates.length === 2) {
+      offer.offerRedeemTimePeriod = bookingDates;
+    }
     if (Array.isArray(eligibleItems)) offer.offerEligibleItems = eligibleItems;
     if (typeof isFeatured === "boolean") offer.isOfferFeatured = isFeatured;
     if (typeof status === "string") offer.offerStatus = status;
@@ -190,7 +221,10 @@ export const updateOffer = async (req, res) => {
     });
   } catch (error) {
     console.error("Update Offer Error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ 
+      message: "Internal server error",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
