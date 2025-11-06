@@ -15,7 +15,14 @@ export const getAllReturns = async (req, res) => {
     const [returns, total] = await Promise.all([
       Return.find(query)
         .populate("user", "name email")
-        .populate("order", "orderStatus createdAt")
+        .populate({
+          path: "order",
+          select: "orderStatus createdAt allocatedWarehouse orderId",
+          populate: {
+            path: "allocatedWarehouse",
+            select: "name", 
+          },
+        })
         .populate("item.product", "productName productImages SKU barcode")
         .populate("item.variant", "variantAttributes images SKU barcode")
         .sort({ createdAt: -1 })
@@ -48,7 +55,7 @@ export const getReturnByIdAdmin = async (req, res) => {
   try {
     const returnDoc = await Return.findById(req.params.id)
       .populate("user", "name email")
-      .populate("order", "orderStatus paymentStatus")
+      .populate("order", "orderStatus paymentStatus allocatedWarehouse")
       .populate("item.product", "productName")
       .populate("item.variant", "variantAttributes");
 
