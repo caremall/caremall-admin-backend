@@ -10,121 +10,6 @@ import inventory from "../../models/inventory.mjs";
 import Offer from "../../models/offerManagement.mjs";
 
 
-// import FirstOrder from "../../models/FirstOrder.mjs";
-
-// export const getFilteredProducts = async (req, res) => {
-//   try {
-//     const { category, brand, tags, search, color, size, minPrice, maxPrice } =
-//       req.query;
-
-//     // Step 1: Build variant filter
-//     const variantMatch = {};
-
-//     const variantFilters = [];
-//     if (color) variantFilters.push({ name: "color", value: color });
-//     if (size) variantFilters.push({ name: "size", value: size });
-
-//     if (variantFilters.length) {
-//       variantMatch.variantAttributes = {
-//         $all: variantFilters.map((attr) => ({
-//           $elemMatch: attr,
-//         })),
-//       };
-//     }
-
-//     if (minPrice || maxPrice) {
-//       const priceFilter = {};
-//       if (minPrice) priceFilter.$gte = parseFloat(minPrice);
-//       if (maxPrice) priceFilter.$lte = parseFloat(maxPrice);
-//       variantMatch.sellingPrice = priceFilter;
-//     }
-
-//     // Step 2: Find matching variant productIds
-//     const matchedVariants = await Variant.find(variantMatch)
-//       .select("productId")
-//       .lean();
-//     const matchingProductIds = [
-//       ...new Set(matchedVariants.map((v) => v.productId.toString())),
-//     ];
-
-//     // Step 3: Build product filter
-//     const productMatch = {
-//       productStatus: "published",
-//       visibility: "visible",
-//     };
-
-//     if (category) productMatch.category = new mongoose.Types.ObjectId(category);
-//     if (brand) productMatch.brand = new mongoose.Types.ObjectId(brand);
-//     if (tags) productMatch.tags = { $in: tags.split(",") };
-//     if (search) {
-//       const regex = new RegExp(search, "i");
-//       productMatch.$or = [
-//         { productName: regex },
-//         { shortDescription: regex },
-//         { productDescription: regex },
-//       ];
-//     }
-
-//     if (matchingProductIds.length) {
-//       productMatch._id = { $in: matchingProductIds };
-//     } else if (variantFilters.length || minPrice || maxPrice) {
-//       // If variant filters applied but no match, return empty
-//       return res.status(200).json({
-//         data: [],
-//       });
-//     }
-
-//     // Step 4: Fetch filtered products with pagination
-//     const [products, totalCount] = await Promise.all([
-//       Product.find(productMatch).populate("brand category").lean(),
-//       Product.countDocuments(productMatch),
-//     ]);
-
-//     // Step 5: Enrich with matching variants for each product
-//     const enrichedProducts = await Promise.all(
-//       products.map(async (product) => {
-//         const variants = await Variant.find({
-//           productId: product._id,
-//           ...(variantFilters.length || minPrice || maxPrice
-//             ? variantMatch
-//             : {}),
-//         }).lean();
-
-//         // Aggregate review stats per product
-//         const reviewStats = await Review.aggregate([
-//           { $match: { productId: product._id } },
-//           {
-//             $group: {
-//               _id: "$productId",
-//               averageRating: { $avg: "$rating" },
-//               reviewCount: { $sum: 1 },
-//             },
-//           },
-//         ]);
-
-//         const averageRating = reviewStats.length
-//           ? reviewStats[0].averageRating
-//           : 0;
-//         const reviewCount = reviewStats.length ? reviewStats[0].reviewCount : 0;
-
-//         return {
-//           ...product,
-//           variants,
-//           averageRating: Number(averageRating.toFixed(2)),
-//           reviewCount,
-//         };
-//       })
-//     );
-
-//     res.status(200).json({
-//       data: enrichedProducts,
-//     });
-//   } catch (error) {
-//     console.error("Error filtering products:", error);
-//     res.status(500).json({ message: "Server error while filtering products" });
-//   }
-// };
-
 export const getFilteredProducts = async (req, res) => {
   try {
     // Parse filters from query params
@@ -967,14 +852,17 @@ export const getFilteredProductsUpdated = async (req, res) => {
           let appliedOffers = [];
 
           const lineTotal = basePrice;
+
+          // Apply offers - FIXED LOGIC
           for (const offer of offers) {
             let applies = false;
+
             if (offer.offerType === "product") {
               applies = offer.offerEligibleItems.includes(product._id.toString());
             } else if (offer.offerType === "category" && product.category) {
-              applies = offer.offerEligibleItems.includes(product.category.toString());
+              applies = offer.offerEligibleItems.includes(product.category._id.toString());
             } else if (offer.offerType === "brand" && product.brand) {
-              applies = offer.offerEligibleItems.includes(product.brand.toString());
+              applies = offer.offerEligibleItems.includes(product.brand._id.toString());
             }
 
             if (applies && lineTotal >= (offer.offerMinimumOrderValue || 0)) {
@@ -1033,6 +921,7 @@ export const getFilteredProductsUpdated = async (req, res) => {
             costPrice: variant.costPrice,
             taxRate: variant.taxRate,
             isDefault: variant.isDefault,
+            landingSellPrice: variant.landingSellPrice,
             pricing,
             offerPrice: finalPrice,  // offerPrice outside pricing
             stock: {
@@ -1044,17 +933,104 @@ export const getFilteredProductsUpdated = async (req, res) => {
           });
         }
 
-        // Default Variant Pricing
+        // Default Variant Pricing - FIXED LOGIC
         const defaultVar = product.defaultVariant;
         let defaultPricing = null;
         let defaultOfferPrice = 0;
         let defaultStock = {};
+
         if (defaultVar) {
-          const v = processedVariants.find(v => v._id.toString() === defaultVar._id.toString());
-          if (v) {
-            defaultPricing = v.pricing;
-            defaultOfferPrice = v.offerPrice;
-            defaultStock = v.stock;
+          // Find the processed variant that matches the default variant
+          const defaultProcessedVariant = processedVariants.find(v =>
+            v._id.toString() === defaultVar._id.toString()
+          );
+
+          if (defaultProcessedVariant) {
+            defaultPricing = defaultProcessedVariant.pricing;
+            defaultOfferPrice = defaultProcessedVariant.offerPrice;
+            defaultStock = defaultProcessedVariant.stock;
+          } else {
+            // If default variant not in processed variants, calculate pricing separately
+            let landingPrice = defaultVar.landingSellPrice || 0;
+            let sellingPrice = defaultVar.sellingPrice || 0;
+            let mrpPrice = defaultVar.mrpPrice || 0;
+
+            let basePrice = landingPrice > 0 ? landingPrice : sellingPrice;
+            let isLandingPriceApplied = landingPrice > 0;
+
+            if (basePrice <= 0) {
+              basePrice = sellingPrice || 0;
+              isLandingPriceApplied = false;
+            }
+
+            let discountedPrice = basePrice;
+            let appliedOffers = [];
+
+            const lineTotal = basePrice;
+
+            // Apply offers to default variant
+            for (const offer of offers) {
+              let applies = false;
+
+              if (offer.offerType === "product") {
+                applies = offer.offerEligibleItems.includes(product._id.toString());
+              } else if (offer.offerType === "category" && product.category) {
+                applies = offer.offerEligibleItems.includes(product.category._id.toString());
+              } else if (offer.offerType === "brand" && product.brand) {
+                applies = offer.offerEligibleItems.includes(product.brand._id.toString());
+              }
+
+              if (applies && lineTotal >= (offer.offerMinimumOrderValue || 0)) {
+                const oldPrice = discountedPrice;
+                discountedPrice = applyDiscount(discountedPrice, offer.offerDiscountUnit, offer.offerDiscountValue);
+                if (discountedPrice < oldPrice) {
+                  appliedOffers.push({
+                    offerName: offer.offerName,
+                    discountType: offer.offerDiscountUnit,
+                    discountValue: offer.offerDiscountValue
+                  });
+                }
+              }
+            }
+
+            const finalPrice = Math.max(0, discountedPrice);
+            const discountPercent = mrpPrice > 0 && landingPrice > 0
+              ? Math.ceil(((mrpPrice - landingPrice) / mrpPrice) * 100)
+              : mrpPrice > 0 && sellingPrice > 0
+                ? Math.ceil(((mrpPrice - sellingPrice) / mrpPrice) * 100)
+                : 0;
+
+            // Stock for default variant
+            const defaultStockAgg = await mongoose.model("Inventory").aggregate([
+              {
+                $match: {
+                  product: new mongoose.Types.ObjectId(product._id),
+                  variant: new mongoose.Types.ObjectId(defaultVar._id),
+                },
+              },
+              { $group: { _id: null, totalAvailableQuantity: { $sum: "$quantity" } } },
+            ]);
+
+            const defaultTotalAvailableQuantity = defaultStockAgg[0]?.totalAvailableQuantity || 0;
+
+            defaultPricing = {
+              originalPrice: basePrice,
+              discountedPrice: finalPrice,
+              totalPrice: finalPrice,
+              sellingPrice,
+              mrpPrice,
+              landingSellPrice: landingPrice,
+              discountPercent,
+              isLandingPriceApplied,
+              appliedOffers
+            };
+
+            defaultOfferPrice = finalPrice;
+            defaultStock = {
+              availableQuantity: defaultTotalAvailableQuantity,
+              maxAllowedQuantity: Math.min(defaultVar.maximumQuantity || 10, defaultTotalAvailableQuantity),
+              isInStock: defaultTotalAvailableQuantity > 0
+            };
           }
         }
 
@@ -1068,6 +1044,7 @@ export const getFilteredProductsUpdated = async (req, res) => {
           urlSlug: product.urlSlug,
           productStatus: product.productStatus,
           hasVariant: true,
+          landingSellPrice: product.landingSellPrice,
           productImages: product.productImages,
           variants: processedVariants,
           defaultVariant: product.defaultVariant ? {
@@ -1099,14 +1076,17 @@ export const getFilteredProductsUpdated = async (req, res) => {
         let appliedOffers = [];
 
         const lineTotal = basePrice;
+
+        // Apply offers - FIXED LOGIC
         for (const offer of offers) {
           let applies = false;
+
           if (offer.offerType === "product") {
             applies = offer.offerEligibleItems.includes(product._id.toString());
           } else if (offer.offerType === "category" && product.category) {
-            applies = offer.offerEligibleItems.includes(product.category.toString());
+            applies = offer.offerEligibleItems.includes(product.category._id.toString());
           } else if (offer.offerType === "brand" && product.brand) {
-            applies = offer.offerEligibleItems.includes(product.brand.toString());
+            applies = offer.offerEligibleItems.includes(product.brand._id.toString());
           }
 
           if (applies && lineTotal >= (offer.offerMinimumOrderValue || 0)) {
@@ -1339,7 +1319,6 @@ export const getMostWantedProducts = async (req, res) => {
       let sellingPrice = 0;
       let mrpPrice = 0;
       let basePrice = 0;
-      let originalPrice = 0;
       let discountedPrice = 0;
       let discountPercent = 0;
       let isLandingPriceApplied = false;
@@ -1354,7 +1333,7 @@ export const getMostWantedProducts = async (req, res) => {
         sellingPrice = product.defaultVariant.sellingPrice || 0;
         mrpPrice = product.defaultVariant.mrpPrice || 0;
 
-        // Use landing price if exists & > 0, else selling price
+        // Use landing price if > 0
         basePrice = landingPrice > 0 ? landingPrice : sellingPrice;
         isLandingPriceApplied = landingPrice > 0;
 
@@ -1373,6 +1352,7 @@ export const getMostWantedProducts = async (req, res) => {
           _id: product.defaultVariant._id,
           variantAttributes: product.defaultVariant.variantAttributes || [],
           SKU: product.defaultVariant.SKU,
+          barcode: product.defaultVariant.barcode,
           images: product.defaultVariant.images || [],
           isDefault: product.defaultVariant.isDefault || false,
         };
@@ -1397,28 +1377,24 @@ export const getMostWantedProducts = async (req, res) => {
         );
       }
 
-      // Fallback if basePrice still 0
+      // Fallback
       if (basePrice <= 0) {
         basePrice = sellingPrice || 0;
         isLandingPriceApplied = false;
       }
 
-      originalPrice = basePrice;
-      discountedPrice = basePrice;
-
       // === Calculate discountPercent from MRP - landingSellPrice ===
       if (mrpPrice > 0 && landingPrice > 0) {
-        const discountAmount = mrpPrice - landingPrice;
-        discountPercent = Math.ceil((discountAmount / mrpPrice) * 100);
+        discountPercent = Math.ceil(((mrpPrice - landingPrice) / mrpPrice) * 100);
       } else if (mrpPrice > 0 && sellingPrice > 0) {
-        const discountAmount = mrpPrice - sellingPrice;
-        discountPercent = Math.ceil((discountAmount / mrpPrice) * 100);
+        discountPercent = Math.ceil(((mrpPrice - sellingPrice) / mrpPrice) * 100);
       } else {
         discountPercent = 0;
       }
 
       // === Apply Offers ===
-      const lineTotalBeforeDiscount = basePrice * 1; // quantity = 1
+      let currentPrice = basePrice;
+      const lineTotalBeforeDiscount = basePrice;
 
       for (const offer of offers) {
         let applies = false;
@@ -1435,14 +1411,14 @@ export const getMostWantedProducts = async (req, res) => {
           applies &&
           lineTotalBeforeDiscount >= (offer.offerMinimumOrderValue || 0)
         ) {
-          const oldPrice = discountedPrice;
-          discountedPrice = applyDiscount(
-            discountedPrice,
+          const oldPrice = currentPrice;
+          currentPrice = applyDiscount(
+            currentPrice,
             offer.offerDiscountUnit,
             offer.offerDiscountValue
           );
 
-          if (discountedPrice < oldPrice) {
+          if (currentPrice < oldPrice) {
             appliedOffers.push({
               offerName: offer.offerName,
               discountType: offer.offerDiscountUnit,
@@ -1452,25 +1428,34 @@ export const getMostWantedProducts = async (req, res) => {
         }
       }
 
-      const finalPrice = Math.max(0, discountedPrice);
-      const totalPrice = finalPrice;
+      discountedPrice = Math.max(0, currentPrice);
+      const finalPrice = discountedPrice;
 
       // === Final Product Object ===
       processedProducts.push({
-        ...product,
+        _id: product._id,
+        productName: product.productName,
+        urlSlug: product.urlSlug,
+        productImages: product.productImages || [],
+        thumbnail: product.thumbnail || (product.productImages?.[0] || ""),
+        brand: product.brand,
+        category: product.category,
+        subcategory: product.subcategory,
+        hasVariant: product.hasVariant,
+        variant: variantDetails,
+        variants: product.hasVariant ? [variantDetails].filter(Boolean) : [],
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
+        landingSellPrice: product.landingSellPrice,
         mostWantedScore,
         pricing: {
-          originalPrice,
+          originalPrice: basePrice,
           discountedPrice: finalPrice,
-          totalPrice,
-          sellingPrice: product.hasVariant
-            ? product.defaultVariant?.sellingPrice || 0
-            : product.sellingPrice || 0,
+          totalPrice: finalPrice,
+          sellingPrice,
           mrpPrice,
           landingSellPrice: landingPrice,
-          discountPercent, // ← calculated from MRP
+          discountPercent,
           isLandingPriceApplied,
           appliedOffers,
         },
@@ -1480,8 +1465,6 @@ export const getMostWantedProducts = async (req, res) => {
           maxAllowedQuantity,
           isInStock: availableQuantity > 0,
         },
-        variant: variantDetails,
-        hasVariant: !!variantDetails,
       });
     }
 
@@ -1493,9 +1476,7 @@ export const getMostWantedProducts = async (req, res) => {
     res.status(200).json(sorted);
   } catch (error) {
     console.error("Error fetching most wanted products:", error);
-    res
-      .status(500)
-      .json({ message: "Server error fetching most wanted products" });
+    res.status(500).json({ message: "Server error fetching most wanted products" });
   }
 };
 
@@ -1703,6 +1684,7 @@ export const getNewArrivalProducts = async (req, res) => {
           appliedOffers,
         },
         offerPrice: finalPrice,
+        landingSellPrice: product.landingSellPrice,
         stock: {
           availableQuantity,
           maxAllowedQuantity,
@@ -1780,8 +1762,13 @@ export const getProductById = async (req, res) => {
   try {
     const now = new Date();
 
-    // 1. Fetch product
-    const product = await Product.findOne({ urlSlug: req.params.slug }).lean();
+    // 1. Fetch product with proper population
+    const product = await Product.findOne({ urlSlug: req.params.slug })
+      .populate("brand", "_id brandName imageUrl")
+      .populate("category", "_id name image")
+      .populate("subcategory", "_id name image")
+      .lean();
+
     if (!product) return res.status(404).json({ message: "Product not found" });
 
     // 2. Enrich with default variant
@@ -1821,17 +1808,28 @@ export const getProductById = async (req, res) => {
       const appliedOffers = [];
 
       const lineTotal = basePrice;
+
+      // FIXED: Proper ID comparison for brand and category offers
       for (const offer of offers) {
         let applies = false;
-        if (offer.offerType === "product") applies = offer.offerEligibleItems.includes(product._id.toString());
-        else if (offer.offerType === "category" && product.category) applies = offer.offerEligibleItems.includes(product.category.toString());
-        else if (offer.offerType === "brand" && product.brand) applies = offer.offerEligibleItems.includes(product.brand.toString());
+
+        if (offer.offerType === "product") {
+          applies = offer.offerEligibleItems.includes(product._id.toString());
+        } else if (offer.offerType === "category" && product.category) {
+          applies = offer.offerEligibleItems.includes(product.category._id.toString());
+        } else if (offer.offerType === "brand" && product.brand) {
+          applies = offer.offerEligibleItems.includes(product.brand._id.toString());
+        }
 
         if (applies && lineTotal >= (offer.offerMinimumOrderValue || 0)) {
           const old = discountedPrice;
           discountedPrice = applyDiscount(discountedPrice, offer.offerDiscountUnit, offer.offerDiscountValue);
           if (discountedPrice < old) {
-            appliedOffers.push({ offerName: offer.offerName, discountType: offer.offerDiscountUnit, discountValue: offer.offerDiscountValue });
+            appliedOffers.push({
+              offerName: offer.offerName,
+              discountType: offer.offerDiscountUnit,
+              discountValue: offer.offerDiscountValue
+            });
           }
         }
       }
@@ -1853,13 +1851,17 @@ export const getProductById = async (req, res) => {
         totalPrice: finalPrice,
         sellingPrice,
         mrpPrice,
-        landingSellPrice: product.landingSellPrice,
+        landingSellPrice: landingPrice,
         discountPercent,
         isLandingPriceApplied,
         appliedOffers
       };
 
-      defaultStock = { availableQuantity, maxAllowedQuantity, isInStock: availableQuantity > 0 };
+      defaultStock = {
+        availableQuantity,
+        maxAllowedQuantity,
+        isInStock: availableQuantity > 0
+      };
       defaultOfferPrice = finalPrice;
     }
 
@@ -1882,17 +1884,28 @@ export const getProductById = async (req, res) => {
         const appliedOffers = [];
 
         const lineTotal = basePrice;
+
+        // FIXED: Proper ID comparison for brand and category offers
         for (const offer of offers) {
           let applies = false;
-          if (offer.offerType === "product") applies = offer.offerEligibleItems.includes(product._id.toString());
-          else if (offer.offerType === "category" && product.category) applies = offer.offerEligibleItems.includes(product.category.toString());
-          else if (offer.offerType === "brand" && product.brand) applies = offer.offerEligibleItems.includes(product.brand.toString());
+
+          if (offer.offerType === "product") {
+            applies = offer.offerEligibleItems.includes(product._id.toString());
+          } else if (offer.offerType === "category" && product.category) {
+            applies = offer.offerEligibleItems.includes(product.category._id.toString());
+          } else if (offer.offerType === "brand" && product.brand) {
+            applies = offer.offerEligibleItems.includes(product.brand._id.toString());
+          }
 
           if (applies && lineTotal >= (offer.offerMinimumOrderValue || 0)) {
             const old = discountedPrice;
             discountedPrice = applyDiscount(discountedPrice, offer.offerDiscountUnit, offer.offerDiscountValue);
             if (discountedPrice < old) {
-              appliedOffers.push({ offerName: offer.offerName, discountType: offer.offerDiscountUnit, discountValue: offer.offerDiscountValue });
+              appliedOffers.push({
+                offerName: offer.offerName,
+                discountType: offer.offerDiscountUnit,
+                discountValue: offer.offerDiscountValue
+              });
             }
           }
         }
@@ -1905,9 +1918,20 @@ export const getProductById = async (req, res) => {
             : 0;
 
         const stockAgg = await mongoose.model("Inventory").aggregate([
-          { $match: { product: new mongoose.Types.ObjectId(product._id), variant: new mongoose.Types.ObjectId(variant._id) } },
-          { $group: { _id: null, totalAvailableQuantity: { $sum: "$quantity" } } }
+          {
+            $match: {
+              product: new mongoose.Types.ObjectId(product._id),
+              variant: new mongoose.Types.ObjectId(variant._id)
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalAvailableQuantity: { $sum: "$quantity" }
+            }
+          }
         ]);
+
         const totalAvailableQuantity = stockAgg[0]?.totalAvailableQuantity || 0;
         totalProductStock += totalAvailableQuantity;
 
@@ -1917,16 +1941,18 @@ export const getProductById = async (req, res) => {
           totalPrice: finalPrice,
           sellingPrice,
           mrpPrice,
-          landingSellPrice: product.landingSellPrice,
+          landingSellPrice: landingPrice,
           discountPercent,
           isLandingPriceApplied,
           appliedOffers
         };
+
         variant.stock = {
           availableQuantity: totalAvailableQuantity,
           maxAllowedQuantity: Math.min(variant.maximumQuantity || 10, totalAvailableQuantity),
           isInStock: totalAvailableQuantity > 0
         };
+
         variant.offerPrice = finalPrice;
         variant.totalAvailableQuantity = totalAvailableQuantity;
       }
@@ -1941,14 +1967,22 @@ export const getProductById = async (req, res) => {
     // === REVIEWS ===
     const reviewStats = await Review.aggregate([
       { $match: { productId: product._id } },
-      { $group: { _id: "$productId", averageRating: { $avg: "$rating" }, reviewCount: { $sum: 1 } } }
+      {
+        $group: {
+          _id: "$productId",
+          averageRating: { $avg: "$rating" },
+          reviewCount: { $sum: 1 }
+        }
+      }
     ]);
+
     const averageRating = reviewStats.length ? Number(reviewStats[0].averageRating.toFixed(2)) : 0;
     const reviewCount = reviewStats.length ? reviewStats[0].reviewCount : 0;
 
     // === NON-VARIANT PRICING (if not hasVariant) ===
     let nonVariantPricing = null;
     let nonVariantOfferPrice = 0;
+    let nonVariantStock = { availableQuantity: 0, maxAllowedQuantity: 0, isInStock: false };
 
     if (!product.hasVariant) {
       const landingPrice = product.landingSellPrice || 0;
@@ -1962,17 +1996,28 @@ export const getProductById = async (req, res) => {
       const appliedOffers = [];
 
       const lineTotal = basePrice;
+
+      // FIXED: Proper ID comparison for brand and category offers
       for (const offer of offers) {
         let applies = false;
-        if (offer.offerType === "product") applies = offer.offerEligibleItems.includes(product._id.toString());
-        else if (offer.offerType === "category" && product.category) applies = offer.offerEligibleItems.includes(product.category.toString());
-        else if (offer.offerType === "brand" && product.brand) applies = offer.offerEligibleItems.includes(product.brand.toString());
+
+        if (offer.offerType === "product") {
+          applies = offer.offerEligibleItems.includes(product._id.toString());
+        } else if (offer.offerType === "category" && product.category) {
+          applies = offer.offerEligibleItems.includes(product.category._id.toString());
+        } else if (offer.offerType === "brand" && product.brand) {
+          applies = offer.offerEligibleItems.includes(product.brand._id.toString());
+        }
 
         if (applies && lineTotal >= (offer.offerMinimumOrderValue || 0)) {
           const old = discountedPrice;
           discountedPrice = applyDiscount(discountedPrice, offer.offerDiscountUnit, offer.offerDiscountValue);
           if (discountedPrice < old) {
-            appliedOffers.push({ offerName: offer.offerName, discountType: offer.offerDiscountUnit, discountValue: offer.offerDiscountValue });
+            appliedOffers.push({
+              offerName: offer.offerName,
+              discountType: offer.offerDiscountUnit,
+              discountValue: offer.offerDiscountValue
+            });
           }
         }
       }
@@ -1990,16 +2035,22 @@ export const getProductById = async (req, res) => {
         totalPrice: finalPrice,
         sellingPrice,
         mrpPrice,
-        landingSellPrice: product.landingSellPrice,
+        landingSellPrice: landingPrice,
         discountPercent,
         isLandingPriceApplied,
         appliedOffers
       };
+
       nonVariantOfferPrice = finalPrice;
+      nonVariantStock = {
+        availableQuantity: totalProductStock,
+        maxAllowedQuantity: Math.min(product.maximumQuantity || 10, totalProductStock),
+        isInStock: totalProductStock > 0
+      };
     }
 
     // === FINAL RESPONSE ===
-    res.status(200).json({
+    const response = {
       ...product,
       variants,
       totalAvailableQuantity: totalProductStock,
@@ -2012,6 +2063,9 @@ export const getProductById = async (req, res) => {
       // ALWAYS RETURN offerPrice
       offerPrice: product.hasVariant ? defaultOfferPrice : nonVariantOfferPrice,
 
+      // ALWAYS RETURN stock for non-variant products
+      stock: !product.hasVariant ? nonVariantStock : undefined,
+
       // defaultVariant with pricing + offerPrice
       defaultVariant: product.hasVariant ? {
         ...productWithDefault.defaultVariant,
@@ -2019,7 +2073,9 @@ export const getProductById = async (req, res) => {
         stock: defaultStock,
         offerPrice: defaultOfferPrice
       } : null
-    });
+    };
+
+    res.status(200).json(response);
 
   } catch (error) {
     console.error("Error fetching product details:", error);
@@ -2380,6 +2436,7 @@ export const getProductsByCategory = async (req, res) => {
 
   res.status(200).json(result);
 };
+
 export const getNearbyProducts = async (req, res) => {
   try {
     const { lat, lng, radius = 10 } = req.query;
