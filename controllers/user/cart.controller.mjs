@@ -726,9 +726,7 @@ export const getCart = async (req, res) => {
         sellingPrice = product.sellingPrice || 0;
         mrpPrice = product.mrpPrice || 0;
 
-        basePrice = (finalQuantity >= minQty && landingPrice > 0)
-          ? landingPrice
-          : sellingPrice;
+        basePrice = landingPrice
 
         // Stock
         const inv = await mongoose.model("Inventory").findOne({ product: product._id, variant: { $exists: false } }).lean();
@@ -737,7 +735,7 @@ export const getCart = async (req, res) => {
       }
 
       // Fallback
-      if (basePrice <= 0) basePrice = sellingPrice || 0;
+      if (basePrice <= 0) basePrice = landingPrice || 0;
 
       // === 2. Cap quantity by stock ===
       if (finalQuantity > maxAllowedQuantity && maxAllowedQuantity > 0) {
@@ -747,8 +745,8 @@ export const getCart = async (req, res) => {
       // === 3. Re-evaluate basePrice if quantity dropped below minQty ===
       if (finalQuantity < minQty) {
         basePrice = product.hasVariant && variant
-          ? (variant.sellingPrice || 0)
-          : (product.sellingPrice || 0);
+          ? (variant.landingSellPrice || 0)
+          : (product.landingSellPrice || 0);
       }
 
       // === 4. Apply Offers (on basePrice) ===
