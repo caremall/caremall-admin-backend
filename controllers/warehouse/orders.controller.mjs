@@ -461,98 +461,97 @@ export const getAllocatedOrders = async (req, res) => {
   }
 };
 
-export const updatePickedQuantities = async (req, res) => {
-  try {
-    const orderId = req.params.id;
 
-    // pickedItems: [{ pickItemId (productId), pickedQuantity, pickerName }]
-    const { pickedItems } = req.body;
 
-    if (!Array.isArray(pickedItems) || pickedItems.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "pickedItems must be a non-empty array" });
+export const updatePickedQuantities = async (req,res) => {
+    try {
+        const orderId = req.params.id
+        const { pickedItems } = req.body
+
+        if (!Array.isArray(pickedItems) || pickedItems.length === 0) {
+            return res.status(400).json({ message: "pickedItems must be a non-empty array" })
+        }
+
+        const order = await Order.findById(orderId).populate("items.product items.variant")
+        if (!order) return res.status(404).json({ message: "Order not found" })
+
+        // Initialize pickings if not exists
+        if (!order.pickings || order.pickings.length === 0) {
+            order.pickings = order.items.map((item) => ({
+                product: item.product._id,
+                variant: item.variant?._id || null,
+                requiredQuantity: item.quantity,
+                pickedQuantity: 0,
+                pickStatus: "pending",
+                pickerStatus: "un-assigned",
+                pickerName: null,
+            }))
+            order.markModified("pickings")
+        }
+
+        for (const { productId, variantId, pickedQuantity, pickerName } of pickedItems) {
+            // Validate IDs
+            if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
+                return res.status(400).json({ message: `Invalid productId: ${productId}` })
+            }
+
+            if (variantId && !mongoose.Types.ObjectId.isValid(variantId)) {
+                return res.status(400).json({ message: `Invalid variantId: ${variantId}` })
+            }
+
+            if (typeof pickedQuantity !== "number" || !Number.isInteger(pickedQuantity) || pickedQuantity < 0) {
+                return res.status(400).json({ message: "pickedQuantity must be a non-negative integer" })
+            }
+
+            if (!pickerName || typeof pickerName !== "string" || pickerName.trim() === "") {
+                return res.status(400).json({ message: "pickerName is required and must be non-empty" })
+            }
+
+            // Find pick item: variant first, then product
+            const pickItem = order.pickings.find((pi) => {
+                if (variantId) {
+                    return pi.variant && pi.variant.toString() === variantId
+                }
+                return pi.product.toString() === productId
+            })
+
+            if (!pickItem) {
+                const type = variantId ? `variant ${variantId}` : `product ${productId}`
+                return res.status(400).json({ message: `Pick item not found for ${type}` })
+            }
+
+            // Update
+            pickItem.pickedQuantity = pickedQuantity
+            pickItem.pickerName = pickerName.trim()
+            pickItem.pickerStatus = "assigned"
+
+            if (pickedQuantity === 0) {
+                pickItem.pickStatus = "pending"
+            } else if (pickedQuantity < pickItem.requiredQuantity) {
+                pickItem.pickStatus = "partial"
+            } else {
+                pickItem.pickStatus = "picked"
+            }
+        }
+
+        // Update order status
+        const allPicked = order.pickings.every((pi) => pi.pickStatus === "picked")
+        if (allPicked) {
+            order.orderStatus = "picked"
+        }
+
+        await order.save()
+
+        return res.status(200).json({
+            success: true,
+            message: "Picking updated successfully",
+            data: order,
+        })
+    } catch (error) {
+        console.error("Update Picked Quantities Error:", error)
+        return res.status(500).json({ message: "Internal server error", error: error.message })
     }
-
-    const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ message: "Order not found" });
-
-    if (!Array.isArray(order.pickings) || order.pickings.length === 0) {
-      order.pickings = order.items.map((item) => ({
-        product: item.product,
-        variant: item.variant || null,
-        pickerName: null,
-        requiredQuantity: item.quantity,
-        pickedQuantity: 0,
-        pickStatus: "pending",
-        pickerStatus: "un-assigned",
-      }));
-      order.markModified("pickings");
-    }
-
-    for (const { pickItemId, pickedQuantity, pickerName } of pickedItems) {
-      if (!pickItemId || !mongoose.Types.ObjectId.isValid(pickItemId)) {
-        return res
-          .status(400)
-          .json({ message: `Invalid product ID: ${pickItemId}` });
-      }
-
-      if (
-        pickedQuantity === undefined ||
-        typeof pickedQuantity !== "number" ||
-        !Number.isInteger(pickedQuantity) ||
-        pickedQuantity < 0
-      ) {
-        return res.status(400).json({
-          message: `Invalid pickedQuantity for product ${pickItemId}: must be non-negative integer`,
-        });
-      }
-
-      if (
-        !pickerName ||
-        typeof pickerName !== "string" ||
-        pickerName.trim() === ""
-      ) {
-        return res.status(400).json({
-          message: `pickerName is required`,
-        });
-      }
-
-      const pickItem = order.pickings.find(
-        (pi) => pi.product.toString() === pickItemId
-      );
-
-      if (!pickItem) {
-        return res.status(400).json({
-          message: `Pick item with product id ${pickItemId} not found`,
-        });
-      }
-
-      // Update fields
-      pickItem.pickedQuantity = pickedQuantity;
-      pickItem.pickerName = pickerName;
-      pickItem.pickerStatus = "assigned";
-
-      if (pickedQuantity === 0) pickItem.pickStatus = "pending";
-      else if (pickedQuantity < pickItem.requiredQuantity)
-        pickItem.pickStatus = "partial";
-      else pickItem.pickStatus = "picked";
-    }
-
-    const allPicked =
-      order.pickings.length > 0 &&
-      order.pickings.every((pi) => pi.pickStatus === "picked");
-    if (allPicked) order.orderStatus = "picked";
-
-    await order.save();
-    res
-      .status(200)
-      .json({ success: true, message: "Picking updated", data: order });
-  } catch (error) {
-    console.error("Update Picked Quantities Error:", error);
-    res.status(500).json({ message: "Failed to update picked quantities" });
-  }
-};
+}
 
 // export const updatePackingDetails = async (req, res) => {
 //   try {
