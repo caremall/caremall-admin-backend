@@ -1,7 +1,8 @@
 import Offer from "../../models/offerManagement.mjs";
 import { uploadBase64Image } from "../../utils/uploadImage.mjs";
-
-
+import Product from "../../models/Product.mjs";
+import Category from "../../models/Category.mjs";
+import Brand from "../../models/Brand.mjs";
 // Helper to validate and convert booking dates array
 function parseBookingDates(bookingDates, fallback = []) {
   if (
@@ -95,29 +96,69 @@ export const createOffer = async (req, res) => {
   });
 };
 
+
 export const getAllOffers = async (req, res) => {
   try {
     const { search = "", status } = req.query;
+
     const query = {
       ...(search && { offerTitle: { $regex: search, $options: "i" } }),
       ...(status && { offerStatus: status }),
     };
 
-    const [offers, total] = await Promise.all([
-      Offer.find(query).sort({ createdAt: -1 }),
-      Offer.countDocuments(query),
-    ]);
+    const offers = await Offer.find(query).sort({ createdAt: -1 });
+
+    // ✅ Add totalEligibleItems dynamically
+    const updatedOffers = await Promise.all(
+      offers.map(async (offer) => {
+        let totalEligibleItems = 0;
+
+        switch (offer.offerType) {
+          case "product":
+            // uses product ids directly
+            totalEligibleItems = offer.offerEligibleItems.length;
+            break;
+
+          case "category":
+            // count products belonging to selected categories
+            totalEligibleItems = await Product.countDocuments({
+              category: { $in: offer.offerEligibleItems },
+            });
+            break;
+
+          case "brand":
+            // count products belonging to selected brands
+            totalEligibleItems = await Product.countDocuments({
+              brand: { $in: offer.offerEligibleItems },
+            });
+            break;
+
+          case "cart":
+            totalEligibleItems = 0; // cart-based offers do not depend on items
+            break;
+
+          default:
+            totalEligibleItems = 0;
+        }
+
+        return {
+          ...offer.toObject(),
+          totalEligibleItems,
+        };
+      })
+    );
 
     res.status(200).json({
       success: true,
-      data: offers,
+      total: updatedOffers.length,
+      data: updatedOffers,
     });
+
   } catch (error) {
     console.error("Get All Offers Error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 // ✅ Get Offer By ID
 export const getOfferById = async (req, res) => {
   try {
