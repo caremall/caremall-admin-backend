@@ -159,14 +159,47 @@ export const getAllOffers = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-// ✅ Get Offer By ID
+
+
 export const getOfferById = async (req, res) => {
   try {
     const offer = await Offer.findById(req.params.id);
+
     if (!offer) {
       return res.status(404).json({ message: "Offer not found" });
     }
-    res.status(200).json({ success: true, data: offer });
+
+    let populatedItems = [];
+
+    if (offer.offerEligibleItems?.length > 0) {
+      if (offer.offerType === "product") {
+        populatedItems = await Product.find(
+          { _id: { $in: offer.offerEligibleItems } },
+          { _id: 1, productName: 1 }
+        );
+      } else if (offer.offerType === "category") {
+        populatedItems = await Category.find(
+          { _id: { $in: offer.offerEligibleItems } },
+          { _id: 1, name: 1 }
+        );
+      } else if (offer.offerType === "brand") {
+        populatedItems = await Brand.find(
+          { _id: { $in: offer.offerEligibleItems } },
+          { _id: 1, brandName: 1 }
+        );
+      } else {
+        // for cart type – keep original values
+        populatedItems = offer.offerEligibleItems;
+      }
+    }
+
+    const response = {
+      ...offer.toObject(),
+      offerEligibleItems: populatedItems,
+    };
+
+    res.status(200).json({ success: true, data: response });
+
   } catch (error) {
     console.error("Get Offer By ID Error:", error);
     res.status(500).json({ message: "Internal server error" });
