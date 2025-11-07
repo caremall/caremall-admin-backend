@@ -708,28 +708,28 @@ export const deleteProduct = async (req, res) => {
   try {
     const productId = req.params.id;
 
+    // 1️⃣ Check if product exists
     const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // Delete variants first
-    const deleteVariantsResult = await Variant.deleteMany({ productId });
-
-    // ---- CHECK ORDERS -------------------------------------------------
+    // 2️⃣ Check if product is in any existing orders BEFORE deleting anything
     const existingProductInOrders = await Order.findOne({
       "items.product": productId,
     });
 
     if (existingProductInOrders) {
-      // 400 = client error – this is a *business rule*, not a crash
       return res.status(400).json({
         message:
           "Cannot delete product as it is associated with existing orders.",
       });
     }
-    // ------------------------------------------------------------------
 
+    // 3️⃣ Delete variants only if product can safely be deleted
+    const deleteVariantsResult = await Variant.deleteMany({ productId });
+
+    // 4️⃣ Delete the product
     await Product.findByIdAndDelete(productId);
 
     res.status(200).json({
@@ -741,6 +741,7 @@ export const deleteProduct = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
 
 export const getSearchSuggestions = async (req, res) => {
   try {
