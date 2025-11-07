@@ -339,6 +339,7 @@ export const getFilteredProducts = async (req, res) => {
           subcategory: product.subcategory,
           urlSlug: product.urlSlug,
           productStatus: product.productStatus,
+          landingSellPrice:product.landingSellPrice,
           hasVariant: true,
           variants: matchingVariants.map((variant) => ({
             _id: variant._id,
@@ -1138,6 +1139,7 @@ export const getFilteredProductsUpdated = async (req, res) => {
           productStatus: product.productStatus,
           hasVariant: false,
           productImages: product.productImages,
+          landingSellPrice:product.landingSellPrice,
           totalAvailableQuantity: productTotalStock,
           pricing,
           offerPrice: finalPrice,  // offerPrice outside
