@@ -2,7 +2,8 @@
 import mongoose from "mongoose";
 import ProductCard from "../../models/productCard.mjs";
 import { enrichProductsWithDefaultVariants } from "../../utils/enrichedProducts.mjs";
-
+import Offer from "../../models/offerManagement.mjs";
+import Variant  from "../../models/Variant.mjs";
 // Create a new ProductCard with linked products
 export const createProductCard = async (req, res) => {
   try {
@@ -79,49 +80,239 @@ export const getAllProductCards = async (req, res) => {
 
 export const getAllActiveProductCards = async (req, res) => {
   try {
+    const now = new Date();
+
+    // === 1. Fetch Active Offers ===
+    const offers = await Offer.find({
+      offerStatus: "published",
+      offerRedeemTimePeriod: { $exists: true, $not: { $size: 0 } },
+      "offerRedeemTimePeriod.0": { $lte: now },
+      "offerRedeemTimePeriod.1": { $gte: now },
+    }).lean();
+
+    const applyDiscount = (price, unit, value) => {
+      if (unit === "percentage") return Math.max(0, price - (price * value) / 100);
+      if (unit === "fixed") return Math.max(0, price - value);
+      return price;
+    };
+
+    // === 2. Fetch ProductCards + Populate Products & Variants ===
     const cards = await ProductCard.find({ active: true })
       .populate({
         path: "products",
         match: { productStatus: "published", visibility: "visible" },
         populate: [
-          {
-            path: "brand",
-            model: "Brand",
-            select: "name",
-          },
-          {
-            path: "category",
-            model: "Category",
-            select: "name",
-          },
-          {
-            path: "defaultVariant",
-            model: "Variant",
-            select:
-              "variantId images sellingPrice mrpPrice SKU barcode isDefault",
-          },
-          {
-            path: "variants",
-            model: "Variant",
-            select:
-              "variantId images sellingPrice mrpPrice SKU barcode availableQuantity weight dimensions isDefault",
-          },
+          { path: "brand", model: "Brand", select: "brandName imageUrl" },
+          { path: "category", model: "Category", select: "name image" },
+          { path: "subcategory", model: "Category", select: "name image" },
         ],
       })
       .sort({ createdAt: -1 })
       .lean();
 
-    // Enrich each product card’s products with default variants (optional)
+    // === 3. Enrich Products with Default Variants ===
     const enrichedCards = await Promise.all(
       cards.map(async (card) => {
-        const enrichedProducts = await enrichProductsWithDefaultVariants(
-          card.products || []
-        );
-        return { ...card, products: enrichedProducts };
+        const rawProducts = card.products || [];
+        const enrichedProducts = await enrichProductsWithDefaultVariants(rawProducts);
+
+        // === 4. Load ALL Variants for these products ===
+        const productIds = enrichedProducts.map(p => p._id);
+        const allVariants = await Variant.find({ productId: { $in: productIds } })
+          .select(
+            "productId _id variantId variantAttributes SKU barcode images landingSellPrice sellingPrice mrpPrice maximumQuantity isDefault"
+          )
+          .lean();
+
+        const variantMap = {};
+        allVariants.forEach(v => {
+          const pid = v.productId?.toString();
+          if (!pid) return;
+          if (!variantMap[pid]) variantMap[pid] = [];
+          variantMap[pid].push(v);
+        });
+
+        // === 5. Process Each Product ===
+        const processedProducts = [];
+
+        for (const product of enrichedProducts) {
+          const pid = product._id.toString();
+          const variants = variantMap[pid] || [];
+
+          // Default variant
+          let defaultVar = null;
+          if (product.hasVariant && product.defaultVariant) {
+            const defId = product.defaultVariant.toString();
+            defaultVar = variants.find(v => v._id.toString() === defId) || null;
+          }
+
+          // Images fallback
+          const finalImages = product.productImages?.length
+            ? product.productImages
+            : (defaultVar?.images || []);
+
+          // Base price source
+          const getBase = (src) => {
+            const landing = src?.landingSellPrice || 0;
+            const selling = src?.sellingPrice || 0;
+            const mrp = src?.mrpPrice || 0;
+            const maxQty = src?.maximumQuantity || 10;
+            return { landing, selling, mrp, maxQty, base: landing > 0 ? landing : selling };
+          };
+
+          const defSrc = defaultVar ? getBase(defaultVar) : getBase(product);
+          const basePrice = defSrc.base;
+          const isLanding = defSrc.landing > 0;
+
+          // Apply offers
+          let discounted = basePrice;
+          const applied = [];
+          for (const o of offers) {
+            let ok = false;
+            if (o.offerType === "product") ok = o.offerEligibleItems.includes(pid);
+            else if (o.offerType === "category" && product.category)
+              ok = o.offerEligibleItems.includes(product.category._id.toString());
+            else if (o.offerType === "brand" && product.brand)
+              ok = o.offerEligibleItems.includes(product.brand._id.toString());
+
+            if (ok && basePrice >= (o.offerMinimumOrderValue || 0)) {
+              const prev = discounted;
+              discounted = applyDiscount(discounted, o.offerDiscountUnit, o.offerDiscountValue);
+              if (discounted < prev) {
+                applied.push({ offerName: o.offerName, discountType: o.offerDiscountUnit, discountValue: o.offerDiscountValue });
+              }
+            }
+          }
+
+          const finalPrice = Math.max(0, discounted);
+          const discountPercent = defSrc.mrp > 0 && defSrc.landing > 0
+            ? Math.ceil(((defSrc.mrp - defSrc.landing) / defSrc.mrp) * 100)
+            : defSrc.mrp > 0 && defSrc.selling > 0
+              ? Math.ceil(((defSrc.mrp - defSrc.selling) / defSrc.mrp) * 100)
+              : 0;
+
+          // Stock
+          let available = 0;
+          if (defaultVar) {
+            const inv = await mongoose.model("Inventory").findOne({ variant: defaultVar._id }).lean();
+            available = inv?.quantity || 0;
+          } else {
+            const agg = await mongoose.model("Inventory").aggregate([
+              { $match: { product: product._id } },
+              { $group: { _id: null, total: { $sum: "$quantity" } } },
+            ]);
+            available = agg[0]?.total || 0;
+          }
+          const maxAllowed = Math.min(defSrc.maxQty, available);
+
+          const pricing = {
+            originalPrice: basePrice,
+            discountedPrice: finalPrice,
+            totalPrice: finalPrice,
+            sellingPrice: defSrc.selling,
+            mrpPrice: defSrc.mrp,
+            landingSellPrice: defSrc.landing,
+            discountPercent,
+            isLandingPriceApplied: isLanding,
+            appliedOffers: applied,
+          };
+
+          // Process variants
+          const processedVariants = variants.map(v => {
+            const src = getBase(v);
+            let vDisc = src.base;
+            const vApplied = [];
+
+            for (const o of offers) {
+              let ok = false;
+              if (o.offerType === "product") ok = o.offerEligibleItems.includes(pid);
+              else if (o.offerType === "category" && product.category)
+                ok = o.offerEligibleItems.includes(product.category._id.toString());
+              else if (o.offerType === "brand" && product.brand)
+                ok = o.offerEligibleItems.includes(product.brand._id.toString());
+
+              if (ok && src.base >= (o.offerMinimumOrderValue || 0)) {
+                const prev = vDisc;
+                vDisc = applyDiscount(vDisc, o.offerDiscountUnit, o.offerDiscountValue);
+                if (vDisc < prev) {
+                  vApplied.push({ offerName: o.offerName, discountType: o.offerDiscountUnit, discountValue: o.offerDiscountValue });
+                }
+              }
+            }
+
+            const vFinal = Math.max(0, vDisc);
+            const vPct = src.mrp > 0 && src.landing > 0
+              ? Math.ceil(((src.mrp - src.landing) / src.mrp) * 100)
+              : src.mrp > 0 && src.selling > 0
+                ? Math.ceil(((src.mrp - src.selling) / src.mrp) * 100)
+                : 0;
+
+            let vStock = 0;
+            (async () => {
+              const inv = await mongoose.model("Inventory").findOne({ variant: v._id }).lean();
+              vStock = inv?.quantity || 0;
+            })();
+
+            return {
+              _id: v._id,
+              variantId: v.variantId,
+              variantAttributes: v.variantAttributes,
+              SKU: v.SKU,
+              barcode: v.barcode,
+              images: v.images || [],
+              pricing: {
+                originalPrice: src.base,
+                discountedPrice: vFinal,
+                totalPrice: vFinal,
+                sellingPrice: src.selling,
+                mrpPrice: src.mrp,
+                landingSellPrice: src.landing,
+                discountPercent: vPct,
+                isLandingPriceApplied: src.landing > 0,
+                appliedOffers: vApplied,
+              },
+              offerPrice: vFinal,
+              stock: {
+                availableQuantity: vStock,
+                maxAllowedQuantity: Math.min(v.maximumQuantity || 10, vStock),
+                isInStock: vStock > 0,
+              },
+              isDefault: v.isDefault,
+            };
+          });
+
+          processedProducts.push({
+            _id: product._id,
+            productName: product.productName,
+            urlSlug: product.urlSlug,
+            thumbnail: product.thumbnail || finalImages[0] || "",
+            productImages: finalImages,
+            SKU: product.SKU,
+            brand: product.brand,
+            category: product.category,
+            subcategory: product.subcategory,
+            hasVariant: product.hasVariant,
+            variants: processedVariants,
+            defaultVariant: defaultVar ? {
+              _id: defaultVar._id,
+              variantAttributes: defaultVar.variantAttributes,
+              images: defaultVar.images,
+              pricing,
+              offerPrice: finalPrice,
+              stock: { availableQuantity: available, maxAllowedQuantity: maxAllowed, isInStock: available > 0 },
+            } : null,
+            pricing,
+            offerPrice: finalPrice,
+            stock: { availableQuantity: available, maxAllowedQuantity: maxAllowed, isInStock: available > 0 },
+          });
+        }
+
+        return { ...card, products: processedProducts };
       })
     );
 
     res.status(200).json({ success: true, data: enrichedCards });
+
   } catch (error) {
     console.error("Get All ProductCards Error:", error);
     res.status(500).json({ message: "Failed to fetch product cards" });

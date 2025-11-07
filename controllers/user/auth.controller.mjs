@@ -1,5 +1,6 @@
 import Address from "../../models/Address.mjs";
 import User from "../../models/User.mjs";
+import axios from "axios";
 import {
   generateUserAccessToken,
   generateUserRefreshToken,
@@ -7,6 +8,9 @@ import {
 } from "../../utils/generateTokens.mjs";
 import sendMail from "../../utils/sendMail.mjs";
 import { uploadBase64Image } from "../../utils/uploadImage.mjs";
+
+// import SendOtp from "sendotp";
+// const sendOtp = new SendOtp("471656ApFfUSVhG0690a0738P1");
 
 export const signup = async (req, res) => {
   const { name, email, password, avatar, phone } = req.body;
@@ -44,20 +48,17 @@ export const login = async (req, res) => {
 
   try {
     const user = await User.findOne({ email }).select("+password");
-    
-   
+
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    
     if (user.isBlocked) {
-      return res.status(403).json({ 
-        message: "Your account has been blocked. Please contact support." 
+      return res.status(403).json({
+        message: "Your account has been blocked. Please contact support.",
       });
     }
 
-  
     if (!(await user.comparePassword(password))) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
@@ -71,7 +72,7 @@ export const login = async (req, res) => {
       sameSite: "Strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
-    
+
     user.password = "";
     res.status(200).json({
       accessToken,
@@ -84,33 +85,32 @@ export const login = async (req, res) => {
   }
 };
 
+// export const sendOtp = async (req, res) => {
+//   const { email } = req.body;
+//   if (!email) return res.status(400).json({ message: "Email is required" });
 
-export const sendOtp = async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ message: "Email is required" });
+//   const user = await User.findOne({ email });
+//   if (!user) return res.status(404).json({ message: "User not found" });
 
-  const user = await User.findOne({ email });
-  if (!user) return res.status(404).json({ message: "User not found" });
+//   // Generate a 6-digit OTP
+//   const otp = Math.floor(100000 + Math.random() * 900000);
 
-  // Generate a 6-digit OTP
-  const otp = Math.floor(100000 + Math.random() * 900000);
+//   user.otp = otp;
+//   user.otpExpires = Date.now() + 5 * 60 * 1000; // OTP valid for 5 min
+//   await user.save();
 
-  user.otp = otp;
-  user.otpExpires = Date.now() + 5 * 60 * 1000; // OTP valid for 5 min
-  await user.save();
-
-  try {
-    await sendMail({
-      email: user.email,
-      subject: "Login OTP",
-      template: "otp.ejs",
-      mailData: { name: user.name, otp },
-    });
-    res.status(200).json({ message: "OTP sent to your email address" });
-  } catch (error) {
-    res.status(500).json({ message: "Error sending OTP email" });
-  }
-};
+//   try {
+//     await sendMail({
+//       email: user.email,
+//       subject: "Login OTP",
+//       template: "otp.ejs",
+//       mailData: { name: user.name, otp },
+//     });
+//     res.status(200).json({ message: "OTP sent to your email address" });
+//   } catch (error) {
+//     res.status(500).json({ message: "Error sending OTP email" });
+//   }
+// };
 
 export const loginWithOtp = async (req, res) => {
   const { email, otp } = req.body;
@@ -214,7 +214,6 @@ export const getLoggedInUserDetails = async (req, res) => {
   }
 };
 
-
 export const editProfile = async (req, res) => {
   try {
     const userId = req.user._id; // Auth middleware must set req.user
@@ -267,5 +266,102 @@ export const editProfile = async (req, res) => {
   } catch (error) {
     console.error("Edit Profile Error:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const sendOrLoginOtp = async (req, res) => {
+  try {
+    const { phone } = req.body;
+    console.log(phone, "phonephonephonephonephone");
+    console.log("Using Template ID:", process.env.MSG91_TEMPLATE_ID);
+
+    if (!phone) return res.status(400).json({ message: "Phone is required" });
+
+    let user = await User.findOne({ phone });
+    if (!user) {
+      user = await User.create({
+        name: `User_${phone}`,
+        email: `${phone}@auto.caremall.in`,
+        phone,
+        password: "default", // random placeholder to satisfy schema
+      });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000);
+    user.otp = otp;
+    user.otpExpires = Date.now() + 5 * 60 * 1000;
+    await user.save();
+    console.log(otp, "otpotpotpotpotpotpotpotpotp");
+    //  MSG91 SMS API call
+    const response = await axios.post(
+      "https://control.msg91.com/api/v5/flow",
+      {
+        // template_id: "69019ca7e18e770bfa226964",
+        template_id: process.env.MSG91_TEMPLATE_ID,
+        recipients: [
+          {
+            mobiles: `91${phone}`,
+            VAR1: otp,
+          },
+        ],
+      },
+      {
+        headers: {
+          authkey: process.env.MSG91_AUTH_KEY,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log(response.data);
+
+    // console.log(response, "responseresponseresponseresponseresponseresponse");
+
+    res.status(200).json({ message: "OTP sent successfully" });
+  } catch (err) {
+    console.error("Send OTP error:", err);
+    res.status(500).json({ message: "Failed to send OTP" });
+  }
+};
+
+export const verifyOtpAndLogin = async (req, res) => {
+  try {
+    const { phone, otp } = req.body;
+    if (!phone || !otp)
+      return res.status(400).json({ message: "Phone and OTP required" });
+
+    const user = await User.findOne({ phone });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (
+      user.otp !== Number(otp) ||
+      !user.otpExpires ||
+      user.otpExpires < Date.now()
+    ) {
+      return res.status(401).json({ message: "Invalid or expired OTP" });
+    }
+
+    user.otp = null;
+    user.otpExpires = null;
+    await user.save();
+
+    const accessToken = generateUserAccessToken(user._id);
+    const refreshToken = generateUserRefreshToken(user._id);
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.status(200).json({
+      accessToken,
+      user,
+      message: "Logged in successfully via OTP",
+    });
+  } catch (err) {
+    console.error("Verify OTP error:", err);
+    res.status(500).json({ message: "OTP verification failed" });
   }
 };
