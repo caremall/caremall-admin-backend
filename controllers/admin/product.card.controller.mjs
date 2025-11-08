@@ -293,7 +293,7 @@ export const getAllActiveProductCards = async (req, res) => {
             category: product.category,
             subcategory: product.subcategory,
             hasVariant: product.hasVariant,
-            landingSellPrice: product.landing,
+            landingSellPrice: product.landingSellPrice,
             variants: processedVariants,
             defaultVariant: defaultVar ? {
               _id: defaultVar._id,
