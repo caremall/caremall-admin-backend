@@ -102,12 +102,12 @@ export const getAllActiveProductCards = async (req, res) => {
         path: "products",
         match: { productStatus: "published", visibility: "visible" },
         populate: [
-          { path: "brand", model: "Brand", select: "brandName imageUrl" },
-          { path: "category", model: "Category", select: "name image" },
-          { path: "subcategory", model: "Category", select: "name image" },
+          { path: "brand", model: "Brand", select: "brandName" },
+          { path: "category", model: "Category", select: "name" },
+          { path: "subcategory", model: "Category", select: "_id name" }, // Keep _id for string conversion
         ],
       })
-      .sort({ createdAt: -1 })
+      .sort({ created: -1 })
       .lean();
 
     // === 3. Enrich Products with Default Variants ===
@@ -139,6 +139,9 @@ export const getAllActiveProductCards = async (req, res) => {
           const pid = product._id.toString();
           const variants = variantMap[pid] || [];
 
+          // ONLY subcategory → convert to string ID
+          const subcategoryId = product.subcategory?._id?.toString() || null;
+
           // Default variant
           let defaultVar = null;
           if (product.hasVariant && product.defaultVariant) {
@@ -164,7 +167,7 @@ export const getAllActiveProductCards = async (req, res) => {
           const basePrice = defSrc.base;
           const isLanding = defSrc.landing > 0;
 
-          // Apply offers
+          // Apply offers — use subcategoryId only where needed
           let discounted = basePrice;
           const applied = [];
           for (const o of offers) {
@@ -174,6 +177,7 @@ export const getAllActiveProductCards = async (req, res) => {
               ok = o.offerEligibleItems.includes(product.category._id.toString());
             else if (o.offerType === "brand" && product.brand)
               ok = o.offerEligibleItems.includes(product.brand._id.toString());
+            // Note: No subcategory offer type — skip or add if needed
 
             if (ok && basePrice >= (o.offerMinimumOrderValue || 0)) {
               const prev = discounted;
@@ -217,8 +221,8 @@ export const getAllActiveProductCards = async (req, res) => {
             appliedOffers: applied,
           };
 
-          // Process variants
-          const processedVariants = variants.map(v => {
+          // Process variants — fix stock await
+          const processedVariants = await Promise.all(variants.map(async (v) => {
             const src = getBase(v);
             let vDisc = src.base;
             const vApplied = [];
@@ -247,11 +251,8 @@ export const getAllActiveProductCards = async (req, res) => {
                 ? Math.ceil(((src.mrp - src.selling) / src.mrp) * 100)
                 : 0;
 
-            let vStock = 0;
-            (async () => {
-              const inv = await mongoose.model("Inventory").findOne({ variant: v._id }).lean();
-              vStock = inv?.quantity || 0;
-            })();
+            const inv = await mongoose.model("Inventory").findOne({ variant: v._id }).lean();
+            const vStock = inv?.quantity || 0;
 
             return {
               _id: v._id,
@@ -280,7 +281,7 @@ export const getAllActiveProductCards = async (req, res) => {
               },
               isDefault: v.isDefault,
             };
-          });
+          }));
 
           processedProducts.push({
             _id: product._id,
@@ -289,9 +290,9 @@ export const getAllActiveProductCards = async (req, res) => {
             thumbnail: product.thumbnail || finalImages[0] || "",
             productImages: finalImages,
             SKU: product.SKU,
-            brand: product.brand,
-            category: product.category,
-            subcategory: product.subcategory,
+            brand: product.brand,           // unchanged (object)
+            category: product.category,     // unchanged (object)
+            subcategory: subcategoryId,     // ONLY THIS IS STRING ID
             hasVariant: product.hasVariant,
             landingSellPrice: product.landingSellPrice,
             variants: processedVariants,
@@ -320,7 +321,6 @@ export const getAllActiveProductCards = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch product cards" });
   }
 };
-
 
 // Get single ProductCard by ID with populated products
 export const getProductCardById = async (req, res) => {
