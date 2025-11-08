@@ -218,7 +218,7 @@ export const updateOffer = async (req, res) => {
       minimumOrderValue,
       imageUrl,
       bookingDates,
-      eligibleItems,
+      offerEligibleItems,
       isFeatured,
       status,
       author,
@@ -281,7 +281,7 @@ export const updateOffer = async (req, res) => {
     if (Array.isArray(bookingDates) && bookingDates.length === 2) {
       offer.offerRedeemTimePeriod = bookingDates;
     }
-    if (Array.isArray(eligibleItems)) offer.offerEligibleItems = eligibleItems;
+    if (Array.isArray(offerEligibleItems)) offer.offerEligibleItems = offerEligibleItems;
     if (typeof isFeatured === "boolean") offer.isOfferFeatured = isFeatured;
     if (typeof status === "string") offer.offerStatus = status;
     if (typeof author === "string") offer.offerAuthor = author.trim();
