@@ -27,8 +27,8 @@ import {
 
 const inventoryRouter = Router();
 //inbound
-inventoryRouter.post("/inbound",createInboundJob )
-inventoryRouter.get("/inbound",getInboundJobs )
+inventoryRouter.post("/inbound",createInboundJob)
+inventoryRouter.get("/inbound",getInboundJobs)
 inventoryRouter.get("/inbound/:id",getInboundJobById )
 
 //transfer
