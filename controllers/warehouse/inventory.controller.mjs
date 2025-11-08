@@ -1762,14 +1762,15 @@ export const createInboundJob = async (req, res) => {
           warehouse,
           product: productId || undefined,
           variant: variantId || undefined,
-          availableQuantity: 0,
+          AvailableQuantity: item.receivedQuantity,
           minimumQuantity: 0,
           reorderQuantity: 0,
           maximumQuantity: 0,
         });
       }
-
-      inventory.availableQuantity += receivedQty;
+      else{
+        inventory.AvailableQuantity += item.receivedQuantity;
+      }
       inventory.updatedAt = new Date();
 
       await inventory.save();
@@ -1824,12 +1825,13 @@ export const getInboundJobs = async (req, res) => {
 
 export const getInboundJobById = async (req, res) => {
   try {
-    const { id } = req.params;              
+    const { id } = req.params; // inbound job id from route param
 
     if (!id) {
       return res.status(400).json({ message: "Inbound job ID is required" });
     }
 
+    // Handle assignedWarehouses: could be object or array
     let warehouseIds = [];
     if (Array.isArray(req.user.assignedWarehouses)) {
       warehouseIds = req.user.assignedWarehouses.map((w) => w._id?.toString());
@@ -1837,43 +1839,36 @@ export const getInboundJobById = async (req, res) => {
       warehouseIds = [req.user.assignedWarehouses._id.toString()];
     }
 
-    console.log("Inbound ID:", id);
-    console.log("Allowed Warehouse IDs:", warehouseIds);
+    console.log("🔍 Inbound ID:", id);
+    console.log("🏭 Warehouse IDs allowed:", warehouseIds);
 
-    // ---------- 2. Base query ----------
-    const query = { _id: id };
+    // Build query
+    const query = {
+      _id: id,
+    };
+
     if (warehouseIds.length > 0) {
       query.warehouse = { $in: warehouseIds };
     }
 
- 
     const inboundJob = await Inbound.findOne(query)
-      .populate("supplier")             
+      .populate("supplier")
       .populate("warehouse")
       .populate("allocatedLocation")
-    
-      .populate({
-        path: "items.productId",
-        model: "Product",               
-      })
-    
-      .populate({
-        path: "items.variantId",
-        model: "Variant",              
-        match: { _id: { $ne: null } },
-      })
-      .lean()
-      .exec();
+      .populate("items.productId")
+      .populate("items.variantId")
+      .lean();
 
     if (!inboundJob) {
-      console.warn("Inbound job not found for given warehouse/user");
+      console.warn("⚠️ Inbound job not found for given warehouse/user");
       return res.status(404).json({ message: "Inbound job not found" });
     }
+
     return res.status(200).json({
       data: inboundJob,
     });
   } catch (error) {
-    console.error("Error fetching inbound job by ID:", error);
+    console.error("❌ Error fetching inbound job by ID:", error);
     return res
       .status(500)
       .json({ message: "Server error fetching inbound job by ID" });
