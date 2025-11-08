@@ -271,6 +271,7 @@ export const getAllActiveProductCards = async (req, res) => {
                 isLandingPriceApplied: src.landing > 0,
                 appliedOffers: vApplied,
               },
+              landingSellPrice: src.landing,
               offerPrice: vFinal,
               stock: {
                 availableQuantity: vStock,
@@ -292,6 +293,7 @@ export const getAllActiveProductCards = async (req, res) => {
             category: product.category,
             subcategory: product.subcategory,
             hasVariant: product.hasVariant,
+            landingSellPrice: product.landing,
             variants: processedVariants,
             defaultVariant: defaultVar ? {
               _id: defaultVar._id,
