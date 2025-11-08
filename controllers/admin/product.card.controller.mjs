@@ -102,21 +102,9 @@ export const getAllActiveProductCards = async (req, res) => {
         path: "products",
         match: { productStatus: "published", visibility: "visible" },
         populate: [
-          {
-            path: "brand",
-            model: "Brand",
-            select: "brandName", // we only need the name for display (optional)
-          },
-          {
-            path: "category",
-            model: "Category",
-            select: "name",
-          },
-          {
-            path: "subcategory",
-            model: "Category",
-            select: "name",
-          },
+          { path: "brand", model: "Brand", select: "brandName imageUrl" },
+          { path: "category", model: "Category", select: "name image" },
+          { path: "subcategory", model: "Category", select: "name image" },
         ],
       })
       .sort({ createdAt: -1 })
@@ -151,16 +139,6 @@ export const getAllActiveProductCards = async (req, res) => {
           const pid = product._id.toString();
           const variants = variantMap[pid] || [];
 
-          // Extract string IDs safely
-          const brandId = product.brand?._id?.toString() || null;
-          const categoryId = product.category?._id?.toString() || null;
-          const subcategoryId = product.subcategory?._id?.toString() || null;
-
-          // Replace objects with string IDs
-          product.brand = brandId;
-          product.category = categoryId;
-          product.subcategory = subcategoryId;
-
           // Default variant
           let defaultVar = null;
           if (product.hasVariant && product.defaultVariant) {
@@ -186,16 +164,16 @@ export const getAllActiveProductCards = async (req, res) => {
           const basePrice = defSrc.base;
           const isLanding = defSrc.landing > 0;
 
-          // Apply offers — NOW USING STRING IDs
+          // Apply offers
           let discounted = basePrice;
           const applied = [];
           for (const o of offers) {
             let ok = false;
             if (o.offerType === "product") ok = o.offerEligibleItems.includes(pid);
-            else if (o.offerType === "category" && categoryId)
-              ok = o.offerEligibleItems.includes(categoryId);
-            else if (o.offerType === "brand" && brandId)
-              ok = o.offerEligibleItems.includes(brandId);
+            else if (o.offerType === "category" && product.category)
+              ok = o.offerEligibleItems.includes(product.category._id.toString());
+            else if (o.offerType === "brand" && product.brand)
+              ok = o.offerEligibleItems.includes(product.brand._id.toString());
 
             if (ok && basePrice >= (o.offerMinimumOrderValue || 0)) {
               const prev = discounted;
@@ -239,8 +217,8 @@ export const getAllActiveProductCards = async (req, res) => {
             appliedOffers: applied,
           };
 
-          // Process variants — FIX: await stock properly
-          const processedVariants = await Promise.all(variants.map(async (v) => {
+          // Process variants
+          const processedVariants = variants.map(v => {
             const src = getBase(v);
             let vDisc = src.base;
             const vApplied = [];
@@ -248,10 +226,10 @@ export const getAllActiveProductCards = async (req, res) => {
             for (const o of offers) {
               let ok = false;
               if (o.offerType === "product") ok = o.offerEligibleItems.includes(pid);
-              else if (o.offerType === "category" && categoryId)
-                ok = o.offerEligibleItems.includes(categoryId);
-              else if (o.offerType === "brand" && brandId)
-                ok = o.offerEligibleItems.includes(brandId);
+              else if (o.offerType === "category" && product.category)
+                ok = o.offerEligibleItems.includes(product.category._id.toString());
+              else if (o.offerType === "brand" && product.brand)
+                ok = o.offerEligibleItems.includes(product.brand._id.toString());
 
               if (ok && src.base >= (o.offerMinimumOrderValue || 0)) {
                 const prev = vDisc;
@@ -269,9 +247,11 @@ export const getAllActiveProductCards = async (req, res) => {
                 ? Math.ceil(((src.mrp - src.selling) / src.mrp) * 100)
                 : 0;
 
-            // FIXED: Actually await stock
-            const inv = await mongoose.model("Inventory").findOne({ variant: v._id }).lean();
-            const vStock = inv?.quantity || 0;
+            let vStock = 0;
+            (async () => {
+              const inv = await mongoose.model("Inventory").findOne({ variant: v._id }).lean();
+              vStock = inv?.quantity || 0;
+            })();
 
             return {
               _id: v._id,
@@ -300,7 +280,7 @@ export const getAllActiveProductCards = async (req, res) => {
               },
               isDefault: v.isDefault,
             };
-          }));
+          });
 
           processedProducts.push({
             _id: product._id,
@@ -309,9 +289,9 @@ export const getAllActiveProductCards = async (req, res) => {
             thumbnail: product.thumbnail || finalImages[0] || "",
             productImages: finalImages,
             SKU: product.SKU,
-            brand: brandId,           // string ID
-            category: categoryId,     // string ID
-            subcategory: subcategoryId, // string ID
+            brand: product.brand,
+            category: product.category,
+            subcategory: product.subcategory,
             hasVariant: product.hasVariant,
             landingSellPrice: product.landingSellPrice,
             variants: processedVariants,
@@ -340,6 +320,7 @@ export const getAllActiveProductCards = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch product cards" });
   }
 };
+
 
 // Get single ProductCard by ID with populated products
 export const getProductCardById = async (req, res) => {
