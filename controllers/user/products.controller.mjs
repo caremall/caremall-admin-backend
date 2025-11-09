@@ -7,6 +7,7 @@ import Warehouse from "../../models/Warehouse.mjs";
 import Review from "../../models/Review.mjs";
 import Brand from "../../models/Brand.mjs";
 import inventory from "../../models/inventory.mjs";
+import Offer from "../../models/offerManagement.mjs";
 // import FirstOrder from "../../models/FirstOrder.mjs";
 
 // export const getFilteredProducts = async (req, res) => {
@@ -122,6 +123,67 @@ import inventory from "../../models/inventory.mjs";
 //   }
 // };
 
+//================== HELPER =======================
+
+// util: check active offer based on date
+const findActiveOffer = async (product) => {
+  const now = new Date();
+  console.log(product.brand?._id, "brandbrandbrandbrandbrandbrandbrandbrand");
+  console.log(
+    product.category?._id,
+    "categorycategorycategorycategorycategory"
+  );
+  console.log(product._id, "categorycategorycategorycategorycategory");
+
+  // Order matters: product > brand > category
+  const offer = await Offer.findOne({
+    offerStatus: "published",
+    offerRedeemTimePeriod: {
+      $exists: true,
+      $ne: [],
+    },
+    $expr: {
+      $and: [
+        { $lte: [{ $arrayElemAt: ["$offerRedeemTimePeriod", 0] }, new Date()] },
+        { $gte: [{ $arrayElemAt: ["$offerRedeemTimePeriod", 1] }, new Date()] },
+      ],
+    },
+    $or: [
+      { offerType: "product", offerEligibleItems: product._id.toString() },
+      { offerType: "brand", offerEligibleItems: product.brand._id.toString() },
+      {
+        offerType: "category",
+        offerEligibleItems: product.category._id.toString(),
+      },
+    ],
+  }).lean();
+
+  return offer;
+};
+
+const applyOfferPrice = (product, offer) => {
+  if (!offer) return product;
+
+  const basePrice = product.landingSellPrice ?? product.sellingPrice;
+
+  const offerPrice =
+    offer.offerDiscountUnit === "percentage"
+      ? Math.round(basePrice - (basePrice * offer.offerDiscountValue) / 100)
+      : Math.max(0, basePrice - offer.offerDiscountValue);
+
+  return {
+    ...product,
+    offerPrice,
+    offerData: {
+      title: offer.offerTitle,
+      description: offer.offerDescription,
+      discountValue: offer.offerDiscountValue,
+      discountUnit: offer.offerDiscountUnit,
+    },
+  };
+};
+
+// ==============CONTROLLER================
 export const getFilteredProducts = async (req, res) => {
   try {
     // Parse filters from query params
@@ -1366,6 +1428,21 @@ export const getFilteredProductsUpdated = async (req, res) => {
         product.totalAvailableQuantity =
           totalStock[0]?.totalAvailableQuantity || 0;
       }
+
+      // const offer = await findActiveOffer(product);
+      // const productWithOffer = applyOfferPrice(product, offer);
+      // console.log(offer, "offerofferofferofferofferofferofferofferoffer");
+
+      // productsWithVariants.push(productWithOffer);
+    }
+
+    for (let i = 0; i < productsWithVariants.length; i++) {
+      const product = productsWithVariants[i];
+
+      const offer = await findActiveOffer(product);
+      const updatedProduct = applyOfferPrice(product, offer);
+
+      productsWithVariants[i] = updatedProduct;
     }
 
     const variantFilters = {};
@@ -1376,7 +1453,7 @@ export const getFilteredProductsUpdated = async (req, res) => {
     });
 
     res.status(200).json({
-      products: productsWithVariants, // MODIFIED: Use productsWithVariants instead of flatProducts
+      products: productsWithVariants,
       filterOptions: {
         variantAttributes: variantFilters,
         brands: availableBrands,
@@ -1582,7 +1659,7 @@ export const getBestSellingProducts = async (req, res) => {
 };
 
 export const getProductById = async (req, res) => {
-  console.log('Fetching product with slug:', req.params.slug);
+  console.log("Fetching product with slug:", req.params.slug);
   try {
     const product = await Product.findOne({ urlSlug: req.params.slug }).lean();
     if (!product) return res.status(404).json({ message: "Product not found" });
@@ -1653,12 +1730,45 @@ export const getProductById = async (req, res) => {
     const averageRating = reviewStats.length ? reviewStats[0].averageRating : 0;
     const reviewCount = reviewStats.length ? reviewStats[0].reviewCount : 0;
 
+    
+
+    // ====================== FETCH OFFERS ======================
+    const activeOffer = await Offer.findOne({
+      offerStatus: "published",
+      offerRedeemTimePeriod: {
+        $exists: true,
+        $ne: [],
+      },
+      $expr: {
+        $and: [
+          {
+            $lte: [{ $arrayElemAt: ["$offerRedeemTimePeriod", 0] }, new Date()],
+          },
+          {
+            $gte: [{ $arrayElemAt: ["$offerRedeemTimePeriod", 1] }, new Date()],
+          },
+        ],
+      },
+      $or: [
+        { offerType: "product", offerEligibleItems: product._id.toString() },
+        {
+          offerType: "brand",
+          offerEligibleItems: product.brand._id.toString(),
+        },
+        {
+          offerType: "category",
+          offerEligibleItems: product.category._id.toString(),
+        },
+      ],
+    }).lean();
+
     // === Final response ===
     res.status(200).json({
       ...product,
       variants,
       averageRating: Number(averageRating.toFixed(2)),
       reviewCount,
+      offerData: activeOffer || null,
     });
   } catch (error) {
     console.error("Error fetching product details:", error);
@@ -1714,16 +1824,24 @@ export const getSearchSuggestions = async (req, res) => {
     const containsRegex = new RegExp(escapedSearch, "i");
 
     // Helper to run query with two regexes and prioritize starts-with
-    const prioritizeMatches = async (Model, fields, selectFields, limit = 10) => {
+    const prioritizeMatches = async (
+      Model,
+      fields,
+      selectFields,
+      limit = 10
+    ) => {
       // Step 1: Get starts-with matches
       const startsWithQuery = {
-        $or: fields.map(field => ({ [field]: startsWithRegex }))
+        $or: fields.map((field) => ({ [field]: startsWithRegex })),
       };
-      if (Model.collection.name === 'products') {
-        Object.assign(startsWithQuery, { productStatus: "published", visibility: "visible" });
-      } else if (Model.collection.name === 'categories') {
+      if (Model.collection.name === "products") {
+        Object.assign(startsWithQuery, {
+          productStatus: "published",
+          visibility: "visible",
+        });
+      } else if (Model.collection.name === "categories") {
         Object.assign(startsWithQuery, { status: "active" });
-      } else if (Model.collection.name === 'brands') {
+      } else if (Model.collection.name === "brands") {
         Object.assign(startsWithQuery, { status: "active" });
       }
 
@@ -1732,28 +1850,34 @@ export const getSearchSuggestions = async (req, res) => {
         .limit(limit)
         .lean();
 
-      const startsWithIds = startsWith.map(doc => doc._id.toString());
+      const startsWithIds = startsWith.map((doc) => doc._id.toString());
 
       // Step 2: Get contains matches, excluding starts-with IDs
       const containsQuery = {
-        _id: { $nin: startsWithIds.map(id => new mongoose.Types.ObjectId(id)) },
-        $or: fields.map(field => ({ [field]: containsRegex }))
+        _id: {
+          $nin: startsWithIds.map((id) => new mongoose.Types.ObjectId(id)),
+        },
+        $or: fields.map((field) => ({ [field]: containsRegex })),
       };
-      if (Model.collection.name === 'products') {
-        Object.assign(containsQuery, { productStatus: "published", visibility: "visible" });
-      } else if (Model.collection.name === 'categories') {
+      if (Model.collection.name === "products") {
+        Object.assign(containsQuery, {
+          productStatus: "published",
+          visibility: "visible",
+        });
+      } else if (Model.collection.name === "categories") {
         Object.assign(containsQuery, { status: "active" });
-      } else if (Model.collection.name === 'brands') {
+      } else if (Model.collection.name === "brands") {
         Object.assign(containsQuery, { status: "active" });
       }
 
       const remainingLimit = limit - startsWith.length;
-      const contains = remainingLimit > 0
-        ? await Model.find(containsQuery)
-            .select(selectFields)
-            .limit(remainingLimit)
-            .lean()
-        : [];
+      const contains =
+        remainingLimit > 0
+          ? await Model.find(containsQuery)
+              .select(selectFields)
+              .limit(remainingLimit)
+              .lean()
+          : [];
 
       // Step 3: Combine: starts-with first, then contains
       return [...startsWith, ...contains];
@@ -1767,18 +1891,13 @@ export const getSearchSuggestions = async (req, res) => {
         "productName sellingPrice mrpPrice thumbnail category urlSlug SKU productImages",
         10
       ),
-      prioritizeMatches(
-        Category,
-        ["name"],
-        "name description image type",
-        10
-      ),
+      prioritizeMatches(Category, ["name"], "name description image type", 10),
       prioritizeMatches(
         Brand,
         ["brandName"],
         "brandName tagline description imageUrl",
         10
-      )
+      ),
     ]);
 
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
@@ -1786,7 +1905,9 @@ export const getSearchSuggestions = async (req, res) => {
     res.status(200).json({ enrichedProducts, categories, brands });
   } catch (error) {
     console.error("Error fetching search suggestions: ", error);
-    res.status(500).json({ message: "Server error while fetching search suggestions" });
+    res
+      .status(500)
+      .json({ message: "Server error while fetching search suggestions" });
   }
 };
 
@@ -1877,4 +1998,3 @@ export const getNearbyProducts = async (req, res) => {
     res.status(500).json({ message: "Server error fetching nearby products" });
   }
 };
-

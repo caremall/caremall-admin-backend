@@ -1,5 +1,7 @@
 import Offer from "../../models/offerManagement.mjs";
 
+// {==================HELPER======================}
+
 // Helper to validate and convert booking dates array
 function parseBookingDates(bookingDates, fallback = []) {
   if (
@@ -11,6 +13,75 @@ function parseBookingDates(bookingDates, fallback = []) {
   }
   return fallback;
 }
+
+const checkOfferConflict = async ({
+  offerType,
+  eligibleItems,
+  bookingDates,
+}) => {
+  console.log(
+    { offerType, eligibleItems, bookingDates },
+    "[][][][][]][][][][][][A][SDA][A][S"
+  );
+
+  const [start, end] = bookingDates;
+
+  let query = {
+    offerStatus: { $in: ["published", "inactive"] },
+    offerRedeemTimePeriod: {
+      $exists: true,
+      $ne: [],
+      $elemMatch: {
+        $gte: start,
+        $lte: end,
+      },
+    },
+  };
+
+  if (offerType === "category") {
+    query.offerType = "category";
+    query.offerEligibleItems = { $in: eligibleItems };
+  }
+
+  if (offerType === "brand") {
+    query.$or = [
+      {
+        offerType: "category",
+        offerEligibleItems: { $in: eligibleItems.map((i) => i.category) },
+      },
+      { offerType: "brand", offerEligibleItems: { $in: eligibleItems } },
+    ];
+  }
+
+  if (offerType === "product") {
+    query.$or = [
+      {
+        offerType: "category",
+        offerEligibleItems: { $in: eligibleItems.map((i) => i.category) },
+      },
+      {
+        offerType: "brand",
+        offerEligibleItems: { $in: eligibleItems.map((i) => i.brand) },
+      },
+      { offerType: "product", offerEligibleItems: { $in: eligibleItems } },
+    ];
+  }
+
+  console.log(
+    query,
+    "queryqueryqueryqueryqueryqueryqueryqueryqueryqueryqueryquery"
+  );
+
+  const existing = await Offer.findOne(query);
+  console.log(
+    existing,
+    "existingexistingexistingexistingexistingexistingexisting"
+  );
+
+  return existing ? existing : null;
+};
+
+// {=======================CONTROLLER=======================}
 
 export const createOffer = async (req, res) => {
   let {
@@ -27,6 +98,8 @@ export const createOffer = async (req, res) => {
     status,
     author = "Admin",
   } = req.body;
+
+  console.log(req.body, "=====================");
 
   // Trim strings
   title = title?.trim();
@@ -60,6 +133,23 @@ export const createOffer = async (req, res) => {
       bookingDates = bookingDates.map((d) => new Date(d));
     } else {
       return res.status(400).json({ message: "Invalid bookingDates" });
+    }
+  }
+
+  // VALIDATION: Prevent overlapping offers
+  if (status !== "draft") {
+    const conflict = await checkOfferConflict({
+      offerType,
+      eligibleItems,
+      bookingDates,
+    });
+    console.log(conflict, "conflictconflictconflictconflictconflictconflict");
+
+    if (conflict) {
+      return res.status(400).json({
+        success: false,
+        message: `Conflicting offer already exists: ${conflict.offerTitle}`,
+      });
     }
   }
 
@@ -193,7 +283,6 @@ export const updateOffer = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 export const deleteOffer = async (req, res) => {
   try {
