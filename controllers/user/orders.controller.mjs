@@ -208,23 +208,59 @@ export const createOrder = async (req, res) => {
 
 export const getUserOrders = async (req, res) => {
   try {
+    const now = new Date();
+   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+   
+    const outdatedOrders = await Order.find({
+      user: req.user._id,
+      orderStatus: "processing",
+      createdAt: { $lt:oneHourAgo  },
+    });
+
+    // Auto-cancel outdated orders
+    if (outdatedOrders.length > 0) {
+      const updateResult = await Order.updateMany(
+        {
+          user: req.user._id,
+          orderStatus: "processing",
+          createdAt: { $lt: oneHourAgo },
+        },
+        {
+          $set: {
+            orderStatus: "cancelled",
+            paymentStatus: "failed", 
+          },
+        }
+      );
+
+      console.log(`Auto-cancelled ${updateResult.modifiedCount} outdated orders.`);
+    } else {
+      console.log("No outdated orders found to cancel.");
+    }
+
+    // Fetch all user orders
     const orders = await Order.find({ user: req.user._id })
       .sort({ createdAt: -1 })
       .populate("items.product", "productName productImages urlSlug SKU")
       .populate("items.variant", "variantAttributes SKU images");
 
-    // Process each order to ensure refundAmount is calculated correctly
-    const processedOrders = orders.map(order => {
+ 
+    const processedOrders = orders.map((order) => {
       const orderObj = order.toObject();
 
-      // If refundAmount doesn't exist or needs recalculation
       if (!orderObj.items[0]?.refundAmount && orderObj.appliedCoupon?.couponCode) {
         const coupon = orderObj.appliedCoupon;
 
         if (coupon.discountType === "percentage") {
           orderObj.items = orderObj.items.map((item) => ({
             ...item,
-            refundAmount: Number((item.totalPrice - (item.totalPrice * coupon.discountValueOriginal) / 100).toFixed(2)),
+            refundAmount: Number(
+              (
+                item.totalPrice -
+                (item.totalPrice * coupon.discountValueOriginal) / 100
+              ).toFixed(2)
+            ),
           }));
         } else if (coupon.discountType === "fixed") {
           const perItemDiscount = coupon.discountValueOriginal / orderObj.items.length;
@@ -234,7 +270,6 @@ export const getUserOrders = async (req, res) => {
           }));
         }
       } else if (!orderObj.items[0]?.refundAmount) {
-        // If no coupon was applied, refundAmount should equal totalPrice
         orderObj.items = orderObj.items.map((item) => ({
           ...item,
           refundAmount: item.totalPrice,
@@ -244,12 +279,14 @@ export const getUserOrders = async (req, res) => {
       return orderObj;
     });
 
+    console.log(`Returning ${processedOrders.length} orders to frontend.`);
     res.status(200).json(processedOrders);
   } catch (err) {
     console.error("Get User Orders Error:", err);
     res.status(500).json({ message: "Failed to fetch orders" });
   }
 };
+
 
 export const getOrderById = async (req, res) => {
   try {

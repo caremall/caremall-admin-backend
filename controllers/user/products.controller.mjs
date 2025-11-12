@@ -8,7 +8,182 @@ import Review from "../../models/Review.mjs";
 import Brand from "../../models/Brand.mjs";
 import inventory from "../../models/inventory.mjs";
 import Offer from "../../models/offerManagement.mjs";
+// import FirstOrder from "../../models/FirstOrder.mjs";
 
+// export const getFilteredProducts = async (req, res) => {
+//   try {
+//     const { category, brand, tags, search, color, size, minPrice, maxPrice } =
+//       req.query;
+
+//     // Step 1: Build variant filter
+//     const variantMatch = {};
+
+//     const variantFilters = [];
+//     if (color) variantFilters.push({ name: "color", value: color });
+//     if (size) variantFilters.push({ name: "size", value: size });
+
+//     if (variantFilters.length) {
+//       variantMatch.variantAttributes = {
+//         $all: variantFilters.map((attr) => ({
+//           $elemMatch: attr,
+//         })),
+//       };
+//     }
+
+//     if (minPrice || maxPrice) {
+//       const priceFilter = {};
+//       if (minPrice) priceFilter.$gte = parseFloat(minPrice);
+//       if (maxPrice) priceFilter.$lte = parseFloat(maxPrice);
+//       variantMatch.sellingPrice = priceFilter;
+//     }
+
+//     // Step 2: Find matching variant productIds
+//     const matchedVariants = await Variant.find(variantMatch)
+//       .select("productId")
+//       .lean();
+//     const matchingProductIds = [
+//       ...new Set(matchedVariants.map((v) => v.productId.toString())),
+//     ];
+
+//     // Step 3: Build product filter
+//     const productMatch = {
+//       productStatus: "published",
+//       visibility: "visible",
+//     };
+
+//     if (category) productMatch.category = new mongoose.Types.ObjectId(category);
+//     if (brand) productMatch.brand = new mongoose.Types.ObjectId(brand);
+//     if (tags) productMatch.tags = { $in: tags.split(",") };
+//     if (search) {
+//       const regex = new RegExp(search, "i");
+//       productMatch.$or = [
+//         { productName: regex },
+//         { shortDescription: regex },
+//         { productDescription: regex },
+//       ];
+//     }
+
+//     if (matchingProductIds.length) {
+//       productMatch._id = { $in: matchingProductIds };
+//     } else if (variantFilters.length || minPrice || maxPrice) {
+//       // If variant filters applied but no match, return empty
+//       return res.status(200).json({
+//         data: [],
+//       });
+//     }
+
+//     // Step 4: Fetch filtered products with pagination
+//     const [products, totalCount] = await Promise.all([
+//       Product.find(productMatch).populate("brand category").lean(),
+//       Product.countDocuments(productMatch),
+//     ]);
+
+//     // Step 5: Enrich with matching variants for each product
+//     const enrichedProducts = await Promise.all(
+//       products.map(async (product) => {
+//         const variants = await Variant.find({
+//           productId: product._id,
+//           ...(variantFilters.length || minPrice || maxPrice
+//             ? variantMatch
+//             : {}),
+//         }).lean();
+
+//         // Aggregate review stats per product
+//         const reviewStats = await Review.aggregate([
+//           { $match: { productId: product._id } },
+//           {
+//             $group: {
+//               _id: "$productId",
+//               averageRating: { $avg: "$rating" },
+//               reviewCount: { $sum: 1 },
+//             },
+//           },
+//         ]);
+
+//         const averageRating = reviewStats.length
+//           ? reviewStats[0].averageRating
+//           : 0;
+//         const reviewCount = reviewStats.length ? reviewStats[0].reviewCount : 0;
+
+//         return {
+//           ...product,
+//           variants,
+//           averageRating: Number(averageRating.toFixed(2)),
+//           reviewCount,
+//         };
+//       })
+//     );
+
+//     res.status(200).json({
+//       data: enrichedProducts,
+//     });
+//   } catch (error) {
+//     console.error("Error filtering products:", error);
+//     res.status(500).json({ message: "Server error while filtering products" });
+//   }
+// };
+
+//================== HELPER =======================
+
+// util: check active offer based on date
+const findActiveOffer = async (product) => {
+  const now = new Date();
+  console.log(product.brand?._id, "brandbrandbrandbrandbrandbrandbrandbrand");
+  console.log(
+    product.category?._id,
+    "categorycategorycategorycategorycategory"
+  );
+  console.log(product._id, "categorycategorycategorycategorycategory");
+
+  // Order matters: product > brand > category
+  const offer = await Offer.findOne({
+    offerStatus: "published",
+    offerRedeemTimePeriod: {
+      $exists: true,
+      $ne: [],
+    },
+    $expr: {
+      $and: [
+        { $lte: [{ $arrayElemAt: ["$offerRedeemTimePeriod", 0] }, new Date()] },
+        { $gte: [{ $arrayElemAt: ["$offerRedeemTimePeriod", 1] }, new Date()] },
+      ],
+    },
+    $or: [
+      { offerType: "product", offerEligibleItems: product._id.toString() },
+      { offerType: "brand", offerEligibleItems: product.brand._id.toString() },
+      {
+        offerType: "category",
+        offerEligibleItems: product.category._id.toString(),
+      },
+    ],
+  }).lean();
+
+  return offer;
+};
+
+const applyOfferPrice = (product, offer) => {
+  if (!offer) return product;
+
+  const basePrice = product.landingSellPrice ?? product.sellingPrice;
+
+  const offerPrice =
+    offer.offerDiscountUnit === "percentage"
+      ? Math.round(basePrice - (basePrice * offer.offerDiscountValue) / 100)
+      : Math.max(0, basePrice - offer.offerDiscountValue);
+
+  return {
+    ...product,
+    offerPrice,
+    offerData: {
+      title: offer.offerTitle,
+      description: offer.offerDescription,
+      discountValue: offer.offerDiscountValue,
+      discountUnit: offer.offerDiscountUnit,
+    },
+  };
+};
+
+// ==============CONTROLLER================
 export const getFilteredProducts = async (req, res) => {
   try {
     // Parse filters from query params
@@ -338,7 +513,6 @@ export const getFilteredProducts = async (req, res) => {
           subcategory: product.subcategory,
           urlSlug: product.urlSlug,
           productStatus: product.productStatus,
-          landingSellPrice: product.landingSellPrice,
           hasVariant: true,
           variants: matchingVariants.map((variant) => ({
             _id: variant._id,
@@ -647,15 +821,14 @@ export const getFilteredProducts = async (req, res) => {
 
 export const getFilteredProductsUpdated = async (req, res) => {
   try {
-    const now = new Date();
-
-    // === 1. Parse Filters ===
+    // Parse filters from query params
     const brands = req.query.brands
       ? Array.isArray(req.query.brands)
         ? req.query.brands
         : req.query.brands.split(",")
       : [];
 
+    // SEPARATE CATEGORIES AND SUBCATEGORIES
     const categories = req.query.categories
       ? Array.isArray(req.query.categories)
         ? req.query.categories
@@ -682,6 +855,7 @@ export const getFilteredProductsUpdated = async (req, res) => {
       : undefined;
     const status = req.query.status || "published";
 
+    // Extract variant attribute filters from query params (excluding reserved fields)
     const reservedFields = [
       "brands",
       "categories",
@@ -702,7 +876,7 @@ export const getFilteredProductsUpdated = async (req, res) => {
       }
     });
 
-    // === 2. Build Product Match (Category/Brand) ===
+    // Build base product match - FIXED CATEGORY/SUBCATEGORY LOGIC
     let productMatch = { productStatus: status, visibility: "visible" };
 
     if (brands.length > 0) {
@@ -711,7 +885,10 @@ export const getFilteredProductsUpdated = async (req, res) => {
       };
     }
 
+    // CORRECTED: SIMPLIFIED CATEGORY FILTERING LOGIC
     const categoryConditions = [];
+
+    // If categories are selected, filter by main categories
     if (categories.length > 0) {
       categoryConditions.push({
         category: {
@@ -719,6 +896,8 @@ export const getFilteredProductsUpdated = async (req, res) => {
         },
       });
     }
+
+    // If subcategories are selected, filter by subcategories
     if (subcategories.length > 0) {
       categoryConditions.push({
         subcategory: {
@@ -728,13 +907,16 @@ export const getFilteredProductsUpdated = async (req, res) => {
         },
       });
     }
+
+    // Apply category conditions with OR logic for initial matching
     if (categoryConditions.length > 0) {
       productMatch.$or = categoryConditions;
     }
 
+    // Get product IDs that match the initial filters
     const productIds = await Product.find(productMatch).distinct("_id");
 
-    // === 3. Variant Attribute Filters ===
+    // Build variant attribute filters
     const variantAttributeFilters = [];
     for (const [attrName, attrValues] of Object.entries(filters)) {
       const valuesArray = Array.isArray(attrValues)
@@ -750,65 +932,62 @@ export const getFilteredProductsUpdated = async (req, res) => {
       });
     }
 
+    // Query variants matching filters
     const variantMatch = { productId: { $in: productIds } };
     if (variantAttributeFilters.length > 0) {
       variantMatch.$and = variantAttributeFilters;
     }
-
-    // === 4. Price & Discount Filters on Variants ===
-    if (minPrice !== undefined || maxPrice !== undefined) {
-      variantMatch.sellingPrice = {};
-      if (minPrice !== undefined) variantMatch.sellingPrice.$gte = minPrice;
-      if (maxPrice !== undefined) variantMatch.sellingPrice.$lte = maxPrice;
+    if (minPrice !== undefined && maxPrice !== undefined) {
+      variantMatch.sellingPrice = { $gte: minPrice, $lte: maxPrice };
     }
 
-    if (minDiscount !== undefined || maxDiscount !== undefined) {
-      const discountConditions = [];
-      if (minDiscount !== undefined) {
-        discountConditions.push({
-          $gte: [
-            {
-              $multiply: [
-                {
-                  $divide: [
-                    { $subtract: ["$mrpPrice", "$landingSellPrice"] },
-                    "$mrpPrice",
-                  ],
-                },
-                100,
-              ],
-            },
-            minDiscount,
-          ],
-        });
-      }
-      if (maxDiscount !== undefined) {
-        discountConditions.push({
-          $lte: [
-            {
-              $multiply: [
-                {
-                  $divide: [
-                    { $subtract: ["$mrpPrice", "$landingSellPrice"] },
-                    "$mrpPrice",
-                  ],
-                },
-                100,
-              ],
-            },
-            maxDiscount,
-          ],
-        });
-      }
-      variantMatch.$expr = { $and: discountConditions };
+    if (minDiscount !== undefined && maxDiscount !== undefined) {
+      variantMatch.$expr = {
+        $and: [
+          {
+            $gte: [
+              {
+                $multiply: [
+                  {
+                    $divide: [
+                      { $subtract: ["$mrpPrice", "$landingSellPrice"] },
+                      "$mrpPrice",
+                    ],
+                  },
+                  100,
+                ],
+              },
+              minDiscount,
+            ],
+          },
+          {
+            $lte: [
+              {
+                $multiply: [
+                  {
+                    $divide: [
+                      { $subtract: ["$mrpPrice", "$landingSellPrice"] },
+                      "$mrpPrice",
+                    ],
+                  },
+                  100,
+                ],
+              },
+              maxDiscount,
+            ],
+          },
+        ],
+      };
     }
 
     const filteredVariants = await Variant.find(variantMatch).lean();
+
+    // Collect product IDs from filtered variants
     const filteredProductIdsFromVariants = [
       ...new Set(filteredVariants.map((v) => v.productId.toString())),
     ];
 
-    // === 5. Final Product Filter ===
+    // CORRECTED: Build final product filter with PROPER CATEGORY/SUBCATEGORY HANDLING
     let productFilter = {
       productStatus: status,
       visibility: "visible",
@@ -830,7 +1009,10 @@ export const getFilteredProductsUpdated = async (req, res) => {
       };
     }
 
+    // CORRECTED: FINAL CATEGORY FILTERING - APPLY BOTH CATEGORY AND SUBCATEGORY FILTERS
     const finalCategoryConditions = [];
+
+    // Apply category filter if categories are selected
     if (categories.length > 0) {
       finalCategoryConditions.push({
         category: {
@@ -838,6 +1020,8 @@ export const getFilteredProductsUpdated = async (req, res) => {
         },
       });
     }
+
+    // Apply subcategory filter if subcategories are selected
     if (subcategories.length > 0) {
       finalCategoryConditions.push({
         subcategory: {
@@ -847,44 +1031,102 @@ export const getFilteredProductsUpdated = async (req, res) => {
         },
       });
     }
+
+    // CORRECTED: Apply the final category conditions
     if (finalCategoryConditions.length > 0) {
+      // If we have multiple conditions, use AND logic to ensure both are satisfied
       if (finalCategoryConditions.length > 1) {
-        productFilter.$and = finalCategoryConditions;
+        productFilter.$and = productFilter.$and || [];
+        productFilter.$and.push(...finalCategoryConditions);
       } else {
+        // If only one condition, apply it directly
         Object.assign(productFilter, finalCategoryConditions[0]);
       }
     }
 
-    // === 6. Fetch Products ===
+    // Filter products without variants by price and discount
+    if (minPrice !== undefined && maxPrice !== undefined) {
+      productFilter.$or = productFilter.$or.map((cond) => {
+        if (cond.hasVariant === false) {
+          return {
+            hasVariant: false,
+            sellingPrice: { $gte: minPrice, $lte: maxPrice },
+          };
+        }
+        return cond;
+      });
+    }
+
+    if (minDiscount !== undefined && maxDiscount !== undefined) {
+      const discountExpr = {
+        $expr: {
+          $and: [
+            {
+              $gte: [
+                {
+                  $multiply: [
+                    {
+                      $divide: [
+                        { $subtract: ["$mrpPrice", "$landingSellPrice"] },
+                        "$mrpPrice",
+                      ],
+                    },
+                    100,
+                  ],
+                },
+                minDiscount,
+              ],
+            },
+            {
+              $lte: [
+                {
+                  $multiply: [
+                    {
+                      $divide: [
+                        { $subtract: ["$mrpPrice", "$landingSellPrice"] },
+                        "$mrpPrice",
+                      ],
+                    },
+                    100,
+                  ],
+                },
+                maxDiscount,
+              ],
+            },
+          ],
+        },
+      };
+
+      productFilter.$or = [
+        {
+          hasVariant: false,
+          ...discountExpr,
+        },
+        {
+          _id: {
+            $in: filteredProductIdsFromVariants.map(
+              (id) => new mongoose.Types.ObjectId(id)
+            ),
+          },
+        },
+      ];
+    }
+
+    // Fetch filtered products with proper population
     const products = await Product.find(productFilter)
       .select(
-        "_id productName brand category subcategory urlSlug hasVariant sellingPrice mrpPrice landingSellPrice productImages minimumQuantity maximumQuantity"
+        "_id productName brand category subcategory urlSlug productStatus visibility hasVariant sellingPrice defaultVariant productImages mrpPrice SKU barcode costPrice discountPercent taxRate landingSellPrice"
       )
       .populate("brand", "_id brandName imageUrl")
       .populate("category", "_id name image")
       .populate("subcategory", "_id name image")
+      .sort({ sellingPrice: 1 })
       .lean();
 
-    // === 7. Enrich with Default Variants ===
+    // MODIFIED: Enrich products with default variants
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
-    // === 8. Fetch Active Offers ===
-    const offers = await Offer.find({
-      offerStatus: "published",
-      offerRedeemTimePeriod: { $exists: true, $not: { $size: 0 } },
-      "offerRedeemTimePeriod.0": { $lte: now },
-      "offerRedeemTimePeriod.1": { $gte: now },
-    }).lean();
-
-    // === 9. Helper: Apply Discount ===
-    const applyDiscount = (price, unit, value) => {
-      if (unit === "percentage")
-        return Math.max(0, price - (price * value) / 100);
-      if (unit === "fixed") return Math.max(0, price - value);
-      return price;
-    };
-
-    // === 10. Process Each Product + Variants ===
+    // MODIFIED: Build products array with variants grouped under parent products
     const productsWithVariants = [];
     const variantsByProductId = filteredVariants.reduce((acc, v) => {
       const pid = v.productId.toString();
@@ -894,107 +1136,23 @@ export const getFilteredProductsUpdated = async (req, res) => {
     }, {});
 
     for (const product of enrichedProducts) {
-      let productTotalStock = 0;
-      const processedVariants = [];
-
       if (product.hasVariant) {
+        // Get matching variants for this product
         const matchingVariants =
           variantsByProductId[product._id.toString()] || [];
 
-        for (const variant of matchingVariants) {
-          let landingPrice = variant.landingSellPrice || 0;
-          let sellingPrice = variant.sellingPrice || 0;
-          let mrpPrice = variant.mrpPrice || 0;
-
-          let basePrice = landingPrice > 0 ? landingPrice : sellingPrice;
-          let isLandingPriceApplied = landingPrice > 0;
-
-          if (basePrice <= 0) {
-            basePrice = sellingPrice || 0;
-            isLandingPriceApplied = false;
-          }
-
-          let discountedPrice = basePrice;
-          let appliedOffers = [];
-
-          const lineTotal = basePrice;
-
-          // Apply offers - FIXED LOGIC
-          for (const offer of offers) {
-            let applies = false;
-
-            if (offer.offerType === "product") {
-              applies = offer.offerEligibleItems.includes(
-                product._id.toString()
-              );
-            } else if (offer.offerType === "category" && product.category) {
-              applies = offer.offerEligibleItems.includes(
-                product.category._id.toString()
-              );
-            } else if (offer.offerType === "brand" && product.brand) {
-              applies = offer.offerEligibleItems.includes(
-                product.brand._id.toString()
-              );
-            }
-
-            if (applies && lineTotal >= (offer.offerMinimumOrderValue || 0)) {
-              const oldPrice = discountedPrice;
-              discountedPrice = applyDiscount(
-                discountedPrice,
-                offer.offerDiscountUnit,
-                offer.offerDiscountValue
-              );
-              if (discountedPrice < oldPrice) {
-                appliedOffers.push({
-                  offerName: offer.offerName,
-                  discountType: offer.offerDiscountUnit,
-                  discountValue: offer.offerDiscountValue,
-                });
-              }
-            }
-          }
-
-          const finalPrice = Math.max(0, discountedPrice);
-          const discountPercent =
-            mrpPrice > 0 && landingPrice > 0
-              ? Math.ceil(((mrpPrice - landingPrice) / mrpPrice) * 100)
-              : mrpPrice > 0 && sellingPrice > 0
-              ? Math.ceil(((mrpPrice - sellingPrice) / mrpPrice) * 100)
-              : 0;
-
-          // Stock
-          const stockAgg = await mongoose.model("Inventory").aggregate([
-            {
-              $match: {
-                product: new mongoose.Types.ObjectId(product._id),
-                variant: new mongoose.Types.ObjectId(variant._id),
-              },
-            },
-            {
-              $group: {
-                _id: null,
-                totalAvailableQuantity: { $sum: "$quantity" },
-              },
-            },
-          ]);
-
-          const totalAvailableQuantity =
-            stockAgg[0]?.totalAvailableQuantity || 0;
-          productTotalStock += totalAvailableQuantity;
-
-          const pricing = {
-            originalPrice: basePrice,
-            discountedPrice: finalPrice,
-            totalPrice: finalPrice,
-            sellingPrice,
-            mrpPrice,
-            landingSellPrice: landingPrice,
-            discountPercent,
-            isLandingPriceApplied,
-            appliedOffers,
-          };
-
-          processedVariants.push({
+        // Create product with variants array
+        const productWithVariants = {
+          _id: product._id,
+          type: "product",
+          productName: product.productName,
+          brand: product.brand,
+          category: product.category,
+          subcategory: product.subcategory,
+          urlSlug: product.urlSlug,
+          productStatus: product.productStatus,
+          hasVariant: true,
+          variants: matchingVariants.map((variant) => ({
             _id: variant._id,
             variantId: variant.variantId,
             variantAttributes: variant.variantAttributes,
@@ -1005,261 +1163,36 @@ export const getFilteredProductsUpdated = async (req, res) => {
                 ? variant.images
                 : product.productImages,
             costPrice: variant.costPrice,
+            sellingPrice: variant.sellingPrice,
+            mrpPrice: variant.mrpPrice,
+            landingSellPrice: variant.landingSellPrice,
+            discountPercent: variant.discountPercent,
             taxRate: variant.taxRate,
             isDefault: variant.isDefault,
-            landingSellPrice: variant.landingSellPrice,
-            pricing,
-            offerPrice: finalPrice, // offerPrice outside pricing
-            stock: {
-              availableQuantity: totalAvailableQuantity,
-              maxAllowedQuantity: Math.min(
-                variant.maximumQuantity || 10,
-                totalAvailableQuantity
-              ),
-              isInStock: totalAvailableQuantity > 0,
-            },
-            totalAvailableQuantity,
-          });
-        }
-
-        // Default Variant Pricing - FIXED LOGIC
-        const defaultVar = product.defaultVariant;
-        let defaultPricing = null;
-        let defaultOfferPrice = 0;
-        let defaultStock = {};
-
-        if (defaultVar) {
-          // Find the processed variant that matches the default variant
-          const defaultProcessedVariant = processedVariants.find(
-            (v) => v._id.toString() === defaultVar._id.toString()
-          );
-
-          if (defaultProcessedVariant) {
-            defaultPricing = defaultProcessedVariant.pricing;
-            defaultOfferPrice = defaultProcessedVariant.offerPrice;
-            defaultStock = defaultProcessedVariant.stock;
-          } else {
-            // If default variant not in processed variants, calculate pricing separately
-            let landingPrice = defaultVar.landingSellPrice || 0;
-            let sellingPrice = defaultVar.sellingPrice || 0;
-            let mrpPrice = defaultVar.mrpPrice || 0;
-
-            let basePrice = landingPrice > 0 ? landingPrice : sellingPrice;
-            let isLandingPriceApplied = landingPrice > 0;
-
-            if (basePrice <= 0) {
-              basePrice = sellingPrice || 0;
-              isLandingPriceApplied = false;
-            }
-
-            let discountedPrice = basePrice;
-            let appliedOffers = [];
-
-            const lineTotal = basePrice;
-
-            // Apply offers to default variant
-            for (const offer of offers) {
-              let applies = false;
-
-              if (offer.offerType === "product") {
-                applies = offer.offerEligibleItems.includes(
-                  product._id.toString()
-                );
-              } else if (offer.offerType === "category" && product.category) {
-                applies = offer.offerEligibleItems.includes(
-                  product.category._id.toString()
-                );
-              } else if (offer.offerType === "brand" && product.brand) {
-                applies = offer.offerEligibleItems.includes(
-                  product.brand._id.toString()
-                );
-              }
-
-              if (applies && lineTotal >= (offer.offerMinimumOrderValue || 0)) {
-                const oldPrice = discountedPrice;
-                discountedPrice = applyDiscount(
-                  discountedPrice,
-                  offer.offerDiscountUnit,
-                  offer.offerDiscountValue
-                );
-                if (discountedPrice < oldPrice) {
-                  appliedOffers.push({
-                    offerName: offer.offerName,
-                    discountType: offer.offerDiscountUnit,
-                    discountValue: offer.offerDiscountValue,
-                  });
-                }
-              }
-            }
-
-            const finalPrice = Math.max(0, discountedPrice);
-            const discountPercent =
-              mrpPrice > 0 && landingPrice > 0
-                ? Math.ceil(((mrpPrice - landingPrice) / mrpPrice) * 100)
-                : mrpPrice > 0 && sellingPrice > 0
-                ? Math.ceil(((mrpPrice - sellingPrice) / mrpPrice) * 100)
-                : 0;
-
-            // Stock for default variant
-            const defaultStockAgg = await mongoose
-              .model("Inventory")
-              .aggregate([
-                {
-                  $match: {
-                    product: new mongoose.Types.ObjectId(product._id),
-                    variant: new mongoose.Types.ObjectId(defaultVar._id),
-                  },
-                },
-                {
-                  $group: {
-                    _id: null,
-                    totalAvailableQuantity: { $sum: "$quantity" },
-                  },
-                },
-              ]);
-
-            const defaultTotalAvailableQuantity =
-              defaultStockAgg[0]?.totalAvailableQuantity || 0;
-
-            defaultPricing = {
-              originalPrice: basePrice,
-              discountedPrice: finalPrice,
-              totalPrice: finalPrice,
-              sellingPrice,
-              mrpPrice,
-              landingSellPrice: landingPrice,
-              discountPercent,
-              isLandingPriceApplied,
-              appliedOffers,
-            };
-
-            defaultOfferPrice = finalPrice;
-            defaultStock = {
-              availableQuantity: defaultTotalAvailableQuantity,
-              maxAllowedQuantity: Math.min(
-                defaultVar.maximumQuantity || 10,
-                defaultTotalAvailableQuantity
-              ),
-              isInStock: defaultTotalAvailableQuantity > 0,
-            };
-          }
-        }
-
-        productsWithVariants.push({
-          _id: product._id,
-          type: "product",
-          productName: product.productName,
-          brand: product.brand,
-          category: product.category,
-          subcategory: product.subcategory,
-          urlSlug: product.urlSlug,
-          productStatus: product.productStatus,
-          hasVariant: true,
-          landingSellPrice: product.landingSellPrice,
+          })),
+          // Include product-level fields for easy access
           productImages: product.productImages,
-          variants: processedVariants,
-          defaultVariant: product.defaultVariant
-            ? {
-                ...product.defaultVariant,
-                pricing: defaultPricing,
-                offerPrice: defaultOfferPrice,
-                stock: defaultStock,
-              }
-            : null,
-          totalAvailableQuantity: productTotalStock,
-          minSellingPrice: processedVariants.length
-            ? Math.min(...processedVariants.map((v) => v.pricing.sellingPrice))
-            : 0,
-          maxSellingPrice: processedVariants.length
-            ? Math.max(...processedVariants.map((v) => v.pricing.sellingPrice))
-            : 0,
-          variantCount: processedVariants.length,
-        });
-      } else {
-        // === NON-VARIANT PRODUCT ===
-        let landingPrice = product.landingSellPrice || 0;
-        let sellingPrice = product.sellingPrice || 0;
-        let mrpPrice = product.mrpPrice || 0;
-
-        let basePrice = landingPrice > 0 ? landingPrice : sellingPrice;
-        let isLandingPriceApplied = landingPrice > 0;
-
-        if (basePrice <= 0) {
-          basePrice = sellingPrice || 0;
-          isLandingPriceApplied = false;
-        }
-
-        let discountedPrice = basePrice;
-        let appliedOffers = [];
-
-        const lineTotal = basePrice;
-
-        // Apply offers - FIXED LOGIC
-        for (const offer of offers) {
-          let applies = false;
-
-          if (offer.offerType === "product") {
-            applies = offer.offerEligibleItems.includes(product._id.toString());
-          } else if (offer.offerType === "category" && product.category) {
-            applies = offer.offerEligibleItems.includes(
-              product.category._id.toString()
-            );
-          } else if (offer.offerType === "brand" && product.brand) {
-            applies = offer.offerEligibleItems.includes(
-              product.brand._id.toString()
-            );
-          }
-
-          if (applies && lineTotal >= (offer.offerMinimumOrderValue || 0)) {
-            const oldPrice = discountedPrice;
-            discountedPrice = applyDiscount(
-              discountedPrice,
-              offer.offerDiscountUnit,
-              offer.offerDiscountValue
-            );
-            if (discountedPrice < oldPrice) {
-              appliedOffers.push({
-                offerName: offer.offerName,
-                discountType: offer.offerDiscountUnit,
-                discountValue: offer.offerDiscountValue,
-              });
-            }
-          }
-        }
-
-        const finalPrice = Math.max(0, discountedPrice);
-        const discountPercent =
-          mrpPrice > 0 && landingPrice > 0
-            ? Math.ceil(((mrpPrice - landingPrice) / mrpPrice) * 100)
-            : mrpPrice > 0 && sellingPrice > 0
-            ? Math.ceil(((mrpPrice - sellingPrice) / mrpPrice) * 100)
-            : 0;
-
-        const stockAgg = await mongoose
-          .model("Inventory")
-          .aggregate([
-            { $match: { product: new mongoose.Types.ObjectId(product._id) } },
-            {
-              $group: {
-                _id: null,
-                totalAvailableQuantity: { $sum: "$quantity" },
-              },
-            },
-          ]);
-        productTotalStock = stockAgg[0]?.totalAvailableQuantity || 0;
-
-        const pricing = {
-          originalPrice: basePrice,
-          discountedPrice: finalPrice,
-          totalPrice: finalPrice,
-          sellingPrice,
-          mrpPrice,
-          landingSellPrice: landingPrice,
-          discountPercent,
-          isLandingPriceApplied,
-          appliedOffers,
+          minSellingPrice:
+            matchingVariants.length > 0
+              ? Math.min(...matchingVariants.map((v) => v.sellingPrice))
+              : product.sellingPrice,
+          maxSellingPrice:
+            matchingVariants.length > 0
+              ? Math.max(...matchingVariants.map((v) => v.sellingPrice))
+              : product.sellingPrice,
+          variantCount: matchingVariants.length,
+          // Include default variant data
+          defaultVariant: product.defaultVariant,
+          sellingPrice: product.sellingPrice,
+          mrpPrice: product.mrpPrice,
+          landingSellPrice: product.landingSellPrice,
+          discountPercent: product.discountPercent,
+          taxRate: product.taxRate,
         };
 
+        productsWithVariants.push(productWithVariants);
+      } else {
+        // Add product without variant (already enriched with default variant data)
         productsWithVariants.push({
           _id: product._id,
           type: "product",
@@ -1270,25 +1203,23 @@ export const getFilteredProductsUpdated = async (req, res) => {
           urlSlug: product.urlSlug,
           productStatus: product.productStatus,
           hasVariant: false,
+          SKU: product.SKU,
+          barcode: product.barcode,
           productImages: product.productImages,
+          costPrice: product.costPrice,
+          sellingPrice: product.sellingPrice,
+          mrpPrice: product.mrpPrice,
           landingSellPrice: product.landingSellPrice,
-          totalAvailableQuantity: productTotalStock,
-          pricing,
-          offerPrice: finalPrice, // offerPrice outside
-          stock: {
-            availableQuantity: productTotalStock,
-            maxAllowedQuantity: Math.min(
-              product.maximumQuantity || 10,
-              productTotalStock
-            ),
-            isInStock: productTotalStock > 0,
-          },
-          variants: [],
+          discountPercent: product.discountPercent,
+          taxRate: product.taxRate,
+          defaultVariant: product.defaultVariant,
+          variants: [], // Empty variants array for consistency
         });
       }
     }
 
-    // === 11. Filter Options ===
+    // MODIFIED: Filter options should only show available options based on current selection
+    // Get available brands from filtered products
     const availableBrandIds = [
       ...new Set(productsWithVariants.map((p) => p.brand._id.toString())),
     ];
@@ -1297,24 +1228,38 @@ export const getFilteredProductsUpdated = async (req, res) => {
       status: "active",
     }).select("_id brandName imageUrl");
 
+    // Get available categories and subcategories from filtered products
     const availableCategoryIds = [
-      ...new Set(productsWithVariants.map((p) => p.category._id.toString())),
+      ...new Set(
+        productsWithVariants.map((p) =>
+          p.category._id ? p.category._id.toString() : p.category.toString()
+        )
+      ),
     ];
+
+    const availableSubcategoryIds = [
+      ...new Set(
+        productsWithVariants
+          .filter((p) => p.subcategory)
+          .map((p) =>
+            p.subcategory._id
+              ? p.subcategory._id.toString()
+              : p.subcategory.toString()
+          )
+      ),
+    ];
+
     const availableCategories = await Category.find({
       _id: { $in: availableCategoryIds },
       status: "active",
     }).select("_id name image type parentId");
 
-    const mainCategoryIds = availableCategories
-      .filter((c) => c.type === "Main")
-      .map((c) => c._id);
-    const availableSubcategoryIds = [
-      ...new Set(
-        productsWithVariants
-          .filter((p) => p.subcategory)
-          .map((p) => p.subcategory._id.toString())
-      ),
-    ];
+    // Get all subcategories for the available main categories
+    const mainCategories = availableCategories.filter(
+      (cat) => cat.type === "Main"
+    );
+    const mainCategoryIds = mainCategories.map((cat) => cat._id);
+
     const allSubcategories = await Category.find({
       $or: [
         { parentId: { $in: mainCategoryIds } },
@@ -1323,36 +1268,96 @@ export const getFilteredProductsUpdated = async (req, res) => {
       status: "active",
     }).select("_id name image parentId type");
 
-    // === 12. Price & Discount Range (from offerPrice) ===
-    const priceValues = productsWithVariants
-      .flatMap((p) =>
-        p.hasVariant ? p.variants.map((v) => v.offerPrice) : [p.offerPrice]
-      )
-      .filter((p) => p > 0);
+    // Create the subcategories response
+    const subcategoriesResponse = {
+      subcategories: allSubcategories.map((subcat) => ({
+        _id: subcat._id,
+        name: subcat.name,
+        image: subcat.image,
+        parentId: subcat.parentId,
+        type: subcat.type,
+      })),
+    };
 
-    const discountValues = productsWithVariants.flatMap((p) =>
-      p.hasVariant
-        ? p.variants.map((v) => v.pricing.discountPercent)
-        : [p.pricing.discountPercent]
-    );
+    // CORRECTED: Aggregate price and discount ranges from FILTERED products
+    const productPriceRange = await Product.aggregate([
+      {
+        $match: {
+          _id: { $in: products.map((p) => p._id) },
+          productStatus: status,
+          sellingPrice: { $exists: true, $gt: 0 },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          minPrice: { $min: "$sellingPrice" },
+          maxPrice: { $max: "$sellingPrice" },
+          minDiscount: { $min: "$discountPercent" },
+          maxDiscount: { $max: "$discountPercent" },
+        },
+      },
+    ]);
 
-    const minPriceFinal = priceValues.length ? Math.min(...priceValues) : 0;
-    const maxPriceFinal = priceValues.length ? Math.max(...priceValues) : 0;
-    const minDiscountFinal = discountValues.length
-      ? Math.min(...discountValues)
-      : 0;
-    const maxDiscountFinal = discountValues.length
-      ? Math.max(...discountValues)
-      : 0;
-
-    // === 13. Variant Attributes ===
-    const variantAttrs = await Variant.aggregate([
+    const variantPriceRange = await Variant.aggregate([
       {
         $match: {
           productId: {
-            $in: productsWithVariants
-              .filter((p) => p.hasVariant)
-              .map((p) => p._id),
+            $in: products.filter((p) => p.hasVariant).map((p) => p._id),
+          },
+          sellingPrice: { $exists: true, $gt: 0 },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          minPrice: { $min: "$sellingPrice" },
+          maxPrice: { $max: "$sellingPrice" },
+          minDiscount: { $min: "$discountPercent" },
+          maxDiscount: { $max: "$discountPercent" },
+        },
+      },
+    ]);
+
+    const combinedMinPrice = Math.min(
+      productPriceRange[0]?.minPrice ?? Infinity,
+      variantPriceRange[0]?.minPrice ?? Infinity
+    );
+    const combinedMaxPrice = Math.max(
+      productPriceRange[0]?.maxPrice ?? 0,
+      variantPriceRange[0]?.maxPrice ?? 0
+    );
+    const combinedMinDiscount = Math.min(
+      productPriceRange[0]?.minDiscount ?? Infinity,
+      variantPriceRange[0]?.minDiscount ?? Infinity
+    );
+    const combinedMaxDiscount = Math.max(
+      productPriceRange[0]?.maxDiscount ?? 0,
+      variantPriceRange[0]?.maxDiscount ?? 0
+    );
+
+    const minPriceFinal =
+      Number.isFinite(combinedMinPrice) && combinedMinPrice !== Infinity
+        ? combinedMinPrice
+        : 0;
+    const maxPriceFinal =
+      Number.isFinite(combinedMaxPrice) && combinedMaxPrice !== 0
+        ? combinedMaxPrice
+        : minPriceFinal;
+    const minDiscountFinal =
+      Number.isFinite(combinedMinDiscount) && combinedMinDiscount !== Infinity
+        ? combinedMinDiscount
+        : 0;
+    const maxDiscountFinal = Number.isFinite(combinedMaxDiscount)
+      ? combinedMaxDiscount
+      : minDiscountFinal;
+
+    // Aggregate variant attributes for filter options from filtered products
+    const variantAttributesAggregation = await Variant.aggregate([
+      {
+        $match: {
+          productId: {
+            $in: products.filter((p) => p.hasVariant).map((p) => p._id),
           },
         },
       },
@@ -1374,26 +1379,86 @@ export const getFilteredProductsUpdated = async (req, res) => {
       { $sort: { _id: 1 } },
     ]);
 
+    // === ADD INVENTORY AVAILABILITY ===
+
+    for (const product of productsWithVariants) {
+      if (product.hasVariant && product.variants.length > 0) {
+        // For each variant, find total available quantity
+        for (const variant of product.variants) {
+          const totalStock = await inventory.aggregate([
+            {
+              $match: {
+                product: new mongoose.Types.ObjectId(product._id),
+                variant: new mongoose.Types.ObjectId(variant._id),
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                totalAvailableQuantity: { $sum: "$AvailableQuantity" },
+              },
+            },
+          ]);
+
+          variant.totalAvailableQuantity =
+            totalStock[0]?.totalAvailableQuantity || 0;
+        }
+
+        // Product-level total = sum of its variants
+        product.totalAvailableQuantity = product.variants.reduce(
+          (sum, v) => sum + (v.totalAvailableQuantity || 0),
+          0
+        );
+      } else {
+        // Non-variant product
+        const totalStock = await inventory.aggregate([
+          {
+            $match: {
+              product: new mongoose.Types.ObjectId(product._id),
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              totalAvailableQuantity: { $sum: "$AvailableQuantity" },
+            },
+          },
+        ]);
+
+        product.totalAvailableQuantity =
+          totalStock[0]?.totalAvailableQuantity || 0;
+      }
+
+      // const offer = await findActiveOffer(product);
+      // const productWithOffer = applyOfferPrice(product, offer);
+      // console.log(offer, "offerofferofferofferofferofferofferofferoffer");
+
+      // productsWithVariants.push(productWithOffer);
+    }
+
+    for (let i = 0; i < productsWithVariants.length; i++) {
+      const product = productsWithVariants[i];
+
+      const offer = await findActiveOffer(product);
+      const updatedProduct = applyOfferPrice(product, offer);
+
+      productsWithVariants[i] = updatedProduct;
+    }
+
     const variantFilters = {};
-    variantAttrs.forEach((attr) => {
-      variantFilters[attr._id] = attr.values.filter((v) => v).sort();
+    variantAttributesAggregation.forEach((attr) => {
+      variantFilters[attr._id] = attr.values
+        .filter((v) => v != null && v !== "")
+        .sort();
     });
 
-    // === 14. Response ===
     res.status(200).json({
       products: productsWithVariants,
       filterOptions: {
         variantAttributes: variantFilters,
         brands: availableBrands,
-        categories: availableCategories.filter((c) => c.type === "Main"),
-        subcategories: {
-          subcategories: allSubcategories.map((s) => ({
-            _id: s._id,
-            name: s.name,
-            image: s.image,
-            parentId: s.parentId,
-          })),
-        },
+        categories: availableCategories.filter((cat) => cat.type === "Main"),
+        subcategories: subcategoriesResponse,
         priceRange: { min: minPriceFinal, max: maxPriceFinal },
         discountRange: { min: minDiscountFinal, max: maxDiscountFinal },
       },
@@ -1410,38 +1475,24 @@ export const getFilteredProductsUpdated = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error in getFilteredProductsUpdated:", error);
+    console.error("Error fetching filtered products:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 export const getMostWantedProducts = async (req, res) => {
   try {
-    const now = new Date();
-
-    // Step 1: Fetch published & visible products
     const products = await Product.find({
       productStatus: "published",
       visibility: "visible",
     }).lean();
 
-    if (!products.length) {
-      return res.status(200).json([]);
-    }
-
-    // Step 2: Enrich with default variants
+    // Enrich products with default variant data
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
-    // Step 3: Fetch active offers
-    const offers = await Offer.find({
-      offerStatus: "published",
-      offerRedeemTimePeriod: { $exists: true, $not: { $size: 0 } },
-      "offerRedeemTimePeriod.0": { $lte: now },
-      "offerRedeemTimePeriod.1": { $gte: now },
-    }).lean();
-
-    // Step 4: Review aggregation
+    // Aggregate review stats for all products in one go
     const productIds = enrichedProducts.map((p) => p._id);
+
     const reviewStats = await Review.aggregate([
       { $match: { productId: { $in: productIds } } },
       {
@@ -1453,6 +1504,7 @@ export const getMostWantedProducts = async (req, res) => {
       },
     ]);
 
+    // Create a map for quick lookup of review stats by product ID
     const reviewStatsMap = new Map();
     reviewStats.forEach((stat) => {
       reviewStatsMap.set(stat._id.toString(), {
@@ -1461,20 +1513,8 @@ export const getMostWantedProducts = async (req, res) => {
       });
     });
 
-    // Step 5: Discount helper
-    const applyDiscount = (price, unit, value) => {
-      if (unit === "percentage") {
-        return Math.max(0, price - (price * value) / 100);
-      } else if (unit === "fixed") {
-        return Math.max(0, price - value);
-      }
-      return price;
-    };
-
-    // Step 6: Process each product
-    const processedProducts = [];
-
-    for (const product of enrichedProducts) {
+    // Map review stats and calculate mostWantedScore per product
+    const scoredProducts = enrichedProducts.map((product) => {
       const review = reviewStatsMap.get(product._id.toString()) || {
         averageRating: 0,
         reviewCount: 0,
@@ -1485,174 +1525,22 @@ export const getMostWantedProducts = async (req, res) => {
       const wishlistCount = product.wishlistCount || 0;
       const viewsCount = product.viewsCount || 0;
 
-      const mostWantedScore =
+      const score =
         orderCount * 3 +
         addedToCartCount * 2 +
         wishlistCount * 1 +
         viewsCount * 0.5;
 
-      // === PRICING LOGIC ===
-      let landingPrice = 0;
-      let sellingPrice = 0;
-      let mrpPrice = 0;
-      let basePrice = 0;
-      let discountedPrice = 0;
-      let discountPercent = 0;
-      let isLandingPriceApplied = false;
-      let appliedOffers = [];
-      let availableQuantity = 0;
-      let maxAllowedQuantity = 0;
-      let variantDetails = null;
-
-      if (product.hasVariant && product.defaultVariant) {
-        // === VARIANT CASE ===
-        landingPrice = product.defaultVariant.landingSellPrice || 0;
-        sellingPrice = product.defaultVariant.sellingPrice || 0;
-        mrpPrice = product.defaultVariant.mrpPrice || 0;
-
-        // Use landing price if > 0
-        basePrice = landingPrice > 0 ? landingPrice : sellingPrice;
-        isLandingPriceApplied = landingPrice > 0;
-
-        // Inventory
-        const inventory = await mongoose
-          .model("Inventory")
-          .findOne({ variant: product.defaultVariant._id })
-          .lean();
-        availableQuantity = inventory?.quantity || 0;
-        maxAllowedQuantity = Math.min(
-          product.defaultVariant.maximumQuantity || 10,
-          availableQuantity
-        );
-
-        variantDetails = {
-          _id: product.defaultVariant._id,
-          variantAttributes: product.defaultVariant.variantAttributes || [],
-          SKU: product.defaultVariant.SKU,
-          barcode: product.defaultVariant.barcode,
-          images: product.defaultVariant.images || [],
-          isDefault: product.defaultVariant.isDefault || false,
-        };
-      } else {
-        // === NON-VARIANT CASE ===
-        landingPrice = product.landingSellPrice || 0;
-        sellingPrice = product.sellingPrice || 0;
-        mrpPrice = product.mrpPrice || 0;
-
-        basePrice = landingPrice > 0 ? landingPrice : sellingPrice;
-        isLandingPriceApplied = landingPrice > 0;
-
-        // Inventory
-        const inventory = await mongoose
-          .model("Inventory")
-          .findOne({ product: product._id, variant: { $exists: false } })
-          .lean();
-        availableQuantity = inventory?.quantity || 0;
-        maxAllowedQuantity = Math.min(
-          product.maximumQuantity || 10,
-          availableQuantity
-        );
-      }
-
-      // Fallback
-      if (basePrice <= 0) {
-        basePrice = sellingPrice || 0;
-        isLandingPriceApplied = false;
-      }
-
-      // === Calculate discountPercent from MRP - landingSellPrice ===
-      if (mrpPrice > 0 && landingPrice > 0) {
-        discountPercent = Math.ceil(
-          ((mrpPrice - landingPrice) / mrpPrice) * 100
-        );
-      } else if (mrpPrice > 0 && sellingPrice > 0) {
-        discountPercent = Math.ceil(
-          ((mrpPrice - sellingPrice) / mrpPrice) * 100
-        );
-      } else {
-        discountPercent = 0;
-      }
-
-      // === Apply Offers ===
-      let currentPrice = basePrice;
-      const lineTotalBeforeDiscount = basePrice;
-
-      for (const offer of offers) {
-        let applies = false;
-
-        if (offer.offerType === "product") {
-          applies = offer.offerEligibleItems.includes(product._id.toString());
-        } else if (offer.offerType === "category" && product.category) {
-          applies = offer.offerEligibleItems.includes(
-            product.category.toString()
-          );
-        } else if (offer.offerType === "brand" && product.brand) {
-          applies = offer.offerEligibleItems.includes(product.brand.toString());
-        }
-
-        if (
-          applies &&
-          lineTotalBeforeDiscount >= (offer.offerMinimumOrderValue || 0)
-        ) {
-          const oldPrice = currentPrice;
-          currentPrice = applyDiscount(
-            currentPrice,
-            offer.offerDiscountUnit,
-            offer.offerDiscountValue
-          );
-
-          if (currentPrice < oldPrice) {
-            appliedOffers.push({
-              offerName: offer.offerName,
-              discountType: offer.offerDiscountUnit,
-              discountValue: offer.offerDiscountValue,
-            });
-          }
-        }
-      }
-
-      discountedPrice = Math.max(0, currentPrice);
-      const finalPrice = discountedPrice;
-
-      // === Final Product Object ===
-      processedProducts.push({
-        _id: product._id,
-        productName: product.productName,
-        urlSlug: product.urlSlug,
-        productImages: product.productImages || [],
-        thumbnail: product.thumbnail || product.productImages?.[0] || "",
-        brand: product.brand,
-        category: product.category,
-        subcategory: product.subcategory,
-        hasVariant: product.hasVariant,
-        variant: variantDetails,
-        variants: product.hasVariant ? [variantDetails].filter(Boolean) : [],
+      return {
+        ...product,
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
-        landingSellPrice: product.landingSellPrice,
-        mostWantedScore,
-        pricing: {
-          originalPrice: basePrice,
-          discountedPrice: finalPrice,
-          totalPrice: finalPrice,
-          sellingPrice,
-          mrpPrice,
-          landingSellPrice: landingPrice,
-          discountPercent,
-          isLandingPriceApplied,
-          appliedOffers,
-        },
-        offerPrice: finalPrice,
-        stock: {
-          availableQuantity,
-          maxAllowedQuantity,
-          isInStock: availableQuantity > 0,
-        },
-      });
-    }
+        mostWantedScore: score,
+      };
+    });
 
-    // Step 7: Sort by score
-    const sorted = processedProducts.sort(
+    // Sort by mostWantedScore descending, no limit
+    const sorted = scoredProducts.sort(
       (a, b) => b.mostWantedScore - a.mostWantedScore
     );
 
@@ -1667,33 +1555,16 @@ export const getMostWantedProducts = async (req, res) => {
 
 export const getNewArrivalProducts = async (req, res) => {
   try {
-    const now = new Date();
-
-    // Step 1: Fetch published & visible products, sorted by newest
     const products = await Product.find({
       productStatus: "published",
       visibility: "visible",
     })
       .sort({ createdAt: -1 })
       .lean();
-
-    if (!products.length) {
-      return res.status(200).json([]);
-    }
-
-    // Step 2: Enrich with default variants
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
-    // Step 3: Fetch active offers
-    const offers = await Offer.find({
-      offerStatus: "published",
-      offerRedeemTimePeriod: { $exists: true, $not: { $size: 0 } },
-      "offerRedeemTimePeriod.0": { $lte: now },
-      "offerRedeemTimePeriod.1": { $gte: now },
-    }).lean();
-
-    // Step 4: Review aggregation
     const productIds = enrichedProducts.map((p) => p._id);
+
     const reviewStats = await Review.aggregate([
       { $match: { productId: { $in: productIds } } },
       {
@@ -1713,176 +1584,19 @@ export const getNewArrivalProducts = async (req, res) => {
       });
     });
 
-    // Step 5: Discount helper
-    const applyDiscount = (price, unit, value) => {
-      if (unit === "percentage") {
-        return Math.max(0, price - (price * value) / 100);
-      } else if (unit === "fixed") {
-        return Math.max(0, price - value);
-      }
-      return price;
-    };
-
-    // Step 6: Process each product
-    const processedProducts = [];
-
-    for (const product of enrichedProducts) {
+    const productsWithReviews = enrichedProducts.map((product) => {
       const review = reviewStatsMap.get(product._id.toString()) || {
         averageRating: 0,
         reviewCount: 0,
       };
-
-      // === PRICING LOGIC ===
-      let landingPrice = 0;
-      let sellingPrice = 0;
-      let mrpPrice = 0;
-      let basePrice = 0;
-      let originalPrice = 0;
-      let discountedPrice = 0;
-      let discountPercent = 0;
-      let isLandingPriceApplied = false;
-      let appliedOffers = [];
-      let availableQuantity = 0;
-      let maxAllowedQuantity = 0;
-      let variantDetails = null;
-
-      if (product.hasVariant && product.defaultVariant) {
-        // === VARIANT CASE ===
-        landingPrice = product.defaultVariant.landingSellPrice || 0;
-        sellingPrice = product.defaultVariant.sellingPrice || 0;
-        mrpPrice = product.defaultVariant.mrpPrice || 0;
-
-        basePrice = landingPrice > 0 ? landingPrice : sellingPrice;
-        isLandingPriceApplied = landingPrice > 0;
-
-        const inventory = await mongoose
-          .model("Inventory")
-          .findOne({ variant: product.defaultVariant._id })
-          .lean();
-        availableQuantity = inventory?.quantity || 0;
-        maxAllowedQuantity = Math.min(
-          product.defaultVariant.maximumQuantity || 10,
-          availableQuantity
-        );
-
-        variantDetails = {
-          _id: product.defaultVariant._id,
-          variantAttributes: product.defaultVariant.variantAttributes || [],
-          SKU: product.defaultVariant.SKU,
-          images: product.defaultVariant.images || [],
-          isDefault: product.defaultVariant.isDefault || false,
-        };
-      } else {
-        // === NON-VARIANT CASE ===
-        landingPrice = product.landingSellPrice || 0;
-        sellingPrice = product.sellingPrice || 0;
-        mrpPrice = product.mrpPrice || 0;
-
-        basePrice = landingPrice > 0 ? landingPrice : sellingPrice;
-        isLandingPriceApplied = landingPrice > 0;
-
-        const inventory = await mongoose
-          .model("Inventory")
-          .findOne({ product: product._id, variant: { $exists: false } })
-          .lean();
-        availableQuantity = inventory?.quantity || 0;
-        maxAllowedQuantity = Math.min(
-          product.maximumQuantity || 10,
-          availableQuantity
-        );
-      }
-
-      // Fallback
-      if (basePrice <= 0) {
-        basePrice = sellingPrice || 0;
-        isLandingPriceApplied = false;
-      }
-
-      originalPrice = basePrice;
-      discountedPrice = basePrice;
-
-      // === Calculate discountPercent from MRP - landingSellPrice ===
-      if (mrpPrice > 0 && landingPrice > 0) {
-        const discountAmount = mrpPrice - landingPrice;
-        discountPercent = Math.ceil((discountAmount / mrpPrice) * 100);
-      } else if (mrpPrice > 0 && sellingPrice > 0) {
-        const discountAmount = mrpPrice - sellingPrice;
-        discountPercent = Math.ceil((discountAmount / mrpPrice) * 100);
-      } else {
-        discountPercent = 0;
-      }
-
-      // === Apply Offers ===
-      const lineTotalBeforeDiscount = basePrice * 1;
-
-      for (const offer of offers) {
-        let applies = false;
-
-        if (offer.offerType === "product") {
-          applies = offer.offerEligibleItems.includes(product._id.toString());
-        } else if (offer.offerType === "category" && product.category) {
-          applies = offer.offerEligibleItems.includes(
-            product.category.toString()
-          );
-        } else if (offer.offerType === "brand" && product.brand) {
-          applies = offer.offerEligibleItems.includes(product.brand.toString());
-        }
-
-        if (
-          applies &&
-          lineTotalBeforeDiscount >= (offer.offerMinimumOrderValue || 0)
-        ) {
-          const oldPrice = discountedPrice;
-          discountedPrice = applyDiscount(
-            discountedPrice,
-            offer.offerDiscountUnit,
-            offer.offerDiscountValue
-          );
-
-          if (discountedPrice < oldPrice) {
-            appliedOffers.push({
-              offerName: offer.offerName,
-              discountType: offer.offerDiscountUnit,
-              discountValue: offer.offerDiscountValue,
-            });
-          }
-        }
-      }
-
-      const finalPrice = Math.max(0, discountedPrice);
-      const totalPrice = finalPrice;
-
-      // === Final Product Object ===
-      processedProducts.push({
+      return {
         ...product,
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
-        pricing: {
-          originalPrice,
-          discountedPrice: finalPrice,
-          totalPrice,
-          sellingPrice: product.hasVariant
-            ? product.defaultVariant?.sellingPrice || 0
-            : product.sellingPrice || 0,
-          mrpPrice,
-          landingSellPrice: landingPrice,
-          discountPercent,
-          isLandingPriceApplied,
-          appliedOffers,
-        },
-        offerPrice: finalPrice,
-        landingSellPrice: product.landingSellPrice,
-        stock: {
-          availableQuantity,
-          maxAllowedQuantity,
-          isInStock: availableQuantity > 0,
-        },
-        variant: variantDetails,
-        hasVariant: !!variantDetails,
-      });
-    }
+      };
+    });
 
-    res.status(200).json(processedProducts);
+    res.status(200).json(productsWithReviews);
   } catch (error) {
     console.error("Error fetching new arrivals:", error);
     res
@@ -1944,158 +1658,21 @@ export const getBestSellingProducts = async (req, res) => {
   }
 };
 
-
-
 export const getProductById = async (req, res) => {
   console.log("Fetching product with slug:", req.params.slug);
   try {
-    const now = new Date();
+    const product = await Product.findOne({ urlSlug: req.params.slug }).lean();
+    if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // 1. Fetch product with population
-    let product = await Product.findOne({ urlSlug: req.params.slug })
-      .populate("brand", "_id")
-      .populate("category", "_id")
-      .populate("subcategory", "_id")
-      .lean();
-
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
-
-    // Safely extract IDs (avoid null errors)
-    const brandId = product.brand?._id?.toString() || null;
-    const categoryId = product.category?._id?.toString() || null;
-    const subcategoryId = product.subcategory?._id?.toString() || null;
-
-    // Replace populated objects with just IDs
-    product.brand = brandId;
-    product.category = categoryId;
-    product.subcategory = subcategoryId;
-
-    // 2. Enrich with default variant
-    const enrichedProduct = await enrichProductsWithDefaultVariants([product]);
-    const productWithDefault = enrichedProduct[0];
-
-    // 3. Fetch active offers
-    const offers = await Offer.find({
-      offerStatus: "published",
-      offerRedeemTimePeriod: { $exists: true, $not: { $eq: [] } },
-      "offerRedeemTimePeriod.0": { $lte: now },
-      "offerRedeemTimePeriod.1": { $gte: now },
-    }).lean();
-
-    // Helper: Apply discount
-    const applyDiscount = (price, unit, value) => {
-      if (unit === "percentage") {
-        return Math.max(0, price - (price * value) / 100);
-      }
-      if (unit === "fixed") {
-        return Math.max(0, price - value);
-      }
-      return price;
-    };
-
-    // Helper: Check if offer applies
-    const offerApplies = (offer, lineTotal) => {
-      if (lineTotal < (offer.offerMinimumOrderValue || 0)) return false;
-
-      if (offer.offerType === "product") {
-        return offer.offerEligibleItems.includes(product._id.toString());
-      }
-      if (offer.offerType === "category" && categoryId) {
-        return offer.offerEligibleItems.includes(categoryId);
-      }
-      if (offer.offerType === "brand" && brandId) {
-        return offer.offerEligibleItems.includes(brandId);
-      }
-      return false;
-    };
-
-    // Helper: Calculate pricing for a variant or product
-    const calculatePricing = (item) => {
-      const landingPrice = item.landingSellPrice || 0;
-      const sellingPrice = item.sellingPrice || 0;
-      const mrpPrice = item.mrpPrice || 0;
-
-      const basePrice = landingPrice > 0 ? landingPrice : sellingPrice;
-      const isLandingPriceApplied = landingPrice > 0;
-
-      let discountedPrice = basePrice;
-      const appliedOffers = [];
-
-      for (const offer of offers) {
-        if (offerApplies(offer, basePrice)) {
-          const oldPrice = discountedPrice;
-          discountedPrice = applyDiscount(
-            discountedPrice,
-            offer.offerDiscountUnit,
-            offer.offerDiscountValue
-          );
-          if (discountedPrice < oldPrice) {
-            appliedOffers.push({
-              offerName: offer.offerName,
-              discountType: offer.offerDiscountUnit,
-              discountValue: offer.offerDiscountValue,
-            });
-          }
-        }
-      }
-
-      const finalPrice = Math.max(0, discountedPrice);
-      const discountPercent =
-        mrpPrice > 0
-          ? Math.ceil(((mrpPrice - basePrice) / mrpPrice) * 100)
-          : 0;
-
-      return {
-        originalPrice: basePrice,
-        discountedPrice: finalPrice,
-        totalPrice: finalPrice,
-        sellingPrice,
-        mrpPrice,
-        landingSellPrice: landingPrice,
-        discountPercent,
-        isLandingPriceApplied,
-        appliedOffers,
-      };
-    };
-
-    // === DEFAULT VARIANT PRICING ===
-    let defaultPricing = null;
-    let defaultStock = { availableQuantity: 0, maxAllowedQuantity: 0, isInStock: false };
-    let defaultOfferPrice = 0;
-
-    if (productWithDefault.hasVariant && productWithDefault.defaultVariant) {
-      const v = productWithDefault.defaultVariant;
-      defaultPricing = calculatePricing(v);
-
-      const inventory = await mongoose
-        .model("Inventory")
-        .findOne({ variant: v._id })
-        .lean();
-
-      const availableQuantity = inventory?.quantity || 0;
-      const maxAllowedQuantity = Math.min(v.maximumQuantity || 10, availableQuantity);
-
-      defaultStock = {
-        availableQuantity,
-        maxAllowedQuantity,
-        isInStock: availableQuantity > 0,
-      };
-      defaultOfferPrice = defaultPricing.discountedPrice;
-    }
-
-    // === ALL VARIANTS ===
     let variants = [];
-    let totalProductStock = 0;
 
+    // === Fetch variants if applicable ===
     if (product.hasVariant) {
       variants = await Variant.find({ productId: product._id }).lean();
 
+      // Add totalAvailableQuantity for each variant
       for (const variant of variants) {
-        const pricing = calculatePricing(variant);
-
-        const stockAgg = await mongoose.model("Inventory").aggregate([
+        const stockAgg = await inventory.aggregate([
           {
             $match: {
               product: new mongoose.Types.ObjectId(product._id),
@@ -2105,38 +1682,40 @@ export const getProductById = async (req, res) => {
           {
             $group: {
               _id: null,
-              totalAvailableQuantity: { $sum: "$quantity" },
+              totalAvailableQuantity: { $sum: "$AvailableQuantity" },
             },
           },
         ]);
 
-        const totalAvailableQuantity = stockAgg[0]?.totalAvailableQuantity || 0;
-        totalProductStock += totalAvailableQuantity;
-
-        variant.pricing = pricing;
-        variant.stock = {
-          availableQuantity: totalAvailableQuantity,
-          maxAllowedQuantity: Math.min(variant.maximumQuantity || 10, totalAvailableQuantity),
-          isInStock: totalAvailableQuantity > 0,
-        };
-        variant.offerPrice = pricing.discountedPrice;
-        variant.totalAvailableQuantity = totalAvailableQuantity;
+        variant.totalAvailableQuantity =
+          stockAgg[0]?.totalAvailableQuantity || 0;
       }
+
+      // Compute totalAvailableQuantity for product (sum of all variants)
+      product.totalAvailableQuantity = variants.reduce(
+        (sum, v) => sum + (v.totalAvailableQuantity || 0),
+        0
+      );
     } else {
-      // Non-variant product stock
-      const stockAgg = await mongoose.model("Inventory").aggregate([
-        { $match: { product: new mongoose.Types.ObjectId(product._id) } },
+      // === Non-variant product — sum directly from inventory ===
+      const stockAgg = await inventory.aggregate([
+        {
+          $match: {
+            product: new mongoose.Types.ObjectId(product._id),
+          },
+        },
         {
           $group: {
             _id: null,
-            totalAvailableQuantity: { $sum: "$quantity" },
+            totalAvailableQuantity: { $sum: "$AvailableQuantity" },
           },
         },
       ]);
-      totalProductStock = stockAgg[0]?.totalAvailableQuantity || 0;
+
+      product.totalAvailableQuantity = stockAgg[0]?.totalAvailableQuantity || 0;
     }
 
-    // === REVIEWS ===
+    // === Aggregate reviews to calculate average rating and count ===
     const reviewStats = await Review.aggregate([
       { $match: { productId: product._id } },
       {
@@ -2148,57 +1727,52 @@ export const getProductById = async (req, res) => {
       },
     ]);
 
-    const averageRating = reviewStats[0]?.averageRating
-      ? Number(reviewStats[0].averageRating.toFixed(2))
-      : 0;
-    const reviewCount = reviewStats[0]?.reviewCount || 0;
+    const averageRating = reviewStats.length ? reviewStats[0].averageRating : 0;
+    const reviewCount = reviewStats.length ? reviewStats[0].reviewCount : 0;
 
-    // === NON-VARIANT PRICING ===
-    let nonVariantPricing = null;
-    let nonVariantOfferPrice = 0;
-    let nonVariantStock = { availableQuantity: 0, maxAllowedQuantity: 0, isInStock: false };
+    
 
-    if (!product.hasVariant) {
-      nonVariantPricing = calculatePricing(product);
-      nonVariantOfferPrice = nonVariantPricing.discountedPrice;
+    // ====================== FETCH OFFERS ======================
+    const activeOffer = await Offer.findOne({
+      offerStatus: "published",
+      offerRedeemTimePeriod: {
+        $exists: true,
+        $ne: [],
+      },
+      $expr: {
+        $and: [
+          {
+            $lte: [{ $arrayElemAt: ["$offerRedeemTimePeriod", 0] }, new Date()],
+          },
+          {
+            $gte: [{ $arrayElemAt: ["$offerRedeemTimePeriod", 1] }, new Date()],
+          },
+        ],
+      },
+      $or: [
+        { offerType: "product", offerEligibleItems: product._id.toString() },
+        {
+          offerType: "brand",
+          offerEligibleItems: product.brand._id.toString(),
+        },
+        {
+          offerType: "category",
+          offerEligibleItems: product.category._id.toString(),
+        },
+      ],
+    }).lean();
 
-      nonVariantStock = {
-        availableQuantity: totalProductStock,
-        maxAllowedQuantity: Math.min(product.maximumQuantity || 10, totalProductStock),
-        isInStock: totalProductStock > 0,
-      };
-    }
-
-    // === FINAL RESPONSE ===
-    const response = {
+    // === Final response ===
+    res.status(200).json({
       ...product,
       variants,
-      totalAvailableQuantity: totalProductStock,
-      averageRating,
+      averageRating: Number(averageRating.toFixed(2)),
       reviewCount,
-
-      // Pricing
-      pricing: product.hasVariant ? defaultPricing : nonVariantPricing,
-      offerPrice: product.hasVariant ? defaultOfferPrice : nonVariantOfferPrice,
-
-      // Stock for non-variant
-      stock: !product.hasVariant ? nonVariantStock : undefined,
-
-      // Default variant with full data
-      defaultVariant: product.hasVariant
-        ? {
-            ...productWithDefault.defaultVariant,
-            pricing: defaultPricing,
-            stock: defaultStock,
-            offerPrice: defaultOfferPrice,
-          }
-        : null,
-    };
-
-    res.status(200).json(response);
+      offerData: activeOffer || null,
+    });
   } catch (error) {
     console.error("Error fetching product details:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: "Server error fetching product details" });
   }
 };
 
@@ -2236,357 +1810,104 @@ export const getProductSearchSuggestions = async (reg, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  getSearchSuggestions – full pricing + variants + priority search
-// ─────────────────────────────────────────────────────────────────────────────
 export const getSearchSuggestions = async (req, res) => {
   try {
     const search = (req.query.q || "").trim();
     if (!search) {
-      return res
-        .status(200)
-        .json({ enrichedProducts: [], categories: [], brands: [] });
+      return res.status(200).json({ products: [], categories: [], brands: [] });
     }
+    // Escape regex special chars
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedSearch = escapeRegex(search);
 
-    const now = new Date();
+    const startsWithRegex = new RegExp("^" + escapedSearch, "i");
+    const containsRegex = new RegExp(escapedSearch, "i");
 
-    // ---------- 1. Regex ----------
-    const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const escaped = escapeRegex(search);
-    const startsWith = new RegExp("^" + escaped, "i");
-    const contains = new RegExp(escaped, "i");
-
-    // ---------- 2. Active Offers ----------
-    const offers = await Offer.find({
-      offerStatus: "published",
-      offerRedeemTimePeriod: { $exists: true, $not: { $size: 0 } },
-      "offerRedeemTimePeriod.0": { $lte: now },
-      "offerRedeemTimePeriod.1": { $gte: now },
-    }).lean();
-
-    const applyDiscount = (price, unit, value) => {
-      if (unit === "percentage")
-        return Math.max(0, price - (price * value) / 100);
-      if (unit === "fixed") return Math.max(0, price - value);
-      return price;
-    };
-
-    // ---------- 3. Priority Search ----------
+    // Helper to run query with two regexes and prioritize starts-with
     const prioritizeMatches = async (
       Model,
       fields,
       selectFields,
       limit = 10
     ) => {
-      const startsQuery = { $or: fields.map((f) => ({ [f]: startsWith })) };
-      const containsQuery = { $or: fields.map((f) => ({ [f]: contains })) };
-
+      // Step 1: Get starts-with matches
+      const startsWithQuery = {
+        $or: fields.map((field) => ({ [field]: startsWithRegex })),
+      };
       if (Model.collection.name === "products") {
-        Object.assign(startsQuery, {
+        Object.assign(startsWithQuery, {
           productStatus: "published",
           visibility: "visible",
         });
+      } else if (Model.collection.name === "categories") {
+        Object.assign(startsWithQuery, { status: "active" });
+      } else if (Model.collection.name === "brands") {
+        Object.assign(startsWithQuery, { status: "active" });
+      }
+
+      const startsWith = await Model.find(startsWithQuery)
+        .select(selectFields)
+        .limit(limit)
+        .lean();
+
+      const startsWithIds = startsWith.map((doc) => doc._id.toString());
+
+      // Step 2: Get contains matches, excluding starts-with IDs
+      const containsQuery = {
+        _id: {
+          $nin: startsWithIds.map((id) => new mongoose.Types.ObjectId(id)),
+        },
+        $or: fields.map((field) => ({ [field]: containsRegex })),
+      };
+      if (Model.collection.name === "products") {
         Object.assign(containsQuery, {
           productStatus: "published",
           visibility: "visible",
         });
       } else if (Model.collection.name === "categories") {
-        Object.assign(startsQuery, { status: "active" });
         Object.assign(containsQuery, { status: "active" });
       } else if (Model.collection.name === "brands") {
-        Object.assign(startsQuery, { status: "active" });
         Object.assign(containsQuery, { status: "active" });
       }
 
-      const starts = await Model.find(startsQuery)
-        .select(selectFields)
-        .limit(limit)
-        .lean();
-      const startsIds = starts.map((d) => d._id.toString());
-
-      const remain = limit - starts.length;
-      const more =
-        remain > 0
-          ? await Model.find({
-              ...containsQuery,
-              _id: {
-                $nin: startsIds.map((id) => new mongoose.Types.ObjectId(id)),
-              },
-            })
+      const remainingLimit = limit - startsWith.length;
+      const contains =
+        remainingLimit > 0
+          ? await Model.find(containsQuery)
               .select(selectFields)
-              .limit(remain)
+              .limit(remainingLimit)
               .lean()
           : [];
 
-      return [...starts, ...more];
+      // Step 3: Combine: starts-with first, then contains
+      return [...startsWith, ...contains];
     };
 
-    // ---------- 4. Search Products ----------
-    const rawProducts = await prioritizeMatches(
-      Product,
-      ["productName", "SKU", "shortDescription", "productDescription"],
-      "_id productName sellingPrice mrpPrice landingSellPrice thumbnail category urlSlug SKU productImages hasVariant defaultVariant maximumQuantity brand",
-      10
-    );
-
-    // ---------- 5. Enrich with default variant ----------
-    const enrichedProducts = await enrichProductsWithDefaultVariants(
-      rawProducts
-    );
-
-    // ---------- 6. Load ALL variants (MUST include productId) ----------
-    const productIds = enrichedProducts.map((p) => p._id);
-    const allVariants = await Variant.find({ productId: { $in: productIds } })
-      .select(
-        "productId _id variantId variantAttributes SKU barcode images landingSellPrice sellingPrice mrpPrice maximumQuantity isDefault"
-      ) // productId is REQUIRED
-      .lean();
-
-    // ---------- 7. Group variants by product ----------
-    const variantMap = {};
-    allVariants.forEach((v) => {
-      const pid = v.productId?.toString(); // Safe access
-      if (!pid) return; // Skip malformed variants
-      if (!variantMap[pid]) variantMap[pid] = [];
-      variantMap[pid].push(v);
-    });
-
-    // ---------- 8. Build final products ----------
-    const finalProducts = [];
-
-    for (const product of enrichedProducts) {
-      const pid = product._id.toString();
-      const variants = variantMap[pid] || [];
-
-      // Default variant
-      let defaultVar = null;
-      if (product.hasVariant && product.defaultVariant) {
-        const defId = product.defaultVariant.toString();
-        defaultVar = variants.find((v) => v._id.toString() === defId) || null;
-      }
-
-      // Images fallback
-      const finalImages = product.productImages?.length
-        ? product.productImages
-        : defaultVar?.images || [];
-
-      // Base price source
-      const getBase = (src) => {
-        const landing = src?.landingSellPrice || 0;
-        const selling = src?.sellingPrice || 0;
-        const mrp = src?.mrpPrice || 0;
-        const maxQty = src?.maximumQuantity || 10;
-        return {
-          landing,
-          selling,
-          mrp,
-          maxQty,
-          base: landing > 0 ? landing : selling,
-        };
-      };
-
-      const defSrc = defaultVar ? getBase(defaultVar) : getBase(product);
-      const basePrice = defSrc.base;
-      const isLanding = defSrc.landing > 0;
-
-      // Apply offers
-      let discounted = basePrice;
-      const applied = [];
-      for (const o of offers) {
-        let ok = false;
-        if (o.offerType === "product") ok = o.offerEligibleItems.includes(pid);
-        else if (o.offerType === "category" && product.category)
-          ok = o.offerEligibleItems.includes(product.category.toString());
-        else if (o.offerType === "brand" && product.brand)
-          ok = o.offerEligibleItems.includes(product.brand.toString());
-
-        if (ok && basePrice >= (o.offerMinimumOrderValue || 0)) {
-          const prev = discounted;
-          discounted = applyDiscount(
-            discounted,
-            o.offerDiscountUnit,
-            o.offerDiscountValue
-          );
-          if (discounted < prev) {
-            applied.push({
-              offerName: o.offerName,
-              discountType: o.offerDiscountUnit,
-              discountValue: o.offerDiscountValue,
-            });
-          }
-        }
-      }
-
-      const finalPrice = Math.max(0, discounted);
-      const discountPercent =
-        defSrc.mrp > 0 && defSrc.landing > 0
-          ? Math.ceil(((defSrc.mrp - defSrc.landing) / defSrc.mrp) * 100)
-          : defSrc.mrp > 0 && defSrc.selling > 0
-          ? Math.ceil(((defSrc.mrp - defSrc.selling) / defSrc.mrp) * 100)
-          : 0;
-
-      // Stock
-      let available = 0;
-      if (defaultVar) {
-        const inv = await mongoose
-          .model("Inventory")
-          .findOne({ variant: defaultVar._id })
-          .lean();
-        available = inv?.quantity || 0;
-      } else {
-        const agg = await mongoose
-          .model("Inventory")
-          .aggregate([
-            { $match: { product: product._id } },
-            { $group: { _id: null, total: { $sum: "$quantity" } } },
-          ]);
-        available = agg[0]?.total || 0;
-      }
-      const maxAllowed = Math.min(defSrc.maxQty, available);
-
-      const pricing = {
-        originalPrice: basePrice,
-        discountedPrice: finalPrice,
-        totalPrice: finalPrice,
-        sellingPrice: defSrc.selling,
-        mrpPrice: defSrc.mrp,
-        landingSellPrice: defSrc.landing,
-        discountPercent,
-        isLandingPriceApplied: isLanding,
-        appliedOffers: applied,
-      };
-
-      // Process variants
-      const processedVariants = variants.map((v) => {
-        const src = getBase(v);
-        let vDisc = src.base;
-        const vApplied = [];
-
-        for (const o of offers) {
-          let ok = false;
-          if (o.offerType === "product")
-            ok = o.offerEligibleItems.includes(pid);
-          else if (o.offerType === "category" && product.category)
-            ok = o.offerEligibleItems.includes(product.category.toString());
-          else if (o.offerType === "brand" && product.brand)
-            ok = o.offerEligibleItems.includes(product.brand.toString());
-
-          if (ok && src.base >= (o.offerMinimumOrderValue || 0)) {
-            const prev = vDisc;
-            vDisc = applyDiscount(
-              vDisc,
-              o.offerDiscountUnit,
-              o.offerDiscountValue
-            );
-            if (vDisc < prev) {
-              vApplied.push({
-                offerName: o.offerName,
-                discountType: o.offerDiscountUnit,
-                discountValue: o.offerDiscountValue,
-              });
-            }
-          }
-        }
-
-        const vFinal = Math.max(0, vDisc);
-        const vPct =
-          src.mrp > 0 && src.landing > 0
-            ? Math.ceil(((src.mrp - src.landing) / src.mrp) * 100)
-            : src.mrp > 0 && src.selling > 0
-            ? Math.ceil(((src.mrp - src.selling) / src.mrp) * 100)
-            : 0;
-
-        // Variant stock
-        let vStock = 0;
-        (async () => {
-          const inv = await mongoose
-            .model("Inventory")
-            .findOne({ variant: v._id })
-            .lean();
-          vStock = inv?.quantity || 0;
-        })();
-
-        return {
-          _id: v._id,
-          variantId: v.variantId,
-          variantAttributes: v.variantAttributes,
-          SKU: v.SKU,
-          images: v.images || [],
-          pricing: {
-            originalPrice: src.base,
-            discountedPrice: vFinal,
-            totalPrice: vFinal,
-            sellingPrice: src.selling,
-            mrpPrice: src.mrp,
-            landingSellPrice: src.landing,
-            discountPercent: vPct,
-            isLandingPriceApplied: src.landing > 0,
-            appliedOffers: vApplied,
-          },
-          offerPrice: vFinal,
-          stock: {
-            availableQuantity: vStock,
-            maxAllowedQuantity: Math.min(v.maximumQuantity || 10, vStock),
-            isInStock: vStock > 0,
-          },
-          isDefault: v.isDefault,
-        };
-      });
-
-      finalProducts.push({
-        _id: product._id,
-        productName: product.productName,
-        urlSlug: product.urlSlug,
-        thumbnail: product.thumbnail || finalImages[0] || "",
-        productImages: finalImages,
-        SKU: product.SKU,
-        brand: product.brand,
-        category: product.category,
-        hasVariant: product.hasVariant,
-        variants: processedVariants,
-        defaultVariant: defaultVar
-          ? {
-              _id: defaultVar._id,
-              variantAttributes: defaultVar.variantAttributes,
-              images: defaultVar.images,
-              pricing,
-              offerPrice: finalPrice,
-              stock: {
-                availableQuantity: available,
-                maxAllowedQuantity: maxAllowed,
-                isInStock: available > 0,
-              },
-            }
-          : null,
-        pricing,
-        offerPrice: finalPrice,
-        stock: {
-          availableQuantity: available,
-          maxAllowedQuantity: maxAllowed,
-          isInStock: available > 0,
-        },
-      });
-    }
-
-    // ---------- 9. Categories & Brands ----------
-    const [categories, brands] = await Promise.all([
-      prioritizeMatches(Category, ["name"], "name description image type", 5),
+    // Run in parallel
+    const [products, categories, brands] = await Promise.all([
+      prioritizeMatches(
+        Product,
+        ["productName", "sku", "shortDescription", "productDescription"],
+        "productName sellingPrice mrpPrice thumbnail category urlSlug SKU productImages",
+        10
+      ),
+      prioritizeMatches(Category, ["name"], "name description image type", 10),
       prioritizeMatches(
         Brand,
         ["brandName"],
         "brandName tagline description imageUrl",
-        5
+        10
       ),
     ]);
 
-    res.status(200).json({
-      enrichedProducts: finalProducts,
-      categories,
-      brands,
-    });
-  } catch (err) {
-    console.error("getSearchSuggestions error:", err);
-    res.status(500).json({ message: "Server error" });
+    const enrichedProducts = await enrichProductsWithDefaultVariants(products);
+
+    res.status(200).json({ enrichedProducts, categories, brands });
+  } catch (error) {
+    console.error("Error fetching search suggestions: ", error);
+    res
+      .status(500)
+      .json({ message: "Server error while fetching search suggestions" });
   }
 };
 
@@ -2624,7 +1945,6 @@ export const getProductsByCategory = async (req, res) => {
 
   res.status(200).json(result);
 };
-
 export const getNearbyProducts = async (req, res) => {
   try {
     const { lat, lng, radius = 10 } = req.query;

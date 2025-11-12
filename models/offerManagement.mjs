@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 const { Schema, model } = mongoose;
 const offerSchema = new Schema(
   {
@@ -91,6 +91,5 @@ const offerSchema = new Schema(
   }
 );
 
-
-const Offer = model('Offer', offerSchema);
+const Offer = model("Offer", offerSchema);
 export default Offer;
