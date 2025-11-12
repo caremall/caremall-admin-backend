@@ -1718,6 +1718,8 @@ export const createInboundJob = async (req, res) => {
       allocatedLocation,
       items,
       warehouse: warehouseFromBody,
+      reasonForUpdate = "Inbound Receipt",
+      note,
     } = req.body;
 
     const warehouse =
@@ -1733,6 +1735,22 @@ export const createInboundJob = async (req, res) => {
       return res.status(400).json({ message: "Inbound items are required" });
     }
 
+    // Validate each item
+    for (const item of items) {
+      const { productId, variantId, receivedQuantity } = item;
+      if (!productId && !variantId) {
+        return res.status(400).json({
+          message: "Each item must have either productId or variantId",
+        });
+      }
+      if (receivedQuantity === undefined || receivedQuantity === null || receivedQuantity < 0) {
+        return res.status(400).json({
+          message: "receivedQuantity must be a non-negative number",
+        });
+      }
+    }
+
+    // Create Inbound Job
     const inboundJob = await Inbound.create({
       jobType,
       jobNumber,
@@ -1744,47 +1762,104 @@ export const createInboundJob = async (req, res) => {
       warehouse,
     });
 
+    const inventoryUpdates = [];
+
+    // Process each item independently
     for (const item of items) {
       const productId = item.productId || null;
       const variantId = item.variantId || null;
       const receivedQty = item.receivedQuantity || 0;
+      const itemNote = item.note || note;
+      const itemWarehouseLocation = item.warehouseLocation || null;
 
-      if (!warehouse || (!productId && !variantId)) continue;
-
-      const query = {
-        warehouse,
-        ...(productId ? { product: productId } : { variant: variantId }),
-      };
+      // Build unique query: (warehouse + product + variant) OR (warehouse + variant) if no product
+      const query = { warehouse };
+      if (productId && variantId) {
+        query.product = productId;
+        query.variant = variantId;
+      } else if (productId) {
+        query.product = productId;
+        query.variant = null; // Explicitly set to null to avoid matching variants
+      } else if (variantId) {
+        query.variant = variantId;
+        query.product = null;
+      }
 
       let inventory = await Inventory.findOne(query);
+
+      let previousQuantity = 0;
+      let newQuantity = receivedQty;
+
       if (!inventory) {
+        // Create new inventory record
         inventory = new Inventory({
           warehouse,
-          product: productId || undefined,
-          variant: variantId || undefined,
-          AvailableQuantity: item.receivedQuantity,
+          product: productId || null,
+          variant: variantId || null,
+          AvailableQuantity: receivedQty,
           minimumQuantity: 0,
           reorderQuantity: 0,
           maximumQuantity: 0,
+          warehouseLocation: itemWarehouseLocation,
         });
-      }
-      else{
-        inventory.AvailableQuantity += item.receivedQuantity;
-      }
-      inventory.updatedAt = new Date();
+        previousQuantity = 0;
+        newQuantity = receivedQty;
+      } else {
+        // Update existing
+        previousQuantity = inventory.AvailableQuantity;
+        newQuantity = inventory.AvailableQuantity + receivedQty;
+        inventory.AvailableQuantity = newQuantity;
 
+        if (itemWarehouseLocation) {
+          inventory.warehouseLocation = itemWarehouseLocation;
+        }
+      }
+
+      inventory.updatedAt = new Date();
       await inventory.save();
+
+      // Create audit log
+      await inventoryLog.create({
+        inventory: inventory._id,
+        product: productId,
+        variant: variantId,
+        warehouse,
+        previousQuantity,
+        quantityChange: receivedQty,
+        newQuantity,
+        reasonForUpdate,
+        note: itemNote || "Received via inbound job",
+        warehouseLocation: itemWarehouseLocation,
+        updatedBy: req.user._id,
+      });
+
+      inventoryUpdates.push({
+        inventory: {
+          _id: inventory._id,
+          warehouse: inventory.warehouse,
+          product: inventory.product,
+          variant: inventory.variant,
+          AvailableQuantity: inventory.AvailableQuantity,
+          warehouseLocation: inventory.warehouseLocation,
+        },
+        previousQuantity,
+        quantityChange: receivedQty,
+        newQuantity,
+      });
     }
 
     return res.status(201).json({
       message: "Inbound job created and inventory updated successfully",
       inboundJob,
+      updatedItems: inventoryUpdates.length,
+      inventoryUpdates,
     });
   } catch (error) {
     console.error("Error creating inbound job:", error);
-    return res
-      .status(500)
-      .json({ message: "Server error creating inbound job" });
+    return res.status(500).json({
+      message: "Server error creating inbound job",
+      error: error.message,
+    });
   }
 };
 
