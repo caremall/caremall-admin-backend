@@ -1,6 +1,7 @@
 import Driver from "../../models/Driver.mjs";
 import bcrypt from "bcryptjs";
 import { uploadBase64Image } from "../../utils/uploadImage.mjs";
+import Order from "../../models/Order.mjs";
 
 
 export const createDriver = async (req, res) => {
@@ -148,18 +149,41 @@ export const updateDriver = async (req, res) => {
 
 
 
-// Delete a driver by ID
+
+
 export const deleteDriver = async (req, res) => {
   try {
-    const deleted = await Driver.findByIdAndDelete(req.params.id);
+    const { id } = req.params;
 
-    if (!deleted) return res.status(404).json({ message: "Driver not found" });
+ 
+    const driver = await Driver.findById(id);
+    if (!driver) {
+      return res.status(404).json({ success: false, message: "Driver not found" });
+    }
 
-    res
-      .status(200)
-      .json({ success: true, message: "Driver deleted successfully" });
+   
+    const driverAssigned = await Order.findOne({ "dispatches.driver": id });
+
+    if (driverAssigned) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete driver. This driver is assigned to one or more orders.",
+      });
+    }
+
+   
+    await Driver.findByIdAndDelete(id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Driver deleted successfully",
+    });
+
   } catch (err) {
     console.error("Delete Driver Error:", err);
-    res.status(500).json({ message: "Failed to delete driver" });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete driver. Please try again later.",
+    });
   }
 };
