@@ -1482,17 +1482,25 @@ export const getFilteredProductsUpdated = async (req, res) => {
 
 export const getMostWantedProducts = async (req, res) => {
   try {
+   
     const products = await Product.find({
       productStatus: "published",
       visibility: "visible",
-    }).lean();
+    })
+    .populate('inventories')
+    .populate('brand') 
+    .populate('category')
+    .lean();
 
-    // Enrich products with default variant data
+    console.log("done", products);
+
+    
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
-    // Aggregate review stats for all products in one go
+    
     const productIds = enrichedProducts.map((p) => p._id);
 
+   
     const reviewStats = await Review.aggregate([
       { $match: { productId: { $in: productIds } } },
       {
@@ -1504,7 +1512,7 @@ export const getMostWantedProducts = async (req, res) => {
       },
     ]);
 
-    // Create a map for quick lookup of review stats by product ID
+    // Create map for review stats
     const reviewStatsMap = new Map();
     reviewStats.forEach((stat) => {
       reviewStatsMap.set(stat._id.toString(), {
@@ -1513,12 +1521,18 @@ export const getMostWantedProducts = async (req, res) => {
       });
     });
 
-    // Map review stats and calculate mostWantedScore per product
+    // Map all data and calculate mostWantedScore per product
     const scoredProducts = enrichedProducts.map((product) => {
       const review = reviewStatsMap.get(product._id.toString()) || {
         averageRating: 0,
         reviewCount: 0,
       };
+
+      // Calculate inventory from populated data
+      const totalAvailableQuantity = product.inventories ? 
+        product.inventories.reduce((sum, inv) => sum + inv.AvailableQuantity, 0) : 0;
+      
+      const inStock = totalAvailableQuantity > 0;
 
       const orderCount = product.orderCount || 0;
       const addedToCartCount = product.addedToCartCount || 0;
@@ -1535,6 +1549,11 @@ export const getMostWantedProducts = async (req, res) => {
         ...product,
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
+        inventory: {
+          totalAvailableQuantity,
+          inStock,
+          
+        },
         mostWantedScore: score,
       };
     });
@@ -1555,12 +1574,17 @@ export const getMostWantedProducts = async (req, res) => {
 
 export const getNewArrivalProducts = async (req, res) => {
   try {
+    
     const products = await Product.find({
       productStatus: "published",
       visibility: "visible",
     })
-      .sort({ createdAt: -1 })
-      .lean();
+    .populate('inventories') 
+    .populate('brand') 
+    .populate('category') 
+    .sort({ createdAt: -1 })
+    .lean();
+
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
     const productIds = enrichedProducts.map((p) => p._id);
@@ -1584,24 +1608,34 @@ export const getNewArrivalProducts = async (req, res) => {
       });
     });
 
-    const productsWithReviews = enrichedProducts.map((product) => {
+    
+    const productsWithReviewsAndInventory = enrichedProducts.map((product) => {
       const review = reviewStatsMap.get(product._id.toString()) || {
         averageRating: 0,
         reviewCount: 0,
       };
+
+      // Calculate inventory from populated data
+      const totalAvailableQuantity = product.inventories ? 
+        product.inventories.reduce((sum, inv) => sum + inv.AvailableQuantity, 0) : 0;
+      
+      const inStock = totalAvailableQuantity > 0;
+
       return {
         ...product,
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
+        inventory: { 
+          totalAvailableQuantity,
+          inStock,
+        },
       };
     });
 
-    res.status(200).json(productsWithReviews);
+    res.status(200).json(productsWithReviewsAndInventory);
   } catch (error) {
     console.error("Error fetching new arrivals:", error);
-    res
-      .status(500)
-      .json({ message: "Server error fetching new arrival products" });
+    res.status(500).json({ message: "Server error fetching new arrival products" });
   }
 };
 
@@ -1617,7 +1651,7 @@ export const getBestSellingProducts = async (req, res) => {
       bestSellers
     );
 
-    // Aggregate review stats for all products
+   
     const productIds = enrichedProducts.map((p) => p._id);
 
     const reviewStats = await Review.aggregate([
