@@ -7,7 +7,7 @@ import Variant from '../../models/Variant.mjs';
 import Coupon from '../../models/coupon.mjs';
 import { enrichProductsWithDefaultVariants } from '../../utils/enrichedProducts.mjs';
 
-// Get active published offers with a valid duration
+
 export const getPublishedOffersWithDuration = async (req, res) => {
   try {
     const currentDate = new Date();
@@ -37,29 +37,62 @@ export const getPublishedOffersWithDuration = async (req, res) => {
 export const applyCouponCode = async (req, res) => {
   const { couponCode, totalPrice } = req.body;
 
-  if (!couponCode)
-    return res.status(400).json({ message: "Coupon code is required" });
+  if (!couponCode) {
+    return res.status(400).json({ 
+      success: false,
+      message: "Coupon code is required",
+      data: {
+        error: "VALIDATION_ERROR",
+        details: "couponCode field is missing"
+      }
+    });
+  }
 
-  if (!totalPrice || totalPrice <= 0)
-    return res.status(400).json({ message: "Valid total price is required" });
+  if (!totalPrice || totalPrice <= 0) {
+    return res.status(400).json({ 
+      success: false,
+      message: "Valid total price is required",
+      data: {
+        error: "VALIDATION_ERROR",
+        details: "totalPrice must be a positive number"
+      }
+    });
+  }
 
   try {
-   
     const coupon = await Coupon.findOne({
       code: { $regex: new RegExp(`^${couponCode.trim()}$`, 'i') },
       active: true
     });
 
-    if (!coupon)
-      return res.status(404).json({ message: "Invalid or inactive coupon" });
-
+    if (!coupon) {
+      return res.status(404).json({
+        success: false,
+        message: "Invalid or inactive coupon",
+        data: {
+        
+        }
+      });
+    }
 
     if (coupon.expiryDate && new Date() > coupon.expiryDate) {
-      return res.status(400).json({ message: "Coupon has expired" });
+      return res.status(400).json({
+        success: false,
+        message: "Coupon has expired",
+        data: {
+         
+        }
+      });
     }
 
     if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
-      return res.status(400).json({ message: "Coupon usage limit reached" });
+      return res.status(400).json({
+        success: false,
+        message: "Coupon usage limit reached",
+        data: {
+         
+        }
+      });
     }
 
     const numericTotalPrice = Number(totalPrice);
@@ -72,7 +105,13 @@ export const applyCouponCode = async (req, res) => {
       const discountPercentage = Number(coupon.discountValue);
       
       if (isNaN(discountPercentage)) {
-        return res.status(400).json({ message: "Invalid discount percentage" });
+        return res.status(400).json({
+          success: false,
+          message: "Invalid discount percentage",
+          data: {
+           
+          }
+        });
       }
       
       discountAmount = (discountPercentage / 100) * numericTotalPrice;
@@ -84,7 +123,6 @@ export const applyCouponCode = async (req, res) => {
         calculation: `(${discountPercentage} / 100) * ${numericTotalPrice} = ${discountAmount}`
       });
 
-      // Apply maximum discount cap if specified (your existing ₹500 cap)w
       if (coupon.maxDiscountAmount) {
         const maxDiscount = Number(coupon.maxDiscountAmount);
         discountAmount = Math.min(discountAmount, maxDiscount);
@@ -92,7 +130,6 @@ export const applyCouponCode = async (req, res) => {
       }
     }
 
-    // Ensure discount doesn't exceed total price
     discountAmount = Math.min(discountAmount, numericTotalPrice);
     discountAmount = Math.round(discountAmount * 100) / 100;
 
@@ -104,27 +141,30 @@ export const applyCouponCode = async (req, res) => {
       finalPrice: finalPrice
     });
 
-    
-    await Coupon.updateOne(
-      { _id: coupon._id },
-      { $inc: { usageCount: 1 } }
-    );
-
     return res.status(200).json({
       success: true,
-      discountAmount,
-      finalPrice,
       message: "Coupon applied successfully!",
-      couponId: coupon._id,
-      code: coupon.code,
-      discountType: coupon.discountType,
-      discountValue: coupon.discountValue, 
-      maxDiscountAmount: coupon.maxDiscountAmount, 
-      originalPrice: totalPrice 
+      data: {
+        discountAmount,
+        finalPrice,
+        couponId: coupon._id,
+        code: coupon.code,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue, 
+        maxDiscountAmount: coupon.maxDiscountAmount, 
+        originalPrice: totalPrice 
+      }
     });
   } catch (error) {
     console.error("Apply Coupon Error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      data: {
+        error: "INTERNAL_SERVER_ERROR",
+        details: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
+      }
+    });
   }
 };
 
@@ -206,7 +246,7 @@ export const getOfferByID = async (req, res) => {
       }
     }
 
-    // 🧹 Remove any null/undefined items
+    // Remove any null/undefined items
     populatedItems = populatedItems.filter(Boolean);
 
     res.status(200).json({
