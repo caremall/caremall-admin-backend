@@ -4,9 +4,10 @@ import Product from '../../models/Product.mjs';
 import Brand from '../../models/Brand.mjs';
 import Category from '../../models/Category.mjs';
 import Variant from '../../models/Variant.mjs';
+import Coupon from '../../models/coupon.mjs';
 import { enrichProductsWithDefaultVariants } from '../../utils/enrichedProducts.mjs';
 
-// Get active published offers with a valid duration
+
 export const getPublishedOffersWithDuration = async (req, res) => {
   try {
     const currentDate = new Date();
@@ -36,66 +37,136 @@ export const getPublishedOffersWithDuration = async (req, res) => {
 export const applyCouponCode = async (req, res) => {
   const { couponCode, totalPrice } = req.body;
 
-  if (!couponCode)
-    return res.status(400).json({ message: "Coupon code is required" });
+  if (!couponCode) {
+    return res.status(400).json({ 
+      success: false,
+      message: "Coupon code is required",
+      data: {
+        error: "VALIDATION_ERROR",
+        details: "couponCode field is missing"
+      }
+    });
+  }
 
-  if (!totalPrice || totalPrice <= 0)
-    return res.status(400).json({ message: "Valid total price is required" });
+  if (!totalPrice || totalPrice <= 0) {
+    return res.status(400).json({ 
+      success: false,
+      message: "Valid total price is required",
+      data: {
+        error: "VALIDATION_ERROR",
+        details: "totalPrice must be a positive number"
+      }
+    });
+  }
 
   try {
-    const offer = await Offer.findOne({
-      code: couponCode.trim(),
-      offerStatus: "published", // Only allow published offers
+    const coupon = await Coupon.findOne({
+      code: { $regex: new RegExp(`^${couponCode.trim()}$`, 'i') },
+      active: true
     });
 
-    if (!offer)
-      return res.status(404).json({ message: "Invalid or inactive coupon" });
-
-    // Check usage limits
-    // if (offer.usageLimit !== null && offer.usageCount >= offer.usageLimit)
-    //   return res.status(400).json({ message: "Coupon usage limit reached" });
-
-    // Check if current date is within redeem period (optional)
-    if (
-      offer.offerRedeemTimePeriod &&
-      offer.offerRedeemTimePeriod.length === 2 &&
-      (new Date() < offer.offerRedeemTimePeriod[0] ||
-        new Date() > offer.offerRedeemTimePeriod[1])
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Coupon not redeemable at this time" });
+    if (!coupon) {
+      return res.status(404).json({
+        success: false,
+        message: "Invalid or inactive coupon",
+        data: {
+        
+        }
+      });
     }
 
-    let discountAmount = 0;
+    if (coupon.expiryDate && new Date() > coupon.expiryDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Coupon has expired",
+        data: {
+         
+        }
+      });
+    }
 
-    if (offer.offerDiscountUnit === "fixed") {
-      discountAmount = offer.offerDiscountValue;
-    } else if (offer.offerDiscountUnit === "percentage") {
-      discountAmount = (offer.offerDiscountValue / 100) * totalPrice;
-      if (
-        offer.maxDiscountAmount !== undefined &&
-        offer.maxDiscountAmount !== null
-      ) {
-        discountAmount = Math.min(discountAmount, offer.maxDiscountAmount);
+    if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
+      return res.status(400).json({
+        success: false,
+        message: "Coupon usage limit reached",
+        data: {
+         
+        }
+      });
+    }
+
+    const numericTotalPrice = Number(totalPrice);
+    
+    let discountAmount = 0;
+    
+    if (coupon.discountType === "fixed") {
+      discountAmount = Number(coupon.discountValue);
+    } else if (coupon.discountType === "percentage") {
+      const discountPercentage = Number(coupon.discountValue);
+      
+      if (isNaN(discountPercentage)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid discount percentage",
+          data: {
+           
+          }
+        });
+      }
+      
+      discountAmount = (discountPercentage / 100) * numericTotalPrice;
+      
+      console.log("Percentage calculation:", {
+        discountPercentage: discountPercentage,
+        totalPrice: numericTotalPrice,
+        calculatedDiscount: discountAmount,
+        calculation: `(${discountPercentage} / 100) * ${numericTotalPrice} = ${discountAmount}`
+      });
+
+      if (coupon.maxDiscountAmount) {
+        const maxDiscount = Number(coupon.maxDiscountAmount);
+        discountAmount = Math.min(discountAmount, maxDiscount);
+        console.log("After max cap:", discountAmount);
       }
     }
 
-    discountAmount = Math.min(discountAmount, totalPrice);
+    discountAmount = Math.min(discountAmount, numericTotalPrice);
+    discountAmount = Math.round(discountAmount * 100) / 100;
 
-    res.status(200).json({
+    const finalPrice = numericTotalPrice - discountAmount;
+
+    console.log("Final calculation:", {
+      originalPrice: numericTotalPrice,
+      discountAmount: discountAmount,
+      finalPrice: finalPrice
+    });
+
+    return res.status(200).json({
       success: true,
-      discountAmount,
-      finalPrice: totalPrice - discountAmount,
-      message: "Coupon applied successfully.",
-      offerId: offer._id, // optional: include offer ID for further processing
+      message: "Coupon applied successfully!",
+      data: {
+        discountAmount,
+        finalPrice,
+        couponId: coupon._id,
+        code: coupon.code,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue, 
+        maxDiscountAmount: coupon.maxDiscountAmount, 
+        originalPrice: totalPrice 
+      }
     });
   } catch (error) {
     console.error("Apply Coupon Error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      data: {
+        error: "INTERNAL_SERVER_ERROR",
+        details: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
+      }
+    });
   }
 };
-
 
 export const getOfferByID = async (req, res) => {
   try {
@@ -117,7 +188,7 @@ export const getOfferByID = async (req, res) => {
 
     let populatedItems = [];
 
-    // ✅ Populate eligible items based on offer type
+    
     if (offer.offerEligibleItems?.length) {
       switch (offer.offerType) {
         case "product":
@@ -142,7 +213,7 @@ export const getOfferByID = async (req, res) => {
               )
               .lean();
 
-            // 🟩 Merge default variant data (like getMostWantedProducts)
+            
             populatedItems = await enrichProductsWithDefaultVariants(products);
           }
           break;
@@ -175,7 +246,7 @@ export const getOfferByID = async (req, res) => {
       }
     }
 
-    // 🧹 Remove any null/undefined items
+    // Remove any null/undefined items
     populatedItems = populatedItems.filter(Boolean);
 
     res.status(200).json({

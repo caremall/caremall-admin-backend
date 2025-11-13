@@ -61,7 +61,7 @@ const productSchema = new Schema(
     productType: {
       type: Schema.Types.ObjectId,
       ref: "ProductType",
-      required: function () {
+      required: function () {                                                                                 
         return this.hasVariant === true;
       },
     },
@@ -169,11 +169,22 @@ const productSchema = new Schema(
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
+productSchema.virtual("inventories", {  
+  ref: "Inventory",
+  localField: "_id",
+  foreignField: "product",
+
+});
 
 
+productSchema.virtual('totalInventory').get(function() {
+  if (this.inventories && this.inventories.length > 0) {
+    return this.inventories.reduce((total, inv) => total + inv.AvailableQuantity, 0);
+  }
+  return 0;
+});
 
 
-// In your Product schema file
 productSchema.virtual("variants", {
   ref: "Variant",
   localField: "_id",
@@ -181,17 +192,19 @@ productSchema.virtual("variants", {
 });
 
 productSchema.virtual("reviews", {
-  ref: "Review", 
-  localField: "_id", // Product _id matches...
-  foreignField: "productId", // ...Review.productId field
+
+  ref: "Review",
+  localField: "_id",
+  foreignField: "productId",
 });
 
-productSchema.virtual("inventory", {
-  ref: "Inventory",
-  localField: "_id",
-  foreignField: "product",
-  justOne: true,
-});
+// productSchema.virtual("inventory", {
+//   ref: "Inventory",
+//   localField: "_id",
+//   foreignField: "product",
+//   justOne: true,
+// });
+
 
 productSchema.pre("validate", function () {
   if (!this.productId) {
