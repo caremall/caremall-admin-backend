@@ -12,6 +12,8 @@ import {
   updateOrderStatus,
   // updatePackingDetails,
   updatePickedQuantities,
+  getOutOfStockOrders,
+  getOutOfStockOrderById,
 } from "../../controllers/warehouse/orders.controller.mjs";
 
 const router = Router();
@@ -20,10 +22,15 @@ const router = Router();
 
 router.post("/:id/pick", updatePickedQuantities)
 // router.put("/:orderId/pack/:packingId",updatePackingDetails)
+
 router.post("/:id/pack", addPackingDetails)
 router.post("/:id/dispatch", markOrderDispatched)
 router.patch("/:id/cancel", markOrderCancelled)
 router.put("/:id/assign-deliveryboy", assignOrderToDeliveryBoy);
+
+router.get("/outstock",getOutOfStockOrders)
+
+router.get("/outstock/:id", getOutOfStockOrderById);
 
 router.get("/allocated",getAllocatedOrders)
 // GET all orders with filter, search, pagination

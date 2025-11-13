@@ -481,15 +481,16 @@ export const updatePickedQuantities = async (req,res) => {
                 product: item.product._id,
                 variant: item.variant?._id || null,
                 requiredQuantity: item.quantity,
+                reason: null,
                 pickedQuantity: 0,
                 pickStatus: "pending",
                 pickerStatus: "un-assigned",
-                pickerName: null,
+                pickerName: null, // This should be ObjectId
             }))
             order.markModified("pickings")
         }
 
-        for (const { productId, variantId, pickedQuantity, pickerName } of pickedItems) {
+        for (const { productId, variantId, pickedQuantity, pickerId, reason } of pickedItems) {
             // Validate IDs
             if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
                 return res.status(400).json({ message: `Invalid productId: ${productId}` })
@@ -499,12 +500,12 @@ export const updatePickedQuantities = async (req,res) => {
                 return res.status(400).json({ message: `Invalid variantId: ${variantId}` })
             }
 
-            if (typeof pickedQuantity !== "number" || !Number.isInteger(pickedQuantity) || pickedQuantity < 0) {
-                return res.status(400).json({ message: "pickedQuantity must be a non-negative integer" })
+            if (!pickerId || !mongoose.Types.ObjectId.isValid(pickerId)) {
+                return res.status(400).json({ message: `Invalid pickerId: ${pickerId}` })
             }
 
-            if (!pickerName || typeof pickerName !== "string" || pickerName.trim() === "") {
-                return res.status(400).json({ message: "pickerName is required and must be non-empty" })
+            if (typeof pickedQuantity !== "number" || !Number.isInteger(pickedQuantity) || pickedQuantity < 0) {
+                return res.status(400).json({ message: "pickedQuantity must be a non-negative integer" })
             }
 
             // Find pick item: variant first, then product
@@ -522,9 +523,17 @@ export const updatePickedQuantities = async (req,res) => {
 
             // Update
             pickItem.pickedQuantity = pickedQuantity
-            pickItem.pickerName = pickerName.trim()
+            pickItem.pickerName = pickerId // Store ObjectId
             pickItem.pickerStatus = "assigned"
 
+            // Set reason only for outofstock or lowstock status
+            if (reason && (reason === "outofstock" || reason === "lowstock")) {
+                pickItem.reason = reason;
+            } else {
+                pickItem.reason = null;
+            }
+
+            // Update pick status
             if (pickedQuantity === 0) {
                 pickItem.pickStatus = "pending"
             } else if (pickedQuantity < pickItem.requiredQuantity) {
@@ -542,16 +551,24 @@ export const updatePickedQuantities = async (req,res) => {
 
         await order.save()
 
+        // Populate pickerName before sending response
+        const populatedOrder = await Order.findById(orderId)
+            .populate("items.product items.variant")
+            .populate("pickings.pickerName", "name email") // Populate picker details
+
         return res.status(200).json({
             success: true,
             message: "Picking updated successfully",
-            data: order,
+            data: populatedOrder,
         })
     } catch (error) {
         console.error("Update Picked Quantities Error:", error)
         return res.status(500).json({ message: "Internal server error", error: error.message })
     }
 }
+
+
+
 
 // export const updatePackingDetails = async (req, res) => {
 //   try {
@@ -764,5 +781,192 @@ export const assignOrderToDeliveryBoy = async (req, res) => {
   } catch (error) {
     console.error("Assign Order to Delivery Boy Error:", error);
     res.status(500).json({ message: "Failed to assign order to delivery boy" });
+  }
+};
+
+
+
+
+
+export const getOutOfStockOrders = async (req, res) => {
+  try {
+    const assignedWarehouses = req.user.assignedWarehouses;
+
+    // Validate warehouse assignment
+    if (!assignedWarehouses || !Array.isArray(assignedWarehouses) || assignedWarehouses.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No warehouse assigned to user",
+      });
+    }
+
+    // Convert warehouse ID to ObjectId
+    const fromWarehouse = new mongoose.Types.ObjectId(assignedWarehouses[0]._id);
+    const validReasons = ["lowstock", "outofstock"];
+
+    console.log("Querying orders for warehouse:", fromWarehouse);
+
+    // Query orders with out-of-stock pickings
+    const orders = await Order.find({
+      allocatedWarehouse: fromWarehouse,
+      "pickings.reason": { $in: validReasons },
+    })
+      .select("orderId shippingAddress.fullName pickings _id")
+      .populate({
+        path: "pickings.product",
+        select: "productName",
+      })
+      .populate({
+        path: "pickings.variant",
+        select: "SKU",
+      })
+      .lean();
+
+    console.log("Found orders:", orders.length);
+
+    // Format response
+    const result = orders.map((order) => {
+      const outOfStockItems = order.pickings
+        .filter((item) => item.reason && validReasons.includes(item.reason))
+        .map((item) => ({
+          productName: item.product?.productName || "Unknown Product",
+          variantSKU: item.variant?.SKU || "N/A",
+          requiredQuantity: item.requiredQuantity,
+          pickedQuantity: item.pickedQuantity,
+          reason: item.reason,
+        }));
+
+      return {
+        _id: order._id, // Include the MongoDB _id
+        orderId: order.orderId,
+        customerName: order.shippingAddress?.fullName || "N/A",
+        outOfStockItems,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+      count: result.length,
+    });
+  } catch (error) {
+    console.error("Error in getOutOfStockOrders:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+
+
+export const getOutOfStockOrderById = async (req, res) => {
+  try {
+    const { id } = req.params; // This is the MongoDB _id
+    const assignedWarehouses = req.user.assignedWarehouses;
+
+    console.log("Searching for order with _id:", id);
+
+    // Validate warehouse assignment
+    if (!assignedWarehouses || !Array.isArray(assignedWarehouses) || assignedWarehouses.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No warehouse assigned to user",
+      });
+    }
+
+    // Convert warehouse ID to ObjectId - CORRECTED
+    const fromWarehouse = new mongoose.Types.ObjectId(assignedWarehouses[0]._id);
+    const validReasons = ["lowstock", "outofstock"];
+
+    console.log("Warehouse ID:", fromWarehouse.toString());
+
+    // Search by MongoDB _id - CORRECTED
+    const order = await Order.findOne({
+      _id: new mongoose.Types.ObjectId(id), // CORRECTED: _id not id
+      allocatedWarehouse: fromWarehouse, // CORRECTED: allocatedWarehouse not allocateWarehouse
+      "pickings.reason": { $in: validReasons },
+    })
+      .select("orderId shippingAddress.fullName pickings _id") // CORRECTED: proper spacing
+      .populate({
+        path: "pickings.product",
+        select: "productName",
+      })
+      .populate({
+        path: "pickings.variant",
+        select: "SKU", // CORRECTED: "SKU" not "gen"
+      })
+      .lean();
+
+    console.log("Found order:", order ? order.orderId : "No order found");
+
+    if (!order) {
+      // Let's debug why the order is not found
+      const orderWithoutFilters = await Order.findOne({
+        _id: new mongoose.Types.ObjectId(id)
+      }).select("orderId allocatedWarehouse pickings.reason").lean();
+
+      console.log("Order without filters:", orderWithoutFilters);
+
+      if (!orderWithoutFilters) {
+        return res.status(404).json({
+          success: false,
+          message: "Order ID not found in database",
+        });
+      }
+
+      // Check if order has out-of-stock items
+      const hasOutOfStockItems = orderWithoutFilters.pickings && 
+        orderWithoutFilters.pickings.some(item => validReasons.includes(item.reason));
+
+      // Check warehouse match
+      const warehouseMatch = orderWithoutFilters.allocatedWarehouse && 
+        orderWithoutFilters.allocatedWarehouse.toString() === fromWarehouse.toString();
+
+      return res.status(404).json({
+        success: false,
+        message: "Order found but doesn't match criteria",
+        debug: {
+          orderId: orderWithoutFilters.orderId,
+          hasOutOfStockItems: hasOutOfStockItems,
+          warehouseMatch: warehouseMatch,
+          orderWarehouse: orderWithoutFilters.allocatedWarehouse ? orderWithoutFilters.allocatedWarehouse.toString() : "null",
+          userWarehouse: fromWarehouse.toString()
+        }
+      });
+    }
+
+    // Format response
+    const outOfStockItems = order.pickings
+      .filter((item) => item.reason && validReasons.includes(item.reason))
+      .map((item) => ({
+        productName: item.product?.productName || "Unknown Product",
+        variantSKU: item.variant?.SKU || "N/A",
+        requiredQuantity: item.requiredQuantity,
+        pickedQuantity: item.pickedQuantity,
+        reason: item.reason,
+      }));
+
+    console.log("Out of stock items:", outOfStockItems.length);
+
+    const result = {
+      _id: order._id,
+      orderId: order.orderId,
+      customerName: order.shippingAddress?.fullName || "N/A",
+      outOfStockItems,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error in getOutOfStockOrderById:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
   }
 };

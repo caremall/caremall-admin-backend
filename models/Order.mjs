@@ -13,7 +13,11 @@ const pickItemSchema = new Schema({
     ref: "Variant",
     default: null,
   },
-  pickerName: { type: String, required: true },
+  pickerName: {
+    type: Schema.Types.ObjectId,
+    ref: "WarehouseUser",
+    default: null,
+  },
   requiredQuantity: {
     type: Number,
     required: true,
@@ -29,6 +33,10 @@ const pickItemSchema = new Schema({
     type: String,
     enum: ["pending", "partial", "picked"],
     default: "pending",
+  },
+  reason: {
+   type: String,
+    enum: ["lowstock", "outofstock"],
   },
   pickerStatus: {
     type: String,
@@ -50,6 +58,7 @@ const packSchema = new Schema({
     enum: ["pending", "packed"],
     default: "pending",
   },
+  
   packingDate: { type: Date, default: Date.now },
   packingTime: { type: String }, // add this field explicitly
 });

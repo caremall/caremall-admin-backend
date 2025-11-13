@@ -22,7 +22,9 @@ import {
   updateInventory,
   updateTransferRequestStatus,
   getTransactionByID,
-  confirmTransferRequest
+  confirmTransferRequest,
+  updateInboundJob,
+  deleteInboundById
 } from "../../controllers/warehouse/inventory.controller.mjs";
 
 const inventoryRouter = Router();
@@ -30,6 +32,10 @@ const inventoryRouter = Router();
 inventoryRouter.post("/inbound",createInboundJob)
 inventoryRouter.get("/inbound",getInboundJobs)
 inventoryRouter.get("/inbound/:id",getInboundJobById )
+inventoryRouter.put("/inbound/:id",updateInboundJob )
+inventoryRouter.delete("/inbound/:id",deleteInboundById )
+
+
 
 //transfer
 inventoryRouter.post("/transfer/create",createTransferRequest)

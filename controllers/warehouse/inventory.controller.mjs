@@ -8,6 +8,12 @@ import Product from "../../models/Product.mjs";
 import mongoose from "mongoose";
 
 
+
+
+
+
+
+
 export const getTransactionByID = async (req, res) => {
   const assignedWarehouses = req.user.assignedWarehouses;
   console.log("Get Transaction by ID - User:", req.user);
@@ -2095,3 +2101,257 @@ export const confirmTransferRequest = async (req, res) => {
   }
 };
 
+
+
+export const updateInboundJob = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params;
+    const {
+      jobType,
+      jobNumber,
+      status,
+      date,
+      supplier,
+      allocatedLocation,
+      items: updatedItems,
+      warehouse: warehouseFromBody,
+      reasonForUpdate = "Inbound Update",
+      note,
+    } = req.body;
+
+    // Fetch existing inbound
+    const existingInbound = await Inbound.findById(id)
+      .populate("items.productId")
+      .populate("items.variantId")
+      .session(session);
+
+    if (!existingInbound) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Inbound job not found" });
+    }
+
+    // Block edits if already completed
+    if (existingInbound.status === "Completed") {
+      await session.abortTransaction();
+      return res.status(403).json({
+        message: "Cannot edit a completed inbound job",
+      });
+    }
+
+    // Validate status transition
+    const validTransitions = {
+      Opened: ["In Progress", "Completed"],
+      "In Progress": ["Completed"],
+      Completed: [],
+    };
+
+    if (
+      status &&
+      status !== existingInbound.status &&
+      !validTransitions[existingInbound.status]?.includes(status)
+    ) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        message: `Invalid status transition from ${existingInbound.status} to ${status}`,
+      });
+    }
+
+    // Determine warehouse
+    const warehouse =
+      Array.isArray(req.user?.assignedWarehouses)
+        ? req.user.assignedWarehouses[0]?._id
+        : req.user?.assignedWarehouses?._id || warehouseFromBody || existingInbound.warehouse;
+
+    if (!warehouse) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: "Warehouse ID is required" });
+    }
+
+    // Validate items
+    if (!updatedItems || !Array.isArray(updatedItems) || updatedItems.length === 0) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: "Inbound items are required" });
+    }
+
+    for (const item of updatedItems) {
+      const { productId, variantId, receivedQuantity } = item;
+      if (!productId && !variantId) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          message: "Each item must have either productId or variantId",
+        });
+      }
+      if (receivedQuantity === undefined || receivedQuantity === null || receivedQuantity < 0) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          message: "receivedQuantity must be a non-negative number",
+        });
+      }
+    }
+
+    const inventoryUpdates = [];
+    const oldItemsMap = new Map(
+      existingInbound.items.map((item) => [item._id.toString(), item])
+    );
+
+    // Process each updated item
+    for (const updatedItem of updatedItems) {
+      const oldItem = oldItemsMap.get(updatedItem._id?.toString());
+      const productId = updatedItem.productId || null;
+      const variantId = updatedItem.variantId || null;
+      const newReceivedQty = updatedItem.receivedQuantity || 0;
+      const oldReceivedQty = oldItem ? oldItem.receivedQuantity || 0 : 0;
+      const quantityChange = newReceivedQty - oldReceivedQty;
+
+      const itemNote = updatedItem.note || note;
+      const itemWarehouseLocation = updatedItem.warehouseLocation || null;
+
+      // Build query
+      const query = { warehouse };
+      if (productId && variantId) {
+        query.product = productId;
+        query.variant = variantId;
+      } else if (productId) {
+        query.product = productId;
+        query.variant = null;
+      } else if (variantId) {
+        query.variant = variantId;
+        query.product = null;
+      }
+
+      let inventory = await Inventory.findOne(query).session(session);
+
+      let previousQuantity = 0;
+      let newQuantity = 0;
+
+      if (!inventory) {
+        if (quantityChange < 0) {
+          await session.abortTransaction();
+          return res.status(400).json({
+            message: `Cannot reduce quantity below zero for new inventory record`,
+          });
+        }
+        inventory = new Inventory({
+          warehouse,
+          product: productId,
+          variant: variantId,
+          AvailableQuantity: newReceivedQty,
+          minimumQuantity: 0,
+          reorderQuantity: 0,
+          maximumQuantity: 0,
+          warehouseLocation: itemWarehouseLocation,
+        });
+        previousQuantity = 0;
+        newQuantity = newReceivedQty;
+      } else {
+        previousQuantity = inventory.AvailableQuantity;
+        newQuantity = previousQuantity + quantityChange;
+
+        if (newQuantity < 0) {
+          await session.abortTransaction();
+          return res.status(400).json({
+            message: `Insufficient inventory: cannot reduce below zero`,
+          });
+        }
+
+        inventory.AvailableQuantity = newQuantity;
+        if (itemWarehouseLocation) {
+          inventory.warehouseLocation = itemWarehouseLocation;
+        }
+      }
+
+      inventory.updatedAt = new Date();
+      await inventory.save({ session });
+
+      // Only log if quantity changed
+      if (quantityChange !== 0) {
+        await inventoryLog.create(
+          [{
+            inventory: inventory._id,
+            product: productId,
+            variant: variantId,
+            warehouse,
+            previousQuantity,
+            quantityChange,
+            newQuantity,
+            reasonForUpdate,
+            note: itemNote || `Inbound job updated`,
+            warehouseLocation: itemWarehouseLocation,
+            updatedBy: req.user._id,
+          }],
+          { session }
+        );
+      }
+
+      inventoryUpdates.push({
+        inventory: {
+          _id: inventory._id,
+          warehouse: inventory.warehouse,
+          product: inventory.product,
+          variant: inventory.variant,
+          AvailableQuantity: inventory.AvailableQuantity,
+          warehouseLocation: inventory.warehouseLocation,
+        },
+        previousQuantity,
+        quantityChange,
+        newQuantity,
+      });
+    }
+
+    // Update inbound job
+    existingInbound.jobType = jobType ?? existingInbound.jobType;
+    existingInbound.jobNumber = jobNumber ?? existingInbound.jobNumber;
+    existingInbound.status = status ?? existingInbound.status;
+    existingInbound.date = date ? new Date(date) : existingInbound.date;
+    existingInbound.supplier = supplier ?? existingInbound.supplier;
+    existingInbound.allocatedLocation = allocatedLocation ?? existingInbound.allocatedLocation;
+    existingInbound.warehouse = warehouse;
+    existingInbound.items = updatedItems.map((item) => ({
+      ...item,
+      productId: item.productId || null,
+      variantId: item.variantId || null,
+      expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
+      receiveDate: item.receiveDate ? new Date(item.receiveDate) : undefined,
+    }));
+
+    await existingInbound.save({ session });
+
+    await session.commitTransaction();
+
+    return res.status(200).json({
+      message: "Inbound job updated successfully",
+      inboundJob: existingInbound,
+      updatedItems: inventoryUpdates.length,
+      inventoryUpdates,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Error updating inbound job:", error);
+    return res.status(500).json({
+      message: "Server error updating inbound job",
+      error: error.message,
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+export const deleteInboundById = async (id) => {
+ 
+  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+    throw new Error('Valid Inbound Job ID is required');
+  }
+
+
+  const deletedJob = await Inbound.findByIdAndDelete(id);
+
+  if (!deletedJob) {
+    throw new Error('Inbound Job not found');
+  }
+
+
+  return deletedJob;
+};

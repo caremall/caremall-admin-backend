@@ -30,7 +30,7 @@ const inboundItemSchema = new Schema({
   },
   variantId: {
     type: Schema.Types.ObjectId,
-    ref: "Product",
+    ref: "Variant",
     required: false
   }
 });
