@@ -13,9 +13,9 @@ const productSchema = new Schema(
     productDescription: { type: String, required: true },
     brand: { type: Schema.Types.ObjectId, ref: "Brand", required: true },
     category: { type: Schema.Types.ObjectId, ref: "Category", required: true },
-    subcategory: { 
-      type: Schema.Types.ObjectId, 
-      ref: "Category", 
+    subcategory: {
+      type: Schema.Types.ObjectId,
+      ref: "Category",
       required: false
     },
     warrantyPolicy: {
@@ -30,20 +30,20 @@ const productSchema = new Schema(
       },
     },
 
-     minimumQuantity: { 
-      type: Number, 
-       required: function () {
-        return this.hasVariant === false;
-      },
-    },
-    reorderQuantity: { 
-      type: Number, 
+    minimumQuantity: {
+      type: Number,
       required: function () {
         return this.hasVariant === false;
       },
     },
-    maximumQuantity: { 
-      type: Number,       
+    reorderQuantity: {
+      type: Number,
+      required: function () {
+        return this.hasVariant === false;
+      },
+    },
+    maximumQuantity: {
+      type: Number,
       required: function () {
         return this.hasVariant === false;
       },
@@ -61,7 +61,7 @@ const productSchema = new Schema(
     productType: {
       type: Schema.Types.ObjectId,
       ref: "ProductType",
-      required: function () {                                                                                 
+      required: function () {
         return this.hasVariant === true;
       },
     },
@@ -85,7 +85,7 @@ const productSchema = new Schema(
       type: Number,
       required: function () {
         return this.hasVariant === false;
-      }
+      },
     },
     mrpPrice: {
       type: Number,
@@ -98,7 +98,7 @@ const productSchema = new Schema(
       required: false,
       set: function (v) {
         return Math.ceil(Number(v));
-      }
+      },
     },
 
     discountPercent: Number,
@@ -117,16 +117,24 @@ const productSchema = new Schema(
     isFeatured: { type: Boolean, default: false },
     isPreOrder: { type: Boolean, default: false },
 
-  
     weight: Number,
     weightUnit: { type: String, enum: ["g", "kg"], default: "g" },
 
     dimensions: {
-  length: { value: Number, unit: { type: String, enum: ["cm", "inch"], default: "cm" } },
-  width:  { value: Number, unit: { type: String, enum: ["cm", "inch"], default: "cm" } },
-  height: { value: Number, unit: { type: String, enum: ["cm", "inch"], default: "cm" } },
-},
-    
+      length: {
+        value: Number,
+        unit: { type: String, enum: ["cm", "inch"], default: "cm" },
+      },
+      width: {
+        value: Number,
+        unit: { type: String, enum: ["cm", "inch"], default: "cm" },
+      },
+      height: {
+        value: Number,
+        unit: { type: String, enum: ["cm", "inch"], default: "cm" },
+      },
+    },
+
     dimensionUnit: { type: String, enum: ["cm", "inch"], default: "cm" },
 
     isFragile: Boolean,
@@ -164,26 +172,28 @@ const productSchema = new Schema(
       type: Number,
       default: 0,
     },
-   
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
-productSchema.virtual("inventories", {  
+productSchema.virtual("inventories", {
   ref: "Inventory",
   localField: "_id",
   foreignField: "product",
-
 });
 
-
-productSchema.virtual('totalInventory').get(function() {
-  if (this.inventories && this.inventories.length > 0) {
-    return this.inventories.reduce((total, inv) => total + inv.AvailableQuantity, 0);
+productSchema.virtual("totalInventory").get(function () {
+  if (!Array.isArray(this.inventories) || this.inventories.length === 0) {
+    return 0;
   }
-  return 0;
-});
 
+  return this.inventories.reduce((total, inv) => {
+    if (inv && typeof inv.AvailableQuantity === "number") {
+      return total + inv.AvailableQuantity;
+    }
+    return total;
+  }, 0);
+});
 
 productSchema.virtual("variants", {
   ref: "Variant",
@@ -204,7 +214,6 @@ productSchema.virtual("reviews", {
 //   justOne: true,
 // });
 
-
 productSchema.pre("validate", function () {
   if (!this.productId) {
     const prefix = "PROD";
@@ -220,11 +229,11 @@ productSchema.pre("validate", function () {
 
 productSchema.pre("save", function (next) {
   if (this.mrpPrice && this.landingSellPrice) {
-    const discount = ((this.mrpPrice - this.landingSellPrice) / this.mrpPrice) * 100;
+    const discount =
+      ((this.mrpPrice - this.landingSellPrice) / this.mrpPrice) * 100;
     this.discountPercent = Math.round(discount);
   }
   next();
 });
-
 
 export default model("Product", productSchema);
