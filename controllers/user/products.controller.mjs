@@ -1482,17 +1482,20 @@ export const getFilteredProductsUpdated = async (req, res) => {
 
 export const getMostWantedProducts = async (req, res) => {
   try {
+
     const products = await Product.find({
       productStatus: "published",
       visibility: "visible",
     })
       .populate("inventories")
+
       .populate("brand", "_id") 
       .populate("category", "_id") 
       .lean();
 
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
     const productIds = enrichedProducts.map((p) => p._id);
+
 
     const reviewStats = await Review.aggregate([
       { $match: { productId: { $in: productIds } } },
@@ -1505,6 +1508,7 @@ export const getMostWantedProducts = async (req, res) => {
       },
     ]);
 
+
     const reviewStatsMap = new Map();
     reviewStats.forEach((stat) => {
       reviewStatsMap.set(stat._id.toString(), {
@@ -1512,6 +1516,7 @@ export const getMostWantedProducts = async (req, res) => {
         reviewCount: stat.reviewCount,
       });
     });
+
 
     const scoredProducts = enrichedProducts.map((product) => {
       const review = reviewStatsMap.get(product._id.toString()) || {
@@ -1562,6 +1567,7 @@ export const getMostWantedProducts = async (req, res) => {
       };
     });
 
+
     const sorted = scoredProducts.sort(
       (a, b) => b.mostWantedScore - a.mostWantedScore
     );
@@ -1575,21 +1581,28 @@ export const getMostWantedProducts = async (req, res) => {
   }
 };
 
+
+
 export const getNewArrivalProducts = async (req, res) => {
   try {
+
     const products = await Product.find({
       productStatus: "published",
       visibility: "visible",
     })
       .populate("inventories")
+
       .populate("brand", "_id") // ← ADD FIELD SELECTION
       .populate("category", "_id") // ← ADD FIELD SELECTION
+
       .sort({ createdAt: -1 })
       .lean();
 
+    // Enrich with default variants
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
     const productIds = enrichedProducts.map((p) => p._id);
 
+    // Aggregate review stats
     const reviewStats = await Review.aggregate([
       { $match: { productId: { $in: productIds } } },
       {
@@ -1601,6 +1614,7 @@ export const getNewArrivalProducts = async (req, res) => {
       },
     ]);
 
+    // Create review stats map
     const reviewStatsMap = new Map();
     reviewStats.forEach((stat) => {
       reviewStatsMap.set(stat._id.toString(), {
@@ -1609,11 +1623,13 @@ export const getNewArrivalProducts = async (req, res) => {
       });
     });
 
+
     const productsWithReviewsAndInventory = enrichedProducts.map((product) => {
       const review = reviewStatsMap.get(product._id.toString()) || {
         averageRating: 0,
         reviewCount: 0,
       };
+
 
       const totalAvailableQuantity = product.inventories
         ? product.inventories.reduce(
@@ -1637,8 +1653,10 @@ export const getNewArrivalProducts = async (req, res) => {
             : product.category || null,
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
+
         totalAvailableQuantity,
         inStock,
+
         inventory: {
           totalAvailableQuantity,
           inStock,
