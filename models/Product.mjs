@@ -181,7 +181,7 @@ productSchema.virtual("variants", {
 });
 
 productSchema.virtual("reviews", {
-  ref: "Review", // Review model name
+  ref: "Review", 
   localField: "_id", // Product _id matches...
   foreignField: "productId", // ...Review.productId field
 });
