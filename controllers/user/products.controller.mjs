@@ -1482,16 +1482,20 @@ export const getFilteredProductsUpdated = async (req, res) => {
 
 export const getMostWantedProducts = async (req, res) => {
   try {
+
     const products = await Product.find({
       productStatus: "published",
       visibility: "visible",
-    }).lean();
+    })
+      .populate("inventories")
 
-    // Enrich products with default variant data
+      .populate("brand", "_id") 
+      .populate("category", "_id") 
+      .lean();
+
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
-
-    // Aggregate review stats for all products in one go
     const productIds = enrichedProducts.map((p) => p._id);
+
 
     const reviewStats = await Review.aggregate([
       { $match: { productId: { $in: productIds } } },
@@ -1504,7 +1508,7 @@ export const getMostWantedProducts = async (req, res) => {
       },
     ]);
 
-    // Create a map for quick lookup of review stats by product ID
+
     const reviewStatsMap = new Map();
     reviewStats.forEach((stat) => {
       reviewStatsMap.set(stat._id.toString(), {
@@ -1513,12 +1517,21 @@ export const getMostWantedProducts = async (req, res) => {
       });
     });
 
-    // Map review stats and calculate mostWantedScore per product
+
     const scoredProducts = enrichedProducts.map((product) => {
       const review = reviewStatsMap.get(product._id.toString()) || {
         averageRating: 0,
         reviewCount: 0,
       };
+
+      const totalAvailableQuantity = product.inventories
+        ? product.inventories.reduce(
+            (sum, inv) => sum + inv.AvailableQuantity,
+            0
+          )
+        : 0;
+
+      const inStock = totalAvailableQuantity > 0;
 
       const orderCount = product.orderCount || 0;
       const addedToCartCount = product.addedToCartCount || 0;
@@ -1531,15 +1544,30 @@ export const getMostWantedProducts = async (req, res) => {
         wishlistCount * 1 +
         viewsCount * 0.5;
 
+      // ADD NORMALIZATION LIKE MENTOR DID
       return {
         ...product,
+        brand:
+          typeof product.brand === "object"
+            ? product.brand?._id || null
+            : product.brand || null,
+        category:
+          typeof product.category === "object"
+            ? product.category?._id || null
+            : product.category || null,
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
+        totalAvailableQuantity,
+        inStock,
+        inventory: {
+          totalAvailableQuantity,
+          inStock,
+        },
         mostWantedScore: score,
       };
     });
 
-    // Sort by mostWantedScore descending, no limit
+
     const sorted = scoredProducts.sort(
       (a, b) => b.mostWantedScore - a.mostWantedScore
     );
@@ -1553,18 +1581,28 @@ export const getMostWantedProducts = async (req, res) => {
   }
 };
 
+
+
 export const getNewArrivalProducts = async (req, res) => {
   try {
+
     const products = await Product.find({
       productStatus: "published",
       visibility: "visible",
     })
+      .populate("inventories")
+
+      .populate("brand", "_id") // ← ADD FIELD SELECTION
+      .populate("category", "_id") // ← ADD FIELD SELECTION
+
       .sort({ createdAt: -1 })
       .lean();
-    const enrichedProducts = await enrichProductsWithDefaultVariants(products);
 
+    // Enrich with default variants
+    const enrichedProducts = await enrichProductsWithDefaultVariants(products);
     const productIds = enrichedProducts.map((p) => p._id);
 
+    // Aggregate review stats
     const reviewStats = await Review.aggregate([
       { $match: { productId: { $in: productIds } } },
       {
@@ -1576,6 +1614,7 @@ export const getNewArrivalProducts = async (req, res) => {
       },
     ]);
 
+    // Create review stats map
     const reviewStatsMap = new Map();
     reviewStats.forEach((stat) => {
       reviewStatsMap.set(stat._id.toString(), {
@@ -1584,19 +1623,48 @@ export const getNewArrivalProducts = async (req, res) => {
       });
     });
 
-    const productsWithReviews = enrichedProducts.map((product) => {
+
+    const productsWithReviewsAndInventory = enrichedProducts.map((product) => {
       const review = reviewStatsMap.get(product._id.toString()) || {
         averageRating: 0,
         reviewCount: 0,
       };
+
+
+      const totalAvailableQuantity = product.inventories
+        ? product.inventories.reduce(
+            (sum, inv) => sum + inv.AvailableQuantity,
+            0
+          )
+        : 0;
+
+      const inStock = totalAvailableQuantity > 0;
+
+      // ADD NORMALIZATION
       return {
         ...product,
+        brand:
+          typeof product.brand === "object"
+            ? product.brand?._id || null
+            : product.brand || null,
+        category:
+          typeof product.category === "object"
+            ? product.category?._id || null
+            : product.category || null,
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
+
+        totalAvailableQuantity,
+        inStock,
+
+        inventory: {
+          totalAvailableQuantity,
+          inStock,
+        },
       };
     });
 
-    res.status(200).json(productsWithReviews);
+    res.status(200).json(productsWithReviewsAndInventory);
   } catch (error) {
     console.error("Error fetching new arrivals:", error);
     res
@@ -1611,13 +1679,15 @@ export const getBestSellingProducts = async (req, res) => {
       productStatus: "published",
       visibility: "visible",
     })
+      .populate("inventories")
+      .populate("brand", "_id") 
+      .populate("category", "_id") 
       .sort({ orderCount: -1 })
       .lean();
+
     const enrichedProducts = await enrichProductsWithDefaultVariants(
       bestSellers
     );
-
-    // Aggregate review stats for all products
     const productIds = enrichedProducts.map((p) => p._id);
 
     const reviewStats = await Review.aggregate([
@@ -1644,10 +1714,35 @@ export const getBestSellingProducts = async (req, res) => {
         averageRating: 0,
         reviewCount: 0,
       };
+
+      const totalAvailableQuantity = product.inventories
+        ? product.inventories.reduce(
+            (sum, inv) => sum + inv.AvailableQuantity,
+            0
+          )
+        : 0;
+
+      const inStock = totalAvailableQuantity > 0;
+
+      // ADD NORMALIZATION
       return {
         ...product,
+        brand:
+          typeof product.brand === "object"
+            ? product.brand?._id || null
+            : product.brand || null,
+        category:
+          typeof product.category === "object"
+            ? product.category?._id || null
+            : product.category || null,
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
+        totalAvailableQuantity,
+        inStock,
+        inventory: {
+          totalAvailableQuantity,
+          inStock,
+        },
       };
     });
 
@@ -1666,11 +1761,9 @@ export const getProductById = async (req, res) => {
 
     let variants = [];
 
-    // === Fetch variants if applicable ===
     if (product.hasVariant) {
       variants = await Variant.find({ productId: product._id }).lean();
 
-      // Add totalAvailableQuantity for each variant
       for (const variant of variants) {
         const stockAgg = await inventory.aggregate([
           {
@@ -1729,8 +1822,6 @@ export const getProductById = async (req, res) => {
 
     const averageRating = reviewStats.length ? reviewStats[0].averageRating : 0;
     const reviewCount = reviewStats.length ? reviewStats[0].reviewCount : 0;
-
-    
 
     // ====================== FETCH OFFERS ======================
     const activeOffer = await Offer.findOne({
@@ -1879,7 +1970,6 @@ export const getSearchSuggestions = async (req, res) => {
               .lean()
           : [];
 
-      // Step 3: Combine: starts-with first, then contains
       return [...startsWith, ...contains];
     };
 

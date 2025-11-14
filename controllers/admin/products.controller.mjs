@@ -312,18 +312,18 @@ export const getAllProducts = async (req, res) => {
           ],
         },
       })
-      .populate({
-        path: "inventory",
-        select:
-          "availableQuantity minimumQuantity reorderQuantity maximumQuantity warehouse warehouseLocation",
-        populate: [
-          {
-            path: "warehouse",
-            select: "name address city state country postalCode",
-          },
-          { path: "warehouseLocation", select: "code name capacity status" },
-        ],
-      })
+      // .populate({
+      //   path: "inventory",
+      //   select:
+      //     "availableQuantity minimumQuantity reorderQuantity maximumQuantity warehouse warehouseLocation",
+      //   populate: [
+      //     {
+      //       path: "warehouse",
+      //       select: "name address city state country postalCode",
+      //     },
+      //     { path: "warehouseLocation", select: "code name capacity status" },
+      //   ],
+      // })
       .sort(sortBy)
       .lean();
 
