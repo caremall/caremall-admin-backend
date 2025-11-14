@@ -41,11 +41,9 @@ app.use((req, res, next) => {
 app.use(errorHandler);
 
 mongoose.connection.once("open", () => {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, "0.0.0.0", () =>
-    console.log(`🌎 - Server running at http://0.0.0.0:${PORT} -🌎`)
+  app.listen(process.env.PORT, () =>
+    console.log(`🌎 - Listening On http://localhost:${process.env.PORT} -🌎`)
   );
 });
-
 
 export default app;
