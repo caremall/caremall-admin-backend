@@ -525,54 +525,89 @@ export const getProductReport = async (req, res) => {
 };
 
 
-export const getTransferRequests = async (req, res) => {
+export const createTransferRequestAdmin = async (req, res) => {
   try {
-    const { status, type } = req.query;
-    const query = {};
+    console.log("Admin Create Transfer Request - User:", req.user);
 
-    // Filter by status if provided
-    if (status) {
-      query.status = status;
+    // Admin must be authenticated
+    if (!req.user) {
+      return res.status(401).json({
+        message: "Unauthorized: User not authenticated",
+      });
     }
 
-    // Filter by transfer type if needed
-    if (type === "incoming") {
-      query.toWarehouse = { $exists: true };
-    } else if (type === "outgoing") {
-      query.fromWarehouse = { $exists: true };
+    // Extract fields from request body
+    const {
+      fromWarehouse,
+      toWarehouse,
+      items,
+      carrier,
+      dispatchTime,
+      totalWeight,
+      driver
+    } = req.body;
+
+    // Validate warehouses
+    if (!fromWarehouse) {
+      return res.status(400).json({ message: "fromWarehouse is required" });
     }
 
-    const transferRequests = await TransferRequest.find(query)
-      .populate("fromWarehouse toWarehouse driver")
-      .sort({ requestedAt: -1 })
-      .lean();
+    if (!toWarehouse) {
+      return res.status(400).json({ message: "toWarehouse is required" });
+    }
 
-    // Determine transfer type for admin display
-    const transferRequestsWithType = transferRequests.map((request) => {
-      let transferType = "other";
+    if (fromWarehouse.toString() === toWarehouse.toString()) {
+      return res.status(400).json({
+        message: "Source and destination warehouses cannot be the same",
+      });
+    }
 
-      if (request.fromWarehouse && request.toWarehouse) {
-        if (request.fromWarehouse._id.toString() === request.toWarehouse._id.toString()) {
-          transferType = "internal";
-        } else {
-          transferType = "movement";
-        }
+    // Validate driver
+    if (!driver) {
+      return res.status(400).json({ message: "Driver is required" });
+    }
+
+    // Validate items list
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        message: "Items must be a non-empty array",
+      });
+    }
+
+    for (const item of items) {
+      if (!item.productId) {
+        return res.status(400).json({
+          message: "Each item must have a productId",
+        });
       }
+      if (!item.quantity || item.quantity <= 0) {
+        return res.status(400).json({
+          message: "Each item must have a quantity greater than zero",
+        });
+      }
+    }
 
-      return {
-        ...request,
-        transferType,
-      };
+    // Create transfer request
+    const transferRequest = await TransferRequest.create({
+      fromWarehouse,
+      toWarehouse,
+      items,
+      carrier,
+      dispatchTime: dispatchTime ? new Date(dispatchTime) : null,
+      totalWeight,
+      driver,
+      createdBy: req.user._id, // optional: track admin who created it
     });
 
-    res.status(200).json({
-      data: transferRequestsWithType,
+    res.status(201).json({
+      message: "Transfer request created successfully",
+      data: transferRequest,
     });
-
   } catch (err) {
-    console.error("Get transfer requests error:", err);
+    console.error("Admin create transfer request error:", err);
     res.status(500).json({
-      message: "Server error fetching transfer requests",
+      message: "Server error creating transfer request",
+      error: err.message,
     });
   }
 };
