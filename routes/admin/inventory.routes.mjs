@@ -7,6 +7,7 @@ import {
   getInventoryLogs,
   getProductReport,
   getStockReport,
+  getTransferRequests,
   toggleFavoriteInventoryLog,
   updateInventory,
 } from "../../controllers/admin/inventory.controller.mjs";
@@ -22,6 +23,7 @@ router.get("/", getAllInventories);
 router.get("/log", getInventoryLogs);
 router.get("/:id", getInventoryById);
 router.put("/:id/favourite", toggleFavoriteInventoryLog);
+inventoryRouter.get("/transfer",getTransferRequests)
 
 //damaged inventory report
 router.post("/:id/damaged", createDamagedInventoryReport);

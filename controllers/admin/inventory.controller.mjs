@@ -523,3 +523,56 @@ export const getProductReport = async (req, res) => {
       .json({ message: "Server error fetching product transaction history" });
   }
 };
+
+
+export const getTransferRequests = async (req, res) => {
+  try {
+    const { status, type } = req.query;
+    const query = {};
+
+    // Filter by status if provided
+    if (status) {
+      query.status = status;
+    }
+
+    // Filter by transfer type if needed
+    if (type === "incoming") {
+      query.toWarehouse = { $exists: true };
+    } else if (type === "outgoing") {
+      query.fromWarehouse = { $exists: true };
+    }
+
+    const transferRequests = await TransferRequest.find(query)
+      .populate("fromWarehouse toWarehouse driver")
+      .sort({ requestedAt: -1 })
+      .lean();
+
+    // Determine transfer type for admin display
+    const transferRequestsWithType = transferRequests.map((request) => {
+      let transferType = "other";
+
+      if (request.fromWarehouse && request.toWarehouse) {
+        if (request.fromWarehouse._id.toString() === request.toWarehouse._id.toString()) {
+          transferType = "internal";
+        } else {
+          transferType = "movement";
+        }
+      }
+
+      return {
+        ...request,
+        transferType,
+      };
+    });
+
+    res.status(200).json({
+      data: transferRequestsWithType,
+    });
+
+  } catch (err) {
+    console.error("Get transfer requests error:", err);
+    res.status(500).json({
+      message: "Server error fetching transfer requests",
+    });
+  }
+};
