@@ -21,13 +21,14 @@ const warehouseSchema = new Schema(
     supportedSKUs: [
       {
         type: Schema.Types.ObjectId,
-        ref: "Variant",
+        ref: "Product",
       },
     ],
     address: {
       street: { type: String, required: true, trim: true },
       city: { type: String, required: true, trim: true },
       state: { type: String, required: true, trim: true },
+      district: { type: String, required: true, trim: true },
       pinCode: { type: String, required: true, trim: true },
     },
     location: {
