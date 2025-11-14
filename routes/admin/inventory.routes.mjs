@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   createDamagedInventoryReport,
+  createTransferRequestAdmin,
   getAllInventories,
   getDamagedInventoryReports,
   getInventoryById,
@@ -10,6 +11,8 @@ import {
   toggleFavoriteInventoryLog,
   updateInventory,
 } from "../../controllers/admin/inventory.controller.mjs";
+import { getTransferRequestsAdmin } from "../../controllers/warehouse/inventory.controller.mjs";
+import { verifyUserToken } from "../../middlewares/verifyToken.mjs";
 
 const router = Router();
 
@@ -17,14 +20,24 @@ const router = Router();
 router.get("/stock-report", getStockReport);
 router.get("/product-report", getProductReport);
 
-router.put("/", updateInventory);
+// inventory list & logs
 router.get("/", getAllInventories);
 router.get("/log", getInventoryLogs);
-router.get("/:id", getInventoryById);
-router.put("/:id/favourite", toggleFavoriteInventoryLog);
 
-//damaged inventory report
-router.post("/:id/damaged", createDamagedInventoryReport);
+// 🔥 Admin Transfer Requests (MUST be before :id)
+router.get("/transfer",verifyUserToken, getTransferRequestsAdmin);
+router.post("/transfer", createTransferRequestAdmin);
+
+// damaged inventory report
 router.get("/damaged", getDamagedInventoryReports);
+router.post("/:id/damaged", createDamagedInventoryReport);
+
+// update inventory
+router.put("/", updateInventory);
+
+// 🔥 Dynamic routes come last
+router.put("/:id/favourite", toggleFavoriteInventoryLog);
+router.get("/:id", getInventoryById);
+
 
 export default router;
