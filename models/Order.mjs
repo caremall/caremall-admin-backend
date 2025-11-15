@@ -70,7 +70,6 @@ const subPackedSchema = new Schema({
   packageLength: { type: Number }, 
   packageWidth: { type: Number }, 
   packageHeight: { type: Number }, 
-  trackingNumber: { type: String },
   packagingMaterial: { type: String }, 
   packStatus: {
     type: String,
