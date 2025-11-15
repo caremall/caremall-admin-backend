@@ -17,7 +17,7 @@ import mongoose from "mongoose";
 export const getTransactionByID = async (req, res) => {
   const assignedWarehouses = req.user.assignedWarehouses;
   console.log("Get Transaction by ID - User:", req.user);
-  
+
   try {
     const { id } = req.params;
 
@@ -45,7 +45,7 @@ export const getTransactionByID = async (req, res) => {
         path: "items.productId",
         select: "productName shortDescription SKU barcode costPrice mrpPrice sellingPrice discountPercent weight dimensions productImages productStatus hasVariant brand category subcategory",
         populate: [
-          { path: "brand", select: "brandName" }, 
+          { path: "brand", select: "brandName" },
           { path: "category", select: "name" },
           { path: "subcategory", select: "name" },
         ],
@@ -96,7 +96,7 @@ export const getTransactionByID = async (req, res) => {
     // Get all product and variant IDs to fetch inventory quantities
     const productIds = [];
     const variantIds = [];
-    
+
     transaction.items?.forEach(item => {
       if (item.productId) {
         productIds.push(item.productId._id);
@@ -116,7 +116,7 @@ export const getTransactionByID = async (req, res) => {
 
     // Create a map for quick lookup of available quantities
     const inventoryMap = new Map();
-    
+
     inventoryData.forEach(inv => {
       if (inv.variant) {
         inventoryMap.set(`variant_${inv.variant.toString()}`, inv.AvailableQuantity);
@@ -133,7 +133,7 @@ export const getTransactionByID = async (req, res) => {
       isInternal: transferType === 'internal', // Boolean for easy check
       items: transaction.items?.map((item) => {
         let availableQuantity = 0;
-        
+
         // Determine available quantity based on whether it's a variant or product
         if (item.variantId) {
           // For variant products, get quantity from variant inventory
@@ -147,49 +147,49 @@ export const getTransactionByID = async (req, res) => {
           ...item,
           productId: item.productId
             ? {
-                _id: item.productId._id,
-                productName: item.productId.productName || "Unknown Product",
-                shortDescription: item.productId.shortDescription || "",
-                SKU: item.productId.SKU || "",
-                barcode: item.productId.barcode || "",
-                costPrice: item.productId.costPrice || 0,
-                mrpPrice: item.productId.mrpPrice || 0,
-                sellingPrice: item.productId.sellingPrice || 0,
-                discountPercent: item.productId.discountPercent || 0,
-                weight: item.productId.weight || 0,
-                dimensions: item.productId.dimensions || {},
-                productImages: item.productId.productImages || [],
-                productStatus: item.productId.productStatus || "unknown",
-                availableQuantity: availableQuantity, // Use calculated available quantity
-                hasVariant: item.productId.hasVariant || false,
-                brand: item.productId.brand?.brandName || "N/A",
-                category: item.productId.category?.name || "N/A",
-                subCategory: item.productId.subcategory?.name || "N/A",
-              }
+              _id: item.productId._id,
+              productName: item.productId.productName || "Unknown Product",
+              shortDescription: item.productId.shortDescription || "",
+              SKU: item.productId.SKU || "",
+              barcode: item.productId.barcode || "",
+              costPrice: item.productId.costPrice || 0,
+              mrpPrice: item.productId.mrpPrice || 0,
+              sellingPrice: item.productId.sellingPrice || 0,
+              discountPercent: item.productId.discountPercent || 0,
+              weight: item.productId.weight || 0,
+              dimensions: item.productId.dimensions || {},
+              productImages: item.productId.productImages || [],
+              productStatus: item.productId.productStatus || "unknown",
+              availableQuantity: availableQuantity, // Use calculated available quantity
+              hasVariant: item.productId.hasVariant || false,
+              brand: item.productId.brand?.brandName || "N/A",
+              category: item.productId.category?.name || "N/A",
+              subCategory: item.productId.subcategory?.name || "N/A",
+            }
             : null,
           variantId: item.variantId
             ? {
-                _id: item.variantId._id,
-                SKU: item.variantId.SKU || "",
-                barcode: item.variantId.barcode || "",
-                costPrice: item.variantId.costPrice || 0,
-                mrpPrice: item.variantId.mrpPrice || 0,
-                sellingPrice: item.variantId.sellingPrice || 0,
-                discountPercent: item.variantId.discountPercent || 0,
-                weight: item.variantId.weight || 0,
-                dimensions: item.variantId.dimensions || {},
-                images: item.variantId.images || [],
-                stockQuantity: availableQuantity, // Use calculated available quantity for variants
-                variantAttributes: item.variantId.variantAttributes || [],
-                productId: item.variantId.productId
-                  ? {
-                      productName: item.variantId.productId.productName || "Unknown Product",
-                      brand: item.variantId.productId.brand?.brandName || "N/A",
-                      category: item.variantId.productId.category?.name || "N/A",
-                      subCategory: item.variantId.productId.subcategory?.name || "N/A",
-                    }
-                  : null,
-              }
+              _id: item.variantId._id,
+              SKU: item.variantId.SKU || "",
+              barcode: item.variantId.barcode || "",
+              costPrice: item.variantId.costPrice || 0,
+              mrpPrice: item.variantId.mrpPrice || 0,
+              sellingPrice: item.variantId.sellingPrice || 0,
+              discountPercent: item.variantId.discountPercent || 0,
+              weight: item.variantId.weight || 0,
+              dimensions: item.variantId.dimensions || {},
+              images: item.variantId.images || [],
+              stockQuantity: availableQuantity, // Use calculated available quantity for variants
+              variantAttributes: item.variantId.variantAttributes || [],
+              productId: item.variantId.productId
+                ? {
+                  productName: item.variantId.productId.productName || "Unknown Product",
+                  brand: item.variantId.productId.brand?.brandName || "N/A",
+                  category: item.variantId.productId.category?.name || "N/A",
+                  subCategory: item.variantId.productId.subcategory?.name || "N/A",
+                }
+                : null,
+            }
             : null,
         };
       }),
@@ -205,7 +205,7 @@ export const getTransactionByID = async (req, res) => {
     });
   } catch (err) {
     console.error("Get transaction by ID error:", err);
-    
+
     // More specific error handling
     if (err.name === 'CastError') {
       return res.status(400).json({
@@ -213,7 +213,7 @@ export const getTransactionByID = async (req, res) => {
         message: "Invalid transaction ID format",
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: "Server error fetching transaction",
@@ -240,14 +240,14 @@ export const createTransferRequest = async (req, res) => {
       return res.status(400).json({ message: "User does not have an assigned warehouse to transfer from" });
     }
 
-    
+
     const {
       toWarehouse,
       items,
       carrier,
       dispatchTime,
       totalWeight,
-      driver 
+      driver
     } = req.body;
 
     console.log('Dynamic From Warehouse:', fromWarehouse);
@@ -257,17 +257,17 @@ export const createTransferRequest = async (req, res) => {
       return res.status(400).json({ message: "toWarehouse is required" });
     }
 
-    
+
     if (!driver) {
       return res.status(400).json({ message: "Driver is required" });
     }
 
-    
+
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Items must be a non-empty array" });
     }
 
-    
+
     for (const item of items) {
       if (!item.productId) {
         return res.status(400).json({ message: "Each item must have a productId" });
@@ -278,30 +278,30 @@ export const createTransferRequest = async (req, res) => {
     }
 
     if (fromWarehouse.toString() === toWarehouse.toString()) {
-      return res.status(400).json({ 
-        message: "Source and destination warehouses cannot be the same" 
+      return res.status(400).json({
+        message: "Source and destination warehouses cannot be the same"
       });
     }
 
     const transferRequest = await TransferRequest.create({
-      fromWarehouse, 
-      toWarehouse,   
-      items,         
+      fromWarehouse,
+      toWarehouse,
+      items,
       carrier,
       dispatchTime: dispatchTime ? new Date(dispatchTime) : null,
       totalWeight,
-      driver 
+      driver
     });
 
-    res.status(201).json({ 
-      message: "Transfer request created successfully", 
-      data: transferRequest 
+    res.status(201).json({
+      message: "Transfer request created successfully",
+      data: transferRequest
     });
   } catch (err) {
     console.error("Create transfer request error:", err.message, err.stack);
-    res.status(500).json({ 
-      message: "Server error creating transfer request", 
-      error: err.message 
+    res.status(500).json({
+      message: "Server error creating transfer request",
+      error: err.message
     });
   }
 };
@@ -314,10 +314,10 @@ export const getTransferRequests = async (req, res) => {
 
     // Get user's assigned warehouses
     const assignedWarehouses = req.user.assignedWarehouses;
-    
+
     // Extract warehouse IDs from assigned warehouses
     let userWarehouseIds = [];
-    
+
     if (Array.isArray(assignedWarehouses)) {
       userWarehouseIds = assignedWarehouses.map(wh => wh._id).filter(id => id);
     } else if (assignedWarehouses && assignedWarehouses._id) {
@@ -351,10 +351,10 @@ export const getTransferRequests = async (req, res) => {
 
     // Add transfer type information to each request
     const transferRequestsWithType = transferRequests.map(request => {
-      const isFromUserWarehouse = userWarehouseIds.some(id => 
+      const isFromUserWarehouse = userWarehouseIds.some(id =>
         id.toString() === request.fromWarehouse._id.toString()
       );
-      const isToUserWarehouse = userWarehouseIds.some(id => 
+      const isToUserWarehouse = userWarehouseIds.some(id =>
         id.toString() === request.toWarehouse._id.toString()
       );
 
@@ -385,15 +385,61 @@ export const getTransferRequests = async (req, res) => {
 };
 
 
+export const getTransferRequestsAdmin = async (req, res) => {
+  try {
+    const { status, type } = req.query;
+    const query = {};
 
+    // Filter by status if provided
+    if (status) {
+      query.status = status;
+    }
 
+    // Filter by transfer type if needed
+    if (type === "incoming") {
+      query.toWarehouse = { $exists: true };
+    } else if (type === "outgoing") {
+      query.fromWarehouse = { $exists: true };
+    }
 
+    // Fetch ALL transfer requests (no warehouse restriction)
+    const transferRequests = await TransferRequest.find(query)
+      .populate("fromWarehouse toWarehouse driver")
+      .sort({ requestedAt: -1 })
+      .lean();
 
+    // Determine transfer type for admin display
+    const transferRequestsWithType = transferRequests.map((request) => {
+      let transferType = "other";
 
+      if (request.fromWarehouse && request.toWarehouse) {
+        if (
+          request.fromWarehouse._id.toString() ===
+          request.toWarehouse._id.toString()
+        ) {
+          transferType = "internal";
+        } else {
+          transferType = "movement";
+        }
+      }
 
+      return {
+        ...request,
+        transferType,
+      };
+    });
 
+    res.status(200).json({
+      data: transferRequestsWithType,
+    });
 
-
+  } catch (err) {
+    console.error("Get transfer requests admin error:", err);
+    res.status(500).json({
+      message: "Server error fetching admin transfer requests",
+    });
+  }
+};
 
 
 
@@ -639,7 +685,7 @@ export const updateInventory = async (req, res) => {
           if (inventory) {
             const previousQuantity = inventory.AvailableQuantity;
             const newQuantity = inventory.AvailableQuantity + quantityChange;
-            
+
             if (newQuantity < 0) {
               errors.push({
                 productId,
@@ -653,11 +699,11 @@ export const updateInventory = async (req, res) => {
 
             inventory.AvailableQuantity = newQuantity;
             inventory.updatedAt = new Date();
-            
+
             if (warehouseLocation) {
               inventory.warehouseLocation = warehouseLocation;
             }
-            
+
             await inventory.save();
 
             // Create inventory log for update
@@ -730,7 +776,7 @@ export const updateInventory = async (req, res) => {
         data: results,
         errors: errors.length > 0 ? errors : undefined
       });
-    } 
+    }
     // Single update logic
     else {
       // Input validation for single update
@@ -752,7 +798,7 @@ export const updateInventory = async (req, res) => {
       if (inventory) {
         const previousQuantity = inventory.AvailableQuantity;
         const newQuantity = inventory.AvailableQuantity + quantityChange;
-        
+
         // Prevent negative inventory if needed (optional)
         if (newQuantity < 0) {
           return res.status(400).json({
@@ -765,12 +811,12 @@ export const updateInventory = async (req, res) => {
 
         inventory.AvailableQuantity = newQuantity;
         inventory.updatedAt = new Date();
-        
+
         // Update warehouseLocation if provided
         if (warehouseLocation) {
           inventory.warehouseLocation = warehouseLocation;
         }
-        
+
         await inventory.save();
 
         // Create inventory log for update
@@ -839,7 +885,7 @@ export const updateInventory = async (req, res) => {
     }
   } catch (error) {
     console.error("Inventory update error:", error);
-    
+
     // Handle duplicate key error (due to unique index)
     // if (error.code === 11000) {
     //   return res.status(409).json({
@@ -847,7 +893,7 @@ export const updateInventory = async (req, res) => {
     //     message: "Inventory record already exists for this product/variant in warehouse"
     //   });
     // }
-    
+
     // Handle validation errors
     if (error.name === 'ValidationError') {
       return res.status(400).json({
@@ -869,14 +915,14 @@ export const updateInventory = async (req, res) => {
 
 
 export const incrementInventory = async (req, res) => {
-   const assignedWarehouses = req.user.assignedWarehouses;
-    const warehouseId = Array.isArray(assignedWarehouses)
-      ? assignedWarehouses[0]?._id
-      : assignedWarehouses?._id;
+  const assignedWarehouses = req.user.assignedWarehouses;
+  const warehouseId = Array.isArray(assignedWarehouses)
+    ? assignedWarehouses[0]?._id
+    : assignedWarehouses?._id;
   try {
     const { productId, variantId, quantity = 1 } = req.body;
 
-   
+
 
     // Standardized query for variant null/undefined
     const query = {
@@ -1031,7 +1077,7 @@ export const getUpdatedInventories = async (req, res) => {
     const pageSize = Number(limit)
     const skip = (Number(page) - 1) * pageSize
 
-    
+
     const updatedInventories = await Inventory.find({
       updatedAt: { $gt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Last 7 days
     })
@@ -1180,16 +1226,16 @@ export const getInventoryLogs = async (req, res) => {
       // Check if this is a damaged product log
       if (log.damageType || log.reasonForDamage || log.quantityToReport) {
         // Damaged product message
-        const itemName = log.product 
-          ? `${log.product.productName} (SKU ${log.product.SKU})` 
-          : log.variant 
+        const itemName = log.product
+          ? `${log.product.productName} (SKU ${log.product.SKU})`
+          : log.variant
             ? `Variant SKU ${log.variant.SKU}`
             : "Unknown item";
-        
+
         const locationName = log.warehouseLocation
           ? log.warehouseLocation.code || log.warehouseLocation.name || "Unknown Location"
           : "Unknown Location";
-        
+
         const userName = log.updatedBy ? log.updatedBy.fullName : "Unknown User";
         const damageType = log.damageType || "damaged";
         const quantityReported = log.quantityToReport || 0;
@@ -1229,15 +1275,15 @@ export const getInventoryLogs = async (req, res) => {
           createdAt: log.createdAt,
           isFavorite: log.isFavorite,
           _id: log._id,
-          type: "inventory_update" 
+          type: "inventory_update"
         };
       }
     });
 
-   
+
     const favoriteLogs = logsWithMessages.filter((log) => log.isFavorite);
 
-  
+
     const damagedLogs = logsWithMessages.filter((log) => log.type === "damaged");
 
     res.status(200).json({
@@ -1288,8 +1334,8 @@ export const createDamagedInventoryReport = async (req, res) => {
 
   try {
     const {
-      product, 
-      variant, 
+      product,
+      variant,
       currentQuantity,
       quantityToReport,
       damageType,
@@ -1301,7 +1347,7 @@ export const createDamagedInventoryReport = async (req, res) => {
       Array.isArray(req.user?.assignedWarehouses)
         ? req.user.assignedWarehouses[0]?._id
         : req.user?.assignedWarehouses?._id;
-    
+
 
     // Validate required fields
     if (!warehouse) {
@@ -1382,9 +1428,9 @@ export const createDamagedInventoryReport = async (req, res) => {
       console.error("Inventory lookup/creation error:", inventoryError);
       await session.abortTransaction();
       session.endSession();
-      return res.status(500).json({ 
+      return res.status(500).json({
         message: "Error processing inventory record",
-        error: inventoryError.message 
+        error: inventoryError.message
       });
     }
 
@@ -1416,10 +1462,10 @@ export const createDamagedInventoryReport = async (req, res) => {
       updatedBy: req.user._id
     }], { session });
 
-    
+
     await mongoose.model("Inventory").findByIdAndUpdate(
       inventoryRecord._id,
-      { 
+      {
         $inc: { AvailableQuantity: -quantityToReport },
         $set: { updatedBy: req.user._id }
       },
@@ -1438,9 +1484,9 @@ export const createDamagedInventoryReport = async (req, res) => {
     await session.abortTransaction();
     session.endSession();
     console.error("Create Damaged Inventory Report Error:", error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: "Internal server error",
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -1976,15 +2022,15 @@ export const getInboundJobById = async (req, res) => {
 
 export const confirmTransferRequest = async (req, res) => {
   const session = await mongoose.startSession();
-  
+
   try {
     session.startTransaction();
-    
+
     const { transferRequestId } = req.params;
 
     // Find the transfer request
     const transferRequest = await TransferRequest.findById(transferRequestId).session(session);
-    
+
     if (!transferRequest) {
       await session.abortTransaction();
       return res.status(404).json({
@@ -2008,7 +2054,7 @@ export const confirmTransferRequest = async (req, res) => {
         warehouse: transferRequest.fromWarehouse,
         product: item.productId
       };
-      
+
       // Include variantId in query if it exists
       if (item.variantId) {
         inventoryQuery.variant = item.variantId;
@@ -2045,7 +2091,7 @@ export const confirmTransferRequest = async (req, res) => {
         warehouse: transferRequest.toWarehouse,
         product: item.productId
       };
-      
+
       if (item.variantId) {
         destInventoryQuery.variant = item.variantId;
       } else {
@@ -2090,7 +2136,7 @@ export const confirmTransferRequest = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     console.error("Error confirming transfer request:", error);
-    
+
     res.status(500).json({
       success: false,
       message: "Failed to confirm transfer request",

@@ -17,12 +17,13 @@ const brandSchema = new Schema(
         description: {
             type: String,
             trim: true,
-            maxlength: 500,
+            maxlength: 5000,
         },
         termsAndConditions: {
             type: String,
             required: true,
             trim: true,
+            maxlength: 5000,
         },
         status: {
             type: String,

@@ -1482,24 +1482,21 @@ export const getFilteredProductsUpdated = async (req, res) => {
 
 export const getMostWantedProducts = async (req, res) => {
   try {
-    // Fetch products and only populate the IDs for brand and category
+
     const products = await Product.find({
       productStatus: "published",
       visibility: "visible",
     })
       .populate("inventories")
-      .populate("brand", "_id")      // Only bring _id field for brand
-      .populate("category", "_id")   // Only bring _id field for category
+
+      .populate("brand", "_id") 
+      .populate("category", "_id") 
       .lean();
 
-    console.log("done", products);
-
-    // Enrich with default variants
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
-
     const productIds = enrichedProducts.map((p) => p._id);
 
-    // Aggregate reviews
+
     const reviewStats = await Review.aggregate([
       { $match: { productId: { $in: productIds } } },
       {
@@ -1511,7 +1508,7 @@ export const getMostWantedProducts = async (req, res) => {
       },
     ]);
 
-    // Create review stats map
+
     const reviewStatsMap = new Map();
     reviewStats.forEach((stat) => {
       reviewStatsMap.set(stat._id.toString(), {
@@ -1520,7 +1517,7 @@ export const getMostWantedProducts = async (req, res) => {
       });
     });
 
-    // Map and calculate most wanted score
+
     const scoredProducts = enrichedProducts.map((product) => {
       const review = reviewStatsMap.get(product._id.toString()) || {
         averageRating: 0,
@@ -1547,6 +1544,7 @@ export const getMostWantedProducts = async (req, res) => {
         wishlistCount * 1 +
         viewsCount * 0.5;
 
+      // ADD NORMALIZATION LIKE MENTOR DID
       return {
         ...product,
         brand:
@@ -1559,6 +1557,8 @@ export const getMostWantedProducts = async (req, res) => {
             : product.category || null,
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
+        totalAvailableQuantity,
+        inStock,
         inventory: {
           totalAvailableQuantity,
           inStock,
@@ -1567,7 +1567,7 @@ export const getMostWantedProducts = async (req, res) => {
       };
     });
 
-    // Sort descending by most wanted score
+
     const sorted = scoredProducts.sort(
       (a, b) => b.mostWantedScore - a.mostWantedScore
     );
@@ -1585,20 +1585,21 @@ export const getMostWantedProducts = async (req, res) => {
 
 export const getNewArrivalProducts = async (req, res) => {
   try {
-    // Fetch products with only _id for brand & category
+
     const products = await Product.find({
       productStatus: "published",
       visibility: "visible",
     })
       .populate("inventories")
-      .populate("brand", "_id")      // Only fetch _id
-      .populate("category", "_id")   // Only fetch _id
+
+      .populate("brand", "_id") // ← ADD FIELD SELECTION
+      .populate("category", "_id") // ← ADD FIELD SELECTION
+
       .sort({ createdAt: -1 })
       .lean();
 
     // Enrich with default variants
     const enrichedProducts = await enrichProductsWithDefaultVariants(products);
-
     const productIds = enrichedProducts.map((p) => p._id);
 
     // Aggregate review stats
@@ -1622,14 +1623,14 @@ export const getNewArrivalProducts = async (req, res) => {
       });
     });
 
-    // Map products with review and inventory data
+
     const productsWithReviewsAndInventory = enrichedProducts.map((product) => {
       const review = reviewStatsMap.get(product._id.toString()) || {
         averageRating: 0,
         reviewCount: 0,
       };
 
-      // Calculate total inventory
+
       const totalAvailableQuantity = product.inventories
         ? product.inventories.reduce(
             (sum, inv) => sum + inv.AvailableQuantity,
@@ -1639,6 +1640,7 @@ export const getNewArrivalProducts = async (req, res) => {
 
       const inStock = totalAvailableQuantity > 0;
 
+      // ADD NORMALIZATION
       return {
         ...product,
         brand:
@@ -1651,6 +1653,10 @@ export const getNewArrivalProducts = async (req, res) => {
             : product.category || null,
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
+
+        totalAvailableQuantity,
+        inStock,
+
         inventory: {
           totalAvailableQuantity,
           inStock,
@@ -1673,13 +1679,15 @@ export const getBestSellingProducts = async (req, res) => {
       productStatus: "published",
       visibility: "visible",
     })
+      .populate("inventories")
+      .populate("brand", "_id") 
+      .populate("category", "_id") 
       .sort({ orderCount: -1 })
       .lean();
+
     const enrichedProducts = await enrichProductsWithDefaultVariants(
       bestSellers
     );
-
-   
     const productIds = enrichedProducts.map((p) => p._id);
 
     const reviewStats = await Review.aggregate([
@@ -1706,10 +1714,35 @@ export const getBestSellingProducts = async (req, res) => {
         averageRating: 0,
         reviewCount: 0,
       };
+
+      const totalAvailableQuantity = product.inventories
+        ? product.inventories.reduce(
+            (sum, inv) => sum + inv.AvailableQuantity,
+            0
+          )
+        : 0;
+
+      const inStock = totalAvailableQuantity > 0;
+
+      // ADD NORMALIZATION
       return {
         ...product,
+        brand:
+          typeof product.brand === "object"
+            ? product.brand?._id || null
+            : product.brand || null,
+        category:
+          typeof product.category === "object"
+            ? product.category?._id || null
+            : product.category || null,
         averageRating: review.averageRating,
         reviewCount: review.reviewCount,
+        totalAvailableQuantity,
+        inStock,
+        inventory: {
+          totalAvailableQuantity,
+          inStock,
+        },
       };
     });
 
@@ -1728,11 +1761,9 @@ export const getProductById = async (req, res) => {
 
     let variants = [];
 
-    // === Fetch variants if applicable ===
     if (product.hasVariant) {
       variants = await Variant.find({ productId: product._id }).lean();
 
-      // Add totalAvailableQuantity for each variant
       for (const variant of variants) {
         const stockAgg = await inventory.aggregate([
           {
@@ -1791,8 +1822,6 @@ export const getProductById = async (req, res) => {
 
     const averageRating = reviewStats.length ? reviewStats[0].averageRating : 0;
     const reviewCount = reviewStats.length ? reviewStats[0].reviewCount : 0;
-
-    
 
     // ====================== FETCH OFFERS ======================
     const activeOffer = await Offer.findOne({
@@ -1941,7 +1970,6 @@ export const getSearchSuggestions = async (req, res) => {
               .lean()
           : [];
 
-      // Step 3: Combine: starts-with first, then contains
       return [...startsWith, ...contains];
     };
 

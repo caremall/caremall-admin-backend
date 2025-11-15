@@ -27,6 +27,7 @@ import inventoryRouter from "./inventory.routes.mjs";
 import dashboardRouter from "./dashboard.router.mjs";
 import pincodeRouter from "./pincode.router.mjs";
 import deliveryBoyRouter from "./deliveryboy.router.mjs";
+import purchaseRouter from "./purchase.routes.mjs";
 
 const adminRouter = Router()
 
@@ -58,7 +59,8 @@ adminRouter.use('/inventory', inventoryRouter)
 adminRouter.use('/dashboard', dashboardRouter)
 adminRouter.use('/pincode', pincodeRouter)
 adminRouter.use('/delivery-boy', deliveryBoyRouter)
-//!admin parent routes
+adminRouter.use('/purchase', purchaseRouter)
+// !admin parent routes
 //get all admins
 adminRouter.get("/", getAllAdmins);
 

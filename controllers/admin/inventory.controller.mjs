@@ -523,3 +523,91 @@ export const getProductReport = async (req, res) => {
       .json({ message: "Server error fetching product transaction history" });
   }
 };
+
+
+export const createTransferRequestAdmin = async (req, res) => {
+  try {
+    console.log("Admin Create Transfer Request - User:", req.user);
+
+    // Admin must be authenticated
+    if (!req.user) {
+      return res.status(401).json({
+        message: "Unauthorized: User not authenticated",
+      });
+    }
+
+    // Extract fields from request body
+    const {
+      fromWarehouse,
+      toWarehouse,
+      items,
+      carrier,
+      dispatchTime,
+      totalWeight,
+      driver
+    } = req.body;
+
+    // Validate warehouses
+    if (!fromWarehouse) {
+      return res.status(400).json({ message: "fromWarehouse is required" });
+    }
+
+    if (!toWarehouse) {
+      return res.status(400).json({ message: "toWarehouse is required" });
+    }
+
+    if (fromWarehouse.toString() === toWarehouse.toString()) {
+      return res.status(400).json({
+        message: "Source and destination warehouses cannot be the same",
+      });
+    }
+
+    // Validate driver
+    if (!driver) {
+      return res.status(400).json({ message: "Driver is required" });
+    }
+
+    // Validate items list
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        message: "Items must be a non-empty array",
+      });
+    }
+
+    for (const item of items) {
+      if (!item.productId) {
+        return res.status(400).json({
+          message: "Each item must have a productId",
+        });
+      }
+      if (!item.quantity || item.quantity <= 0) {
+        return res.status(400).json({
+          message: "Each item must have a quantity greater than zero",
+        });
+      }
+    }
+
+    // Create transfer request
+    const transferRequest = await TransferRequest.create({
+      fromWarehouse,
+      toWarehouse,
+      items,
+      carrier,
+      dispatchTime: dispatchTime ? new Date(dispatchTime) : null,
+      totalWeight,
+      driver,
+      createdBy: req.user._id, // optional: track admin who created it
+    });
+
+    res.status(201).json({
+      message: "Transfer request created successfully",
+      data: transferRequest,
+    });
+  } catch (err) {
+    console.error("Admin create transfer request error:", err);
+    res.status(500).json({
+      message: "Server error creating transfer request",
+      error: err.message,
+    });
+  }
+};
