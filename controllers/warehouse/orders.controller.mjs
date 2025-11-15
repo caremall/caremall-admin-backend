@@ -714,13 +714,13 @@ export const addPackingDetails = async (req, res) => {
     const orderId = req.params.id;
     const { packingDate, subPacks = [] } = req.body;
     console.log("Received packing request:", { orderId, packingDate, subPacks });
+    
     if (!Array.isArray(subPacks) || subPacks.length === 0) {
       return res.status(400).json({
         message: "subPacks array is required and cannot be empty",
       });
     }
-    // Find order WITHOUT populating items.product and items.variant
-    // This keeps them as ObjectIds for easier comparison
+
     const order = await Order.findById(orderId)
       .populate("pickings.product")
       .populate("pickings.variant");
@@ -728,11 +728,8 @@ export const addPackingDetails = async (req, res) => {
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
-    console.log("Order items:", order.items);
-    console.log("Order pickings:", order.pickings);
 
     if (!order.packings) order.packings = [];
-
     const newPackCodes = [];
 
     // Process each sub-pack
@@ -754,20 +751,47 @@ export const addPackingDetails = async (req, res) => {
         });
       }
 
-      let packCode = null;
+      let packCode = null; // ← Only declare ONCE here
       let packStatus = "pending";
 
       // Generate pack code only if confirmed
       if (confirm) {
-        const existingCodes = order.packings
-          .filter((p) => p.packCode && p.packCode.startsWith("PACK"))
-          .map((p) => {
-            const num = p.packCode.replace("PACK", "");
-            return parseInt(num, 10);
-          });
+        let attempts = 0;
+        const maxAttempts = 5;
+        
+        while (attempts < maxAttempts) {
+          const freshOrder = await Order.findById(orderId);
+          const orderCustomId = freshOrder.orderId.replace('#', '');
+          
+          const existingCodes = freshOrder.packings
+            .filter((p) => p.packCode && p.packCode.startsWith(`PACK-${orderCustomId}-`))
+            .map((p) => {
+              const num = p.packCode.replace(`PACK-${orderCustomId}-`, "");
+              return parseInt(num, 10);
+            })
+            .filter(num => !isNaN(num) && num >= 0);
 
-        const nextNum = existingCodes.length > 0 ? Math.max(...existingCodes) + 1 : 0;
-        packCode = `PACK${String(nextNum).padStart(3, "0")}`;
+          const nextNum = existingCodes.length > 0 ? Math.max(...existingCodes) + 1 : 1;
+          packCode = `PACK-${orderCustomId}-${String(nextNum).padStart(3, "0")}`; // ← Assign to outer variable
+          
+          // Check if this pack code already exists in the database
+          const existingPack = await Order.findOne({ 
+            "packings.packCode": packCode 
+          });
+          
+          if (!existingPack) {
+            break; // Unique code found
+          }
+          
+          attempts++;
+        }
+        
+        if (attempts >= maxAttempts) {
+          return res.status(500).json({
+            message: "Failed to generate unique pack code after multiple attempts"
+          });
+        }
+        
         packStatus = "packed";
         newPackCodes.push(packCode);
       }
@@ -784,8 +808,6 @@ export const addPackingDetails = async (req, res) => {
           });
         }
 
-        console.log(`Looking for product: ${productId} in order items`);
-
         // Find matching order item - compare as strings
         const orderItem = order.items.find((oi) => {
           const productMatch = oi.product.toString() === productId;
@@ -794,22 +816,17 @@ export const addPackingDetails = async (req, res) => {
           if (variantId) {
             variantMatch = oi.variant && oi.variant.toString() === variantId;
           } else {
-            variantMatch = !oi.variant; // Both should be null/undefined
+            variantMatch = !oi.variant;
           }
           
           return productMatch && variantMatch;
         });
 
         if (!orderItem) {
-          console.log(`Product ${productId} not found in order items. Available items:`, 
-            order.items.map(oi => ({ product: oi.product.toString(), variant: oi.variant?.toString() }))
-          );
           return res.status(400).json({
             message: `Product ${productId}${variantId ? ` (variant: ${variantId})` : ""} not found in order`,
           });
         }
-
-        console.log(`Found order item for product ${productId}:`, orderItem);
 
         // Check if picked
         const picking = order.pickings.find((p) => {
@@ -819,7 +836,7 @@ export const addPackingDetails = async (req, res) => {
           if (variantId) {
             variantMatch = p.variant && p.variant._id.toString() === variantId;
           } else {
-            variantMatch = !p.variant; // Both should be null/undefined
+            variantMatch = !p.variant;
           }
           
           return productMatch && variantMatch;
@@ -841,7 +858,6 @@ export const addPackingDetails = async (req, res) => {
         const alreadyPacked = order.packings.reduce((sum, packing) => {
           let itemPackedQty = 0;
           
-          // Check if packing has items array (new format)
           if (packing.items && packing.items.length > 0) {
             const packedItem = packing.items.find((pi) => {
               const productMatch = pi.product.toString() === productId;
@@ -857,7 +873,7 @@ export const addPackingDetails = async (req, res) => {
             });
             itemPackedQty = packedItem ? packedItem.quantity : 0;
           }
-          // Old format (direct product/variant fields)
+          // Old format handling
           else if (packing.product) {
             const productMatch = packing.product.toString() === productId;
             let variantMatch = true;
@@ -878,8 +894,6 @@ export const addPackingDetails = async (req, res) => {
 
         const remaining = orderItem.quantity - alreadyPacked;
 
-        console.log(`Product ${productId} - Ordered: ${orderItem.quantity}, Already packed: ${alreadyPacked}, Remaining: ${remaining}, Trying to pack: ${quantity}`);
-
         if (quantity > remaining) {
           return res.status(400).json({
             message: `Cannot pack ${quantity} of product ${productId}. Only ${remaining} remaining (Ordered: ${orderItem.quantity}, Packed: ${alreadyPacked})`,
@@ -896,7 +910,7 @@ export const addPackingDetails = async (req, res) => {
 
       // Create packing entry
       const packingEntry = {
-        packCode,
+        packCode, // ← This will now have the correct value
         packerName,
         packageWeight,
         packageLength,
@@ -910,7 +924,7 @@ export const addPackingDetails = async (req, res) => {
       };
 
       order.packings.push(packingEntry);
-      console.log(`Added packing entry with ${packItems.length} items`);
+      console.log(`Added packing entry with ${packItems.length} items, packCode: ${packCode}`);
     }
 
     // Check if ALL order items are fully packed
@@ -937,21 +951,16 @@ export const addPackingDetails = async (req, res) => {
         return sum + packedQty;
       }, 0);
 
-      const isFullyPacked = totalPacked >= orderItem.quantity;
-      console.log(`Product ${orderItem.product.toString()} - Ordered: ${orderItem.quantity}, Packed: ${totalPacked}, Fully packed: ${isFullyPacked}`);
-      
-      return isFullyPacked;
+      return totalPacked >= orderItem.quantity;
     });
 
     // Update order status only if fully packed
     if (allFullyPacked && order.orderStatus !== "packed") {
       order.orderStatus = "packed";
-      console.log(`Order ${orderId} status updated to: packed`);
     }
 
     // Save order
     await order.save();
-    console.log(`Order saved successfully with ${order.packings.length} packings`);
 
     // Success response
     return res.status(200).json({
