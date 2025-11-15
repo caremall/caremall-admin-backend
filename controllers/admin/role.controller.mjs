@@ -3,7 +3,7 @@ import Role from "../../models/Role.mjs";
 // Create Role
 export const createRole = async (req, res) => {
     try {
-        const { name, permissions, description, status } = req.body;
+        const { name, type, permissions, description, status } = req.body;
 
         // Validate required fields
         if (!name) {
@@ -30,9 +30,10 @@ export const createRole = async (req, res) => {
             });
         }
 
-        // Create role with default permissions structure
+        // Create role with complete permissions structure
         const roleData = {
             name: name.trim(),
+            type: type || 'admin',
             description: description?.trim() || '',
             status: status || 'draft',
             permissions: {
@@ -94,6 +95,66 @@ export const createRole = async (req, res) => {
                     edit: permissions?.roles?.edit || false,
                     delete: permissions?.roles?.delete || false,
                 },
+                warehouseUser: {
+                    create: permissions?.warehouseUser?.create || false,
+                    view: permissions?.warehouseUser?.view || false,
+                    edit: permissions?.warehouseUser?.edit || false,
+                    delete: permissions?.warehouseUser?.delete || false,
+                },
+                outOfStockOrder: {
+                    create: permissions?.outOfStockOrder?.create || false,
+                    edit: permissions?.outOfStockOrder?.edit || false,
+                },
+                locations: {
+                    create: permissions?.locations?.create || false,
+                    view: permissions?.locations?.view || false,
+                    edit: permissions?.locations?.edit || false,
+                    delete: permissions?.locations?.delete || false,
+                },
+                driver: {
+                    create: permissions?.driver?.create || false,
+                    view: permissions?.driver?.view || false,
+                    edit: permissions?.driver?.edit || false,
+                    delete: permissions?.driver?.delete || false,
+                },
+                carrier: {
+                    create: permissions?.carrier?.create || false,
+                    view: permissions?.carrier?.view || false,
+                    edit: permissions?.carrier?.edit || false,
+                    delete: permissions?.carrier?.delete || false,
+                },
+                pick: {
+                    view: permissions?.pick?.view || false,
+                    edit: permissions?.pick?.edit || false,
+                },
+                pack: {
+                    view: permissions?.pack?.view || false,
+                    edit: permissions?.pack?.edit || false,
+                },
+                Dispatch: {
+                    view: permissions?.Dispatch?.view || false,
+                    edit: permissions?.Dispatch?.edit || false,
+                },
+                Delivery: {
+                    view: permissions?.Delivery?.view || false,
+                    edit: permissions?.Delivery?.edit || false,
+                },
+                inbound: {
+                    create: permissions?.inbound?.create || false,
+                    view: permissions?.inbound?.view || false,
+                    edit: permissions?.inbound?.edit || false,
+                    delete: permissions?.inbound?.delete || false,
+                },
+                Returns: {
+                    view: permissions?.Returns?.view || false,
+                    edit: permissions?.Returns?.edit || false,
+                },
+                supplier: {
+                    create: permissions?.supplier?.create || false,
+                    view: permissions?.supplier?.view || false,
+                    edit: permissions?.supplier?.edit || false,
+                    delete: permissions?.supplier?.delete || false,
+                },
             }
         };
 
@@ -102,18 +163,12 @@ export const createRole = async (req, res) => {
         res.status(201).json({
             success: true,
             message: "Role created successfully",
-            data: {
-                id: role._id,
-                name: role.name,
-                status: role.status,
-                description: role.description
-            }
+            data: role
         });
 
     } catch (error) {
         console.error("Error creating role:", error);
         
-        // Mongoose validation error
         if (error.name === 'ValidationError') {
             const errors = Object.values(error.errors).map(err => err.message);
             return res.status(400).json({
@@ -123,7 +178,6 @@ export const createRole = async (req, res) => {
             });
         }
 
-        // Mongoose duplicate key error
         if (error.code === 11000) {
             return res.status(409).json({
                 success: false,
@@ -131,7 +185,6 @@ export const createRole = async (req, res) => {
             });
         }
 
-       
         res.status(500).json({
             success: false,
             message: "Internal server error",
@@ -141,241 +194,208 @@ export const createRole = async (req, res) => {
 };
 
 // Get All Roles
-// controllers/role.controller.mjs
-
 export const getAllRoles = async (req, res) => {
-  try {
-    const { search, permission, status, page, limit } = req.query;
+    try {
+        const { search, permission, status, page, limit } = req.query;
 
-    const filter = {};
+        const filter = {};
 
-    // Search by name or description
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-      ];
-    }
+        if (search) {
+            filter.$or = [
+                { name: { $regex: search, $options: "i" } },
+                { description: { $regex: search, $options: "i" } },
+            ];
+        }
 
-    // Filter by permission
-    if (permission) {
-      filter.permissions = permission;
-    }
+        if (permission) {
+            filter.permissions = permission;
+        }
 
-    // Filter by status
-    if (status && ['draft', 'published'].includes(status)) {
-      filter.status = status;
-    }
+        if (status && ['draft', 'published'].includes(status)) {
+            filter.status = status;
+        }
 
-    // If no pagination parameters provided, return all data
-    if (!page && !limit) {
-      const roles = await Role.find(filter).sort({ createdAt: -1 });
-      
-      return res.status(200).json({
-        data: roles,
-        meta: {
-          total: roles.length,
-          page: 1,
-          limit: roles.length,
-          totalPages: 1,
-        },
-      });
-    }
+        if (!page && !limit) {
+            const roles = await Role.find(filter).sort({ createdAt: -1 });
+            
+            return res.status(200).json({
+                data: roles,
+                meta: {
+                    total: roles.length,
+                    page: 1,
+                    limit: roles.length,
+                    totalPages: 1,
+                },
+            });
+        }
 
-    // Use pagination if parameters provided
-    const pageNum = parseInt(page) || 1;
-    const limitNum = parseInt(limit) || 10;
-    const skip = (pageNum - 1) * limitNum;
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 10;
+        const skip = (pageNum - 1) * limitNum;
 
-    // Get total for pagination
-    const total = await Role.countDocuments(filter);
+        const total = await Role.countDocuments(filter);
 
-    const roles = await Role.find(filter)
-      .skip(skip)
-      .limit(limitNum)
-      .sort({ createdAt: -1 });
+        const roles = await Role.find(filter)
+            .skip(skip)
+            .limit(limitNum)
+            .sort({ createdAt: -1 });
 
-    res.status(200).json({
-      data: roles,
-      meta: {
-        total,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(total / limitNum),
-      },
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-
-
-export const updateRole = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, permissions, description, status } = req.body;
-
-    // Validate role ID
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Role ID is required"
-      });
-    }
-
-    // Check if role exists
-    const existingRole = await Role.findById(id);
-    if (!existingRole) {
-      return res.status(404).json({
-        success: false,
-        message: "Role not found"
-      });
-    }
-
-    // If name is being updated, check for duplicates
-    if (name && name !== existingRole.name) {
-      const duplicateRole = await Role.findOne({ name: name.trim() });
-      if (duplicateRole) {
-        return res.status(409).json({
-          success: false,
-          message: "Role with this name already exists"
+        res.status(200).json({
+            data: roles,
+            meta: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(total / limitNum),
+            },
         });
-      }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-
-    // Validate status enum
-    if (status && !['draft', 'published'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Status must be either 'draft' or 'published'"
-      });
-    }
-
-    // Prepare update data - use the incoming permissions directly
-    const updateData = {
-      ...(name && { name: name.trim() }),
-      ...(description && { description: description.trim() }),
-      ...(status && { status }),
-    };
-
-    // If permissions are provided, use them directly
-    if (permissions) {
-      updateData.permissions = permissions;
-    }
-
-    const role = await Role.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
-    });
-
-    // Return the complete role data including permissions
-    res.status(200).json({
-      success: true,
-      message: "Role updated successfully",
-      data: role // Return the entire role document
-    });
-
-  } catch (error) {
-    console.error("Error updating role:", error);
-    
-    // Mongoose validation error
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: errors
-      });
-    }
-
-    // Mongoose duplicate key error
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: "Role with this name already exists"
-      });
-    }
-
-    // Invalid ID format
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid role ID format"
-      });
-    }
-
-    res.status(500).json({
-  success: false,
-  message: "Internal server error",
-  errorMessage: error.message,  // Add this line temporarily
-  stack: error.stack             // Add this line temporarily
-});
-  }
 };
 
+// Update Role
+export const updateRole = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, type, permissions, description, status } = req.body;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: "Role ID is required"
+            });
+        }
+
+        const existingRole = await Role.findById(id);
+        if (!existingRole) {
+            return res.status(404).json({
+                success: false,
+                message: "Role not found"
+            });
+        }
+
+        if (name && name !== existingRole.name) {
+            const duplicateRole = await Role.findOne({ name: name.trim() });
+            if (duplicateRole) {
+                return res.status(409).json({
+                    success: false,
+                    message: "Role with this name already exists"
+                });
+            }
+        }
+
+        if (status && !['draft', 'published'].includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: "Status must be either 'draft' or 'published'"
+            });
+        }
+
+        const updateData = {
+            ...(name && { name: name.trim() }),
+            ...(type && { type }),
+            ...(description && { description: description.trim() }),
+            ...(status && { status }),
+            ...(permissions && { permissions }),
+        };
+
+        const role = await Role.findByIdAndUpdate(id, updateData, {
+            new: true,
+            runValidators: true,
+        });
+
+        res.status(200).json({
+            success: true,
+            message: "Role updated successfully",
+            data: role
+        });
+
+    } catch (error) {
+        console.error("Error updating role:", error);
+        
+        if (error.name === 'ValidationError') {
+            const errors = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({
+                success: false,
+                message: "Validation failed",
+                errors: errors
+            });
+        }
+
+        if (error.code === 11000) {
+            return res.status(409).json({
+                success: false,
+                message: "Role with this name already exists"
+            });
+        }
+
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid role ID format"
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// Get Role By ID
 export const getRoleById = async (req, res) => {
-  try {
-    const { id } = req.params;
+    try {
+        const { id } = req.params;
 
-    // Validate role ID
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Role ID is required"
-      });
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: "Role ID is required"
+            });
+        }
+
+        const role = await Role.findById(id);
+
+        if (!role) {
+            return res.status(404).json({
+                success: false,
+                message: "Role not found"
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: role
+        });
+
+    } catch (error) {
+        console.error("Error fetching role:", error);
+        
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid role ID format"
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
-
-    const role = await Role.findById(id);
-
-    if (!role) {
-      return res.status(404).json({
-        success: false,
-        message: "Role not found"
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: {
-        id: role._id,
-        name: role.name,
-        description: role.description,
-        permissions: role.permissions,
-        status: role.status,
-        createdAt: role.createdAt,
-        updatedAt: role.updatedAt
-      }
-    });
-
-  } catch (error) {
-    console.error("Error fetching role:", error);
-    
-    // Invalid ID format
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid role ID format"
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
 };
 
-// Delete Role
+
 export const deleteRole = async (req, res) => {
-  try {
-    const role = await Role.findByIdAndDelete(req.params.id);
-    if (!role) return res.status(404).json({ error: "Role not found" });
-    res
-      .status(200)
-      .json({ success: true, message: "Role deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    try {
+        const role = await Role.findByIdAndDelete(req.params.id);
+        if (!role) return res.status(404).json({ error: "Role not found" });
+        res.status(200).json({ success: true, message: "Role deleted successfully" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
