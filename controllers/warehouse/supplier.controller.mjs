@@ -28,7 +28,7 @@ export const createSupplier = async (req, res) => {
         .json({ message: "User is not assigned to any warehouse" });
     }
 
-    
+
     const existingContactNumber = await Supplier.findOne({
       contactNumber: contactNumber.trim(),
       warehouse: warehouseId,
@@ -48,7 +48,7 @@ export const createSupplier = async (req, res) => {
         message: "Email already exists in this warehouse",
       });
     }
-    
+
     let imageURL = "";
     if (image) {
       const uploaded = await uploadBase64Image(image, "supplier-images/");
@@ -86,32 +86,40 @@ export const createSupplier = async (req, res) => {
 // Get all suppliers for the user's assigned warehouse
 export const getSuppliers = async (req, res) => {
   try {
-    const assignedWarehouse = req.user?.assignedWarehouses;
-    const warehouseId =
-      req.user.assignedWarehouses?._id ||
-      (Array.isArray(req.user.assignedWarehouses) &&
-        req.user.assignedWarehouses.length > 0 &&
-        req.user.assignedWarehouses[0]._id);
+    // Check if the user has assigned warehouses
+    const assigned = req.user?.assignedWarehouses;
 
-    if (!warehouseId) {
-      return res
-        .status(400)
-        .json({ message: "User is not assigned to any warehouse" });
+    let query = {};
+
+    // If assignedWarehouses exists and has at least 1 warehouse → restrict
+    if (Array.isArray(assigned) && assigned.length > 0) {
+      const warehouseId = assigned[0]?._id;
+
+      if (!warehouseId) {
+        return res.status(400).json({
+          message: "User is not assigned to any warehouse",
+        });
+      }
+
+      query.warehouse = warehouseId;
     }
 
+    // If no assigned warehouses → user is ADMIN → return all suppliers (no filter)
 
-    const suppliers = await Supplier.find({ warehouse: warehouseId })
+    const suppliers = await Supplier.find(query)
       .populate("warehouse", "name type")
       .sort({ createdAt: -1 });
 
     res.status(200).json({ data: suppliers, total: suppliers.length });
   } catch (err) {
     console.error("Get Suppliers error:", err);
-    res
-      .status(500)
-      .json({ message: "Failed to fetch suppliers", error: err.message });
+    res.status(500).json({
+      message: "Failed to fetch suppliers",
+      error: err.message,
+    });
   }
 };
+
 
 // Get a single supplier by ID within user's assigned warehouse
 export const getSupplierById = async (req, res) => {
