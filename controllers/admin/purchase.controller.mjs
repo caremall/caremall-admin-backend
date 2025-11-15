@@ -247,6 +247,42 @@ export const getPurchases = async (req, res) => {
   }
 };
 
+export const getPurchaseById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ message: "Purchase ID is required" });
+    }
+
+    // Determine user's warehouse access
+    const warehouseId = Array.isArray(req.user?.assignedWarehouses)
+      ? req.user.assignedWarehouses[0]?._id
+      : req.user?.assignedWarehouses?._id;
+
+    const query = { _id: id };
+    if (warehouseId) query.warehouse = warehouseId;
+
+    const purchase = await Purchase.findOne(query)
+      .populate("supplier")
+      .populate("warehouse")
+      .populate("items.product")
+      .populate("items.variant")
+      .lean();
+
+    if (!purchase) {
+      return res.status(404).json({ message: "Purchase not found" });
+    }
+
+    return res.status(200).json({ data: purchase });
+  } catch (err) {
+    console.error("Error fetching purchase by ID:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error fetching purchase details" });
+  }
+};
+
 export const updatePurchase = async (req, res) => {
   try {
     const { id } = req.params;
