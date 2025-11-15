@@ -1,6 +1,7 @@
 import damagedInventory from "../../models/damagedInventory.mjs";
 import Inventory from "../../models/inventory.mjs";
 import inventoryLog from "../../models/inventoryLog.mjs";
+import TransferRequest from "../../models/TransferRequest.mjs";
 import { uploadBase64Images } from "../../utils/uploadImage.mjs";
 // Update inventory quantity (add or remove stock)
 export const updateInventory = async (req, res) => {
@@ -529,12 +530,7 @@ export const createTransferRequestAdmin = async (req, res) => {
   try {
     console.log("Admin Create Transfer Request - User:", req.user);
 
-    // Admin must be authenticated
-    if (!req.user) {
-      return res.status(401).json({
-        message: "Unauthorized: User not authenticated",
-      });
-    }
+    
 
     // Extract fields from request body
     const {
@@ -587,7 +583,7 @@ export const createTransferRequestAdmin = async (req, res) => {
       }
     }
 
-    // Create transfer request
+    
     const transferRequest = await TransferRequest.create({
       fromWarehouse,
       toWarehouse,
@@ -596,7 +592,6 @@ export const createTransferRequestAdmin = async (req, res) => {
       dispatchTime: dispatchTime ? new Date(dispatchTime) : null,
       totalWeight,
       driver,
-      createdBy: req.user._id, // optional: track admin who created it
     });
 
     res.status(201).json({
