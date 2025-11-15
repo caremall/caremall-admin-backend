@@ -10,43 +10,37 @@ const roleSchema = new Schema(
             unique: true,
             trim: true,
         },
+        type: {
+            type: String,
+            enum: ['warehouse', 'delivery_hub', 'admin'],
+            default: 'admin',
+        },
         permissions: {
-            
             dashboard: {
                 view: { type: Boolean, default: false }
             },
-
-            
             warehouseManager: {
                 create: { type: Boolean, default: false },
                 view: { type: Boolean, default: false },
                 edit: { type: Boolean, default: false },
                 delete: { type: Boolean, default: false }
             },
-
-
             warehouse: {
                 create: { type: Boolean, default: false },
                 view: { type: Boolean, default: false },
                 edit: { type: Boolean, default: false },
                 delete: { type: Boolean, default: false }
             },
-
-            
             location: {
                 create: { type: Boolean, default: false },
                 view: { type: Boolean, default: false },
                 edit: { type: Boolean, default: false },
                 delete: { type: Boolean, default: false }
             },
-
-            
             orders: {
                 view: { type: Boolean, default: false },
                 update: { type: Boolean, default: false }
             },
-
-            
             inventory: {
                 overview: { type: Boolean, default: false },
                 history: { type: Boolean, default: false },
@@ -55,44 +49,91 @@ const roleSchema = new Schema(
                 stockTransaction: { type: Boolean, default: false },
                 stockAdjustment: { type: Boolean, default: false }
             },
-
-            
             products: {
                 create: { type: Boolean, default: false },
                 view: { type: Boolean, default: false },
                 edit: { type: Boolean, default: false },
                 delete: { type: Boolean, default: false }
             },
-
-            
             userManagement: {
                 block: { type: Boolean, default: false },
                 view: { type: Boolean, default: false }
             },
-
-            
             websiteManagement: {
                 manage: { type: Boolean, default: false }
             },
-
-            
             admin: {
                 create: { type: Boolean, default: false },
                 view: { type: Boolean, default: false },
                 edit: { type: Boolean, default: false },
                 delete: { type: Boolean, default: false },
             },
-
-            
             roles: {
                 create: { type: Boolean, default: false },
                 view: { type: Boolean, default: false },
                 edit: { type: Boolean, default: false },
                 delete: { type: Boolean, default: false },
             },
-
-            
-           
+            warehouseUser: {
+                create: { type: Boolean, default: false },
+                view: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+                delete: { type: Boolean, default: false },
+            },
+            outOfStockOrder: {
+                create: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+            },
+            locations: {
+                create: { type: Boolean, default: false },
+                view: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+                delete: { type: Boolean, default: false },
+            },
+            driver: {
+                create: { type: Boolean, default: false },
+                view: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+                delete: { type: Boolean, default: false },
+            },
+            carrier: {
+                create: { type: Boolean, default: false },
+                view: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+                delete: { type: Boolean, default: false },
+            },
+            pick: {
+                view: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+            },
+            pack: {
+                view: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+            },
+            Dispatch: {
+                view: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+            },
+            Delivery: {
+                view: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+            },
+            inbound: {
+                create: { type: Boolean, default: false },
+                view: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+                delete: { type: Boolean, default: false },
+            },
+            Returns: {
+                view: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+            },
+            supplier: {
+                create: { type: Boolean, default: false },
+                view: { type: Boolean, default: false },
+                edit: { type: Boolean, default: false },
+                delete: { type: Boolean, default: false },
+            },
         },
         description: {
             type: String,
