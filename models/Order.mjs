@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
-
 const { Schema, model } = mongoose;
+
 const pickItemSchema = new Schema({
   product: {
     type: Schema.Types.ObjectId,
@@ -13,7 +13,11 @@ const pickItemSchema = new Schema({
     ref: "Variant",
     default: null,
   },
-  pickerName: { type: String, required: true },
+  pickerName: {
+    type: Schema.Types.ObjectId,
+    ref: "WarehouseUser",
+    default: null,
+  },
   requiredQuantity: {
     type: Number,
     required: true,
@@ -30,6 +34,10 @@ const pickItemSchema = new Schema({
     enum: ["pending", "partial", "picked"],
     default: "pending",
   },
+  reason: {
+    type: String,
+    enum: ["lowstock", "outofstock"],
+  },
   pickerStatus: {
     type: String,
     enum: ["assigned", "un-assigned"],
@@ -37,42 +45,119 @@ const pickItemSchema = new Schema({
   },
 });
 
-const packSchema = new Schema({
+const packItemSchema = new Schema({
+  product: {
+    type: Schema.Types.ObjectId,
+    ref: "Product",
+    required: true,
+  },
+  variant: {
+    type: Schema.Types.ObjectId,
+    ref: "Variant",
+    default: null,
+  },
+  quantity: {
+    type: Number,
+    required: true,
+    min: 1,
+  },
+});
+
+const subPackedSchema = new Schema({
+  packCode: { type: String }, 
   packerName: { type: String, required: true },
-  packageWeight: { type: Number }, // kg
-  packageLength: { type: Number }, // cm
-  packageWidth: { type: Number }, // cm
-  packageHeight: { type: Number }, // cm
-  trackingNumber: { type: String },
-  packagingMaterial: { type: String }, // box, polybag, etc.
+  packageWeight: { type: Number },
+  packageLength: { type: Number }, 
+  packageWidth: { type: Number }, 
+  packageHeight: { type: Number }, 
+  packagingMaterial: { type: String }, 
   packStatus: {
     type: String,
     enum: ["pending", "packed"],
     default: "pending",
   },
+  items: [packItemSchema], 
   packingDate: { type: Date, default: Date.now },
-  packingTime: { type: String }, // add this field explicitly
+  packingTime: { type: String },
 });
+
 
 const dispatchSchema = new Schema(
   {
-    carrier: { type: Schema.Types.ObjectId, ref: "Carrier" },
-    driver: { type: Schema.Types.ObjectId, ref: "Driver" },
-    Rider: { type: Schema.Types.ObjectId, ref: "DeliveryBoy" },
-    vehicleNumber: { type: String },
-    dispatchDate: { type: Date, default: Date.now },
-    dispatchTime: { type: String },
-    totalPackages: { type: Number },
-    totalWeight: { type: Number },
-    destinationHub: { type: String },
-    toLocation: { type: String },
-    manifestStatus: {
+    dispatchType: {
       type: String,
-      enum: ["Pending", "In Transit", "Delivered"],
-      default: "Pending",
+      enum: ["warehouse", "delivery_hub", "carrier", "rider"],
+      required: true,
     },
+    warehouse: {
+      type: Schema.Types.ObjectId,
+      ref: "Warehouse",
+      required: function() {
+        return this.dispatchType === "warehouse" || this.dispatchType === "delivery_hub";
+      }
+    },
+   
+    carrier: {
+      type: Schema.Types.ObjectId,
+      ref: "Carrier",
+      required: function() {
+        return this.dispatchType === "carrier";
+      }
+    },
+    rider: {
+      type: Schema.Types.ObjectId,
+      ref: "DeliveryBoy",
+      required: function() {
+        return this.dispatchType === "rider";
+      }
+    },
+    driver: {
+      type: Schema.Types.ObjectId,
+      ref: "Driver",
+      required: function() {
+        return this.dispatchType === "warehouse" || this.dispatchType === "delivery_hub";
+      }
+    },
+    vehicleNumber: {
+      type: String,
+    },
+    dispatchDate: {
+      type: Date,
+      required: true,
+      default: Date.now
+    },
+    dispatchTime: {
+      type: String,
+      required: true
+    },
+    destination: {
+      type: String,
+      required: true
+    },
+    totalPackages: {
+      type: Number,
+      required: true
+    },
+    totalWeight: {
+      type: Number,
+      required: true
+    },
+    amount: {
+      type: Number,
+      required: true
+    },
+    status: {
+      type: String,
+      enum: ["pending", "in_transit", "delivered", "cancelled", "dispatched"],
+      default: "pending"
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    }
   },
-  { _id: false }
+  { _id: true, timestamps: true }
 );
 
 const orderSchema = new Schema(
@@ -214,7 +299,7 @@ const orderSchema = new Schema(
     },
     allocatedBy: {
       type: Schema.Types.ObjectId,
-      ref: "Admin", // where User has role operationsmanager
+      ref: "Admin", 
       default: null,
     },
     allocatedAt: {
@@ -226,7 +311,7 @@ const orderSchema = new Schema(
       default: false,
     },
     pickings: [pickItemSchema],
-    packings: [packSchema],
+    packings: [subPackedSchema], 
     dispatches: [dispatchSchema],
     cancellationDetails: {
       cancelledBy: { type: Schema.Types.ObjectId, ref: "User", required: false },
