@@ -14,6 +14,8 @@ import {
   updatePickedQuantities,
   getOutOfStockOrders,
   getOutOfStockOrderById,
+  getDispatchOrderById,
+  createDispatch,
 } from "../../controllers/warehouse/orders.controller.mjs";
 
 const router = Router();
@@ -24,7 +26,7 @@ router.post("/:id/pick", updatePickedQuantities)
 // router.put("/:orderId/pack/:packingId",updatePackingDetails)
 
 router.post("/:id/pack", addPackingDetails)
-router.post("/:id/dispatch", markOrderDispatched)
+router.post("/:orderId/dispatch", createDispatch)
 router.patch("/:id/cancel", markOrderCancelled)
 router.put("/:id/assign-deliveryboy", assignOrderToDeliveryBoy);
 
@@ -48,5 +50,6 @@ router.patch("/:id/deliver", markOrderDelivered);
 // DELETE order
 router.delete("/:id", deleteOrder);
 
+router.get('/dispatch/:id',getDispatchOrderById)
 
 export default router;
