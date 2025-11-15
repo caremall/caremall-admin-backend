@@ -1,7 +1,7 @@
 import Purchase from "../../models/Purchase.mjs";
 import Counter from "../../models/Counter.mjs";
-import Inventory from "../../models/inventory.mjs"; // adjust path
-import inventoryLog from "../../models/inventoryLog.mjs"; // adjust path
+import Inventory from "../../models/inventory.mjs";
+import inventoryLog from "../../models/inventoryLog.mjs";
 
 async function getNextSequence(name = "purchase") {
   const updated = await Counter.findOneAndUpdate(
@@ -16,7 +16,6 @@ function round2(n) {
   return Number(Number(n || 0).toFixed(2));
 }
 
-
 export const createPurchase = async (req, res) => {
   try {
     const {
@@ -27,6 +26,7 @@ export const createPurchase = async (req, res) => {
       supplierRefDate,
       items,
       narration,
+      roundOff: addRoundOff = 0,
     } = req.body;
 
     if (!supplier)
@@ -101,8 +101,9 @@ export const createPurchase = async (req, res) => {
 
     subTotal = round2(subTotal);
     totalVat = round2(totalVat);
-    const grandTotal = round2(subTotal + totalVat); 
-    const roundOff = round2(grandTotal - (subTotal + totalVat));
+
+    const roundOff = round2(Number(addRoundOff));
+    const grandTotal = round2(subTotal + totalVat + roundOff);
 
     // Generate purchase number (auto-increment)
     const seq = await getNextSequence("purchase");
@@ -130,7 +131,7 @@ export const createPurchase = async (req, res) => {
       const productId = it.product || null;
       const variantId = it.variant || null;
       const receivedQty = Number(it.quantity || 0);
-      const itemWarehouseLocation = it.warehouseLocation || null; 
+      const itemWarehouseLocation = it.warehouseLocation || null;
 
       // Build inventory query
       const query = { warehouse };
@@ -280,7 +281,7 @@ export const updatePurchase = async (req, res) => {
         const prevQty = inventory.AvailableQuantity;
         const newQty = prevQty - returnedQty;
 
-        inventory.AvailableQuantity = newQty < 0 ? 0 : newQty; // prevent negative
+        inventory.AvailableQuantity = newQty < 0 ? 0 : newQty;
         inventory.updatedAt = new Date();
         await inventory.save();
 
@@ -308,6 +309,7 @@ export const updatePurchase = async (req, res) => {
       supplierRefDate,
       items,
       narration,
+      roundOff: addRoundOff = 0,
     } = req.body;
 
     if (!items || items.length === 0) {
@@ -349,7 +351,9 @@ export const updatePurchase = async (req, res) => {
 
     subTotal = round2(subTotal);
     totalVat = round2(totalVat);
-    const grandTotal = round2(subTotal + totalVat);
+
+    const roundOff = round2(Number(addRoundOff));
+    const grandTotal = round2(subTotal + totalVat + roundOff);
 
     // UPDATE PURCHASE DOCUMENT
     oldPurchase.supplier = supplier;
@@ -360,6 +364,7 @@ export const updatePurchase = async (req, res) => {
     oldPurchase.items = newItems;
     oldPurchase.subTotal = subTotal;
     oldPurchase.totalVat = totalVat;
+    oldPurchase.roundOff = roundOff;
     oldPurchase.grandTotal = grandTotal;
     oldPurchase.narration = narration;
 
